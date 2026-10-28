@@ -42,7 +42,13 @@ public struct AppleDevice: Identifiable, Hashable, Codable, Sendable {
 
     /// Unknown Developer Mode is left to CoreDevice to validate at installation time.
     public var canInstall: Bool {
-        isPaired && isConnected && developerModeEnabled != false && supportsRequiredOS
+        canAttemptConnection && isConnected
+    }
+
+    /// Discovery can retain an offline snapshot after a paired device reconnects.
+    /// This permits a directed probe, never installation from that snapshot.
+    public var canAttemptConnection: Bool {
+        !id.isEmpty && !udid.isEmpty && isPaired && developerModeEnabled != false && supportsRequiredOS
     }
 }
 
@@ -88,6 +94,78 @@ public enum DeviceService {
             redactedDescription: "xcrun devicectl list devices"))
         guard result.exitCode == 0 else { throw DeviceServiceError.commandFailed(String(result.output.suffix(4000))) }
         return try parseDevices(Data(contentsOf: jsonURL))
+    }
+
+    /// Ask only the selected device for its current state. Listing all devices is
+    /// deliberately kept passive; a cached disconnected entry is not proof that
+    /// this directed CoreDevice operation cannot establish a real connection.
+    public static func resolveConnection(selected: AppleDevice, using runner: ProcessRunner = ProcessRunner()) async throws -> AppleDevice {
+        try await resolveConnection(selected: selected, execute: { command in try await runner.run(command) })
+    }
+
+    static func resolveConnection(selected: AppleDevice,
+                                  execute: @Sendable (ProcessCommand) async throws -> ProcessResult) async throws -> AppleDevice {
+        try Task.checkCancellation()
+        guard selected.canAttemptConnection else { throw DeviceServiceError.unavailableDevice }
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("nxport-connection-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let jsonURL = temporary.appendingPathComponent("details.json")
+        let command = ProcessCommand(executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"), arguments: [
+            "devicectl", "device", "info", "details", "--device", selected.id,
+            "--timeout", "20", "--json-output", jsonURL.path
+        ], environment: ToolEnvironment.values,
+            redactedDescription: "xcrun devicectl device info details — selected device")
+        let result = try await execute(command)
+        try Task.checkCancellation()
+        guard result.exitCode == 0 else { throw DeviceServiceError.commandFailed(String(result.output.suffix(4000))) }
+        guard let size = try? jsonURL.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 1_000_000,
+              let data = try? Data(contentsOf: jsonURL) else { throw DeviceServiceError.invalidResponse }
+        return try parseDeviceDetails(data, selected: selected)
+    }
+
+    static func parseDeviceDetails(_ data: Data, selected: AppleDevice) throws -> AppleDevice {
+        guard selected.canAttemptConnection,
+              let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entry = root["result"] as? [String: Any],
+              let device = parseDevice(entry),
+              device.id.caseInsensitiveCompare(selected.id) == .orderedSame,
+              device.udid.caseInsensitiveCompare(selected.udid) == .orderedSame else { throw DeviceServiceError.invalidResponse }
+        let properties = entry["properties"] as? [String: Any] ?? [:]
+        let hardware = properties["hardware"] as? [String: Any] ?? [:]
+        let legacyHardware = entry["hardwareProperties"] as? [String: Any] ?? [:]
+        for fields in [hardware, legacyHardware] {
+            if let reality = fields["reality"] as? String, reality.lowercased() != "physical" { throw DeviceServiceError.invalidResponse }
+            if let platform = fields["platform"] as? String, !["ios", "ipados"].contains(platform.lowercased()) { throw DeviceServiceError.invalidResponse }
+        }
+        // A details response must provide the actual UDID, rather than the
+        // discovery parser's identifier fallback, and may not contradict itself.
+        let udids = [hardware["udid"], legacyHardware["udid"]].compactMap { $0 as? String }
+        guard !udids.isEmpty, udids.allSatisfy({ $0.caseInsensitiveCompare(selected.udid) == .orderedSame }) else {
+            throw DeviceServiceError.invalidResponse
+        }
+        let state = properties["state"] as? [String: Any] ?? [:]
+        let software = properties["software"] as? [String: Any] ?? [:]
+        let legacy = entry["deviceProperties"] as? [String: Any] ?? [:]
+        for fields in [properties["connection"] as? [String: Any] ?? [:], entry["connectionProperties"] as? [String: Any] ?? [:]] {
+            if let pairing = fields["pairingState"] as? String, pairing.lowercased() != "paired" { throw DeviceServiceError.unavailableDevice }
+            for key in ["state", "tunnelState"] {
+                if let connection = fields[key] as? String, !["connected", "available"].contains(connection.lowercased()) { throw DeviceServiceError.unavailableDevice }
+            }
+        }
+        let developerModes = [state["developerModeStatus"], software["developerModeStatus"], legacy["developerModeStatus"]].compactMap { $0 }
+        guard !developerModes.contains(where: { developerMode($0) == false }) else { throw DeviceServiceError.unavailableDevice }
+        let ddi = [state["ddiServicesAvailable"], software["ddiServicesAvailable"], legacy["ddiServicesAvailable"]].compactMap { $0 }
+        guard !ddi.isEmpty, ddi.allSatisfy({ value in
+            guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return false }
+            return number.boolValue
+        }), device.canInstall else { throw DeviceServiceError.unavailableDevice }
+        // CoreDevice may change UUID casing between list and details. Preserve
+        // the selected identity after matching it, keeping the UI selection valid.
+        return AppleDevice(id: selected.id, udid: selected.udid, name: device.name, model: device.model,
+                           osVersion: device.osVersion, transport: device.transport,
+                           isPaired: device.isPaired, isConnected: device.isConnected,
+                           developerModeEnabled: device.developerModeEnabled)
     }
 
     public static func deploymentPlan(projectURL: URL, teamID: String, device: AppleDevice,
@@ -449,7 +527,10 @@ public enum DeviceService {
               let entries = result["devices"] as? [[String: Any]] else {
             throw DeviceServiceError.invalidResponse
         }
-        return entries.compactMap { entry -> AppleDevice? in
+        return entries.compactMap { parseDevice($0) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private static func parseDevice(_ entry: [String: Any]) -> AppleDevice? {
             let properties = entry["properties"] as? [String: Any] ?? [:]
             let hardware = properties["hardware"] as? [String: Any]
                 ?? entry["hardwareProperties"] as? [String: Any] ?? [:]
@@ -479,26 +560,7 @@ public enum DeviceService {
             let connectionState = string(connection["state"] ?? connection["tunnelState"]).lowercased()
             let developerModeValue = state["developerModeStatus"] ?? software["developerModeStatus"]
                 ?? legacyDevice["developerModeStatus"]
-            let developerMode: Bool?
-            if let bool = developerModeValue as? Bool {
-                developerMode = bool
-            } else if let status = developerModeValue as? [String: Any] {
-                // Xcode 27 encodes this enum as {"enabled":{"mode":1}},
-                // whereas earlier releases returned the string "enabled".
-                if status["enabled"] != nil && status["disabled"] == nil {
-                    developerMode = true
-                } else if status["disabled"] != nil && status["enabled"] == nil {
-                    developerMode = false
-                } else {
-                    developerMode = nil
-                }
-            } else {
-                switch string(developerModeValue).lowercased() {
-                case "enabled": developerMode = true
-                case "disabled": developerMode = false
-                default: developerMode = nil
-                }
-            }
+            let developerMode = developerMode(developerModeValue)
             let name = string(state["name"] ?? legacyDevice["name"])
             let model = string(hardware["marketingName"] ?? hardware["productType"])
             return AppleDevice(id: id, udid: string(hardware["udid"]).isEmpty ? id : string(hardware["udid"]),
@@ -506,7 +568,20 @@ public enum DeviceService {
                                transport: string(connection["transportType"]), isPaired: pairing == "paired",
                                isConnected: ["connected", "available"].contains(connectionState),
                                developerModeEnabled: developerMode)
-        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private static func developerMode(_ value: Any?) -> Bool? {
+        if let bool = value as? Bool { return bool }
+        if let status = value as? [String: Any] {
+            // Modern enum form. Any explicit disabled state prevents deployment.
+            if status["disabled"] != nil { return false }
+            return status["enabled"] != nil ? true : nil
+        }
+        switch string(value).lowercased() {
+        case "enabled": return true
+        case "disabled": return false
+        default: return nil
+        }
     }
 
     private static func string(_ value: Any?) -> String { value as? String ?? "" }

@@ -70,6 +70,151 @@ final class DeviceServiceTests: XCTestCase {
         XCTAssertThrowsError(try DeviceService.parseDevices(Data(#"{"result":{}}"#.utf8)))
     }
 
+    private var cachedPhone: AppleDevice {
+        AppleDevice(id: "selected-phone", udid: "selected-udid", name: "Fixture phone", model: "iPhone",
+                    osVersion: "27.2", transport: "localNetwork", isPaired: true,
+                    isConnected: false, developerModeEnabled: true)
+    }
+
+    // Sanitized structural fixture of the directed Xcode 27 details response.
+    // Modern properties coexist with compatibility properties; DDI is reported
+    // by deviceProperties, not by the passive discovery list.
+    private var directedDetails: String {
+        #"""
+        {"result":{"identifier":"selected-phone",
+          "properties":{
+            "hardware":{"reality":"physical","platform":"iOS","deviceType":"iPhone","udid":"selected-udid"},
+            "connection":{"pairingState":"paired","state":"connected","transportType":"localNetwork"},
+            "state":{"name":"Fixture phone","developerModeStatus":{"enabled":{"mode":1}}},
+            "software":{"osVersionNumber":{"components":[27,2,0,0,0],"originalComponentsCount":2,"stringValue":"27.2"}}
+          },
+          "hardwareProperties":{"platform":"iOS","deviceType":"iPhone","udid":"selected-udid"},
+          "connectionProperties":{"pairingState":"paired","tunnelState":"connected","transportType":"localNetwork"},
+          "deviceProperties":{"ddiServicesAvailable":true,"developerModeStatus":"enabled","osVersionNumber":"27.2"}
+        }}
+        """#
+    }
+
+    func testDirectedConnectionResolvesOnlySelectedCachedOfflineDevice() async throws {
+        let selected = cachedPhone, json = Data(directedDetails.utf8)
+        XCTAssertTrue(selected.canAttemptConnection)
+        XCTAssertFalse(selected.canInstall)
+        let resolved = try await DeviceService.resolveConnection(selected: selected, execute: { command in
+            XCTAssertEqual(command.executableURL.path, "/usr/bin/xcrun")
+            XCTAssertEqual(Array(command.arguments.prefix(8)), ["devicectl", "device", "info", "details", "--device", "selected-phone", "--timeout", "20"])
+            XCTAssertFalse(command.arguments.contains("list"))
+            XCTAssertFalse(command.arguments.contains("install"))
+            let index = try XCTUnwrap(command.arguments.firstIndex(of: "--json-output"))
+            try json.write(to: URL(fileURLWithPath: command.arguments[index + 1]))
+            return ProcessResult(exitCode: 0, output: "")
+        })
+        XCTAssertEqual(resolved.id, selected.id)
+        XCTAssertEqual(resolved.udid, selected.udid)
+        XCTAssertTrue(resolved.isPaired)
+        XCTAssertTrue(resolved.isConnected)
+        XCTAssertTrue(resolved.canInstall)
+        XCTAssertEqual(resolved.connectionLabel, "Wi-Fi")
+        XCTAssertFalse(selected.isConnected, "Resolving a new snapshot never fabricates a connection in the original list.")
+    }
+
+    func testDirectedDetailsRejectIdentityConnectionAndDDIMismatches() throws {
+        let original = directedDetails
+        for invalid in [
+            original.replacingOccurrences(of: "selected-phone", with: "different-phone"),
+            original.replacingOccurrences(of: "selected-udid", with: "different-udid"),
+            original.replacingOccurrences(of: "connected", with: "disconnected"),
+            original.replacingOccurrences(of: "paired", with: "unpaired"),
+            original.replacingOccurrences(of: #""ddiServicesAvailable":true,"#, with: ""),
+            original.replacingOccurrences(of: #""ddiServicesAvailable":true"#, with: #""ddiServicesAvailable":false"#),
+            original.replacingOccurrences(of: #""ddiServicesAvailable":true"#, with: #""ddiServicesAvailable":"true""#),
+            original.replacingOccurrences(of: #""ddiServicesAvailable":true"#, with: #""ddiServicesAvailable":1"#),
+            original.replacingOccurrences(of: #""developerModeStatus":"enabled""#, with: #""developerModeStatus":"disabled""#),
+            original.replacingOccurrences(of: "27.2", with: "25.0"),
+            original.replacingOccurrences(of: "physical", with: "simulated"),
+            original.replacingOccurrences(of: "iOS", with: "tvOS"),
+            #"{"result":{"devices":[]}}"#
+        ] {
+            XCTAssertThrowsError(try DeviceService.parseDeviceDetails(Data(invalid.utf8), selected: cachedPhone))
+        }
+        // A missing actual UDID cannot be replaced by the parser's ID fallback.
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(original.utf8)) as? [String: Any])
+        var result = try XCTUnwrap(object["result"] as? [String: Any])
+        var properties = try XCTUnwrap(result["properties"] as? [String: Any])
+        var hardware = try XCTUnwrap(properties["hardware"] as? [String: Any]); hardware.removeValue(forKey: "udid")
+        properties["hardware"] = hardware; result["properties"] = properties
+        var legacy = try XCTUnwrap(result["hardwareProperties"] as? [String: Any]); legacy.removeValue(forKey: "udid")
+        result["hardwareProperties"] = legacy
+        let bytes = try JSONSerialization.data(withJSONObject: ["result": result])
+        let fallback = AppleDevice(id: "selected-phone", udid: "selected-phone", name: "Fixture", model: "iPhone", osVersion: "27.2",
+                                   transport: "usb", isPaired: true, isConnected: false, developerModeEnabled: nil)
+        XCTAssertThrowsError(try DeviceService.parseDeviceDetails(bytes, selected: fallback))
+    }
+
+    func testDirectedDetailsAcceptLegacyShapeAndUnknownDeveloperMode() throws {
+        let json = #"""
+        {"result":{"identifier":"selected-phone",
+          "hardwareProperties":{"reality":"physical","platform":"iOS","deviceType":"iPhone","udid":"selected-udid"},
+          "connectionProperties":{"pairingState":"paired","tunnelState":"connected","transportType":"usb"},
+          "deviceProperties":{"name":"Fixture","ddiServicesAvailable":true,"osVersionNumber":"27.2"}}}
+        """#
+        let device = try DeviceService.parseDeviceDetails(Data(json.utf8), selected: cachedPhone)
+        XCTAssertTrue(device.canInstall)
+        XCTAssertNil(device.developerModeEnabled)
+    }
+
+    func testDirectedDetailsPreserveSelectedIdentityCasingWithFreshConnection() throws {
+        let selected = AppleDevice(id: "selected-phone", udid: "selected-udid", name: "Cached name", model: "Cached model",
+                                   osVersion: "26.0", transport: "usb", isPaired: true,
+                                   isConnected: false, developerModeEnabled: nil)
+        let json = directedDetails.replacingOccurrences(of: "selected-phone", with: "SELECTED-PHONE")
+            .replacingOccurrences(of: "selected-udid", with: "SELECTED-UDID")
+        let device = try DeviceService.parseDeviceDetails(Data(json.utf8), selected: selected)
+        XCTAssertEqual(device.id, selected.id)
+        XCTAssertEqual(device.udid, selected.udid)
+        XCTAssertEqual(device.name, "Fixture phone")
+        XCTAssertEqual(device.osVersion, "27.2")
+        XCTAssertEqual(device.connectionLabel, "Wi-Fi")
+        XCTAssertEqual(device.developerModeEnabled, true)
+        XCTAssertTrue(device.canInstall)
+    }
+
+    func testDirectedConnectionTimeoutAndCancellationDoNotPromoteSnapshot() async throws {
+        let selected = cachedPhone
+        do {
+            _ = try await DeviceService.resolveConnection(selected: selected, execute: { _ in
+                ProcessResult(exitCode: 1, output: "The directed device request timed out.")
+            })
+            XCTFail("An unsuccessful CoreDevice command cannot promote a device.")
+        } catch DeviceServiceError.commandFailed { }
+        let json = Data(directedDetails.utf8)
+        let task = Task {
+            try await DeviceService.resolveConnection(selected: selected, execute: { command in
+                let index = try XCTUnwrap(command.arguments.firstIndex(of: "--json-output"))
+                try json.write(to: URL(fileURLWithPath: command.arguments[index + 1]))
+                withUnsafeCurrentTask { $0?.cancel() }
+                return ProcessResult(exitCode: 0, output: "")
+            })
+        }
+        do { _ = try await task.value; XCTFail("Cancellation must discard even a valid late response.") }
+        catch is CancellationError { }
+        XCTAssertFalse(selected.canInstall)
+    }
+
+    func testDirectedConnectionDoesNotProbeIneligibleDevices() async throws {
+        for device in [
+            AppleDevice(id: "phone", udid: "udid", name: "Fixture", model: "iPhone", osVersion: "27.2", transport: "usb", isPaired: false, isConnected: false, developerModeEnabled: true),
+            AppleDevice(id: "phone", udid: "udid", name: "Fixture", model: "iPhone", osVersion: "25.0", transport: "usb", isPaired: true, isConnected: true, developerModeEnabled: true),
+            AppleDevice(id: "phone", udid: "udid", name: "Fixture", model: "iPhone", osVersion: "27.2", transport: "usb", isPaired: true, isConnected: true, developerModeEnabled: false)
+        ] {
+            do {
+                _ = try await DeviceService.resolveConnection(selected: device, execute: { _ in
+                    XCTFail("An ineligible device must not be probed."); return ProcessResult(exitCode: 0, output: "")
+                })
+                XCTFail("An ineligible device cannot be resolved.")
+            } catch DeviceServiceError.unavailableDevice { }
+        }
+    }
+
     func testDeploymentPlanPreservesPathsAndEnablesSigningExplicitly() throws {
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temporary) }

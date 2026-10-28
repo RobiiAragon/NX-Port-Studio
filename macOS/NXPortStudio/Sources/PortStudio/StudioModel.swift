@@ -115,7 +115,7 @@ final class StudioModel {
     var selectedDevice: AppleDevice? { devices.first { $0.id == selectedDeviceID } }
     var missingRequirements: [DependencyStatus] { dependencies.filter { $0.isRequired && !$0.isAvailable } }
     var hasSigningTeam: Bool { teamID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil }
-    var signingReady: Bool { destination != .iOS || (hasSigningTeam && selectedDevice?.canInstall == true) }
+    var signingReady: Bool { destination != .iOS || (hasSigningTeam && selectedDevice?.canAttemptConnection == true) }
     var canBuild: Bool { (selectedFirmwarePath.isEmpty || selectedFirmware != nil) && signingReady && !isBusy && !isPreparing && !isChecking && missingRequirements.isEmpty && !gameFiles.isEmpty && !keysPath.isEmpty && !repositoryPath.isEmpty }
     var approximateSpace: String { ByteCountFormatter.string(fromByteCount: inputBytes * 2 + 10_000_000_000, countStyle: .file) }
 
@@ -252,11 +252,11 @@ final class StudioModel {
                 let command = try BuildCommand.make(configuration: config, pythonURL: pythonURL)
                 let verifiedSigningDevice: AppleDevice?
                 if config.destination == .iOS {
-                    let currentDevices = try await DeviceService.discover(using: runner)
-                    devices = currentDevices
-                    guard let device = currentDevices.first(where: { $0.id == signingDevice?.id }), device.canInstall else {
-                        throw DeviceServiceError.unavailableDevice
-                    }
+                    guard let signingDevice else { throw DeviceServiceError.unavailableDevice }
+                    let device = try await DeviceService.resolveConnection(selected: signingDevice, using: runner)
+                    try Task.checkCancellation()
+                    guard operationID == runID else { throw CancellationError() }
+                    if let index = devices.firstIndex(where: { $0.id == signingDevice.id }) { devices[index] = device }
                     verifiedSigningDevice = device
                 } else { verifiedSigningDevice = nil }
                 appendLog(command.redactedDescription)
@@ -312,13 +312,16 @@ final class StudioModel {
                 }
                 progress = 1
             } catch is CancellationError {
+                guard operationID == runID else { return }
                 status = completedURL != nil && config.destination == .iOS ? "Signed IPA saved; installation cancelled" : "Cancelled"
                 appendLog("Build cancelled.")
             } catch {
+                guard operationID == runID else { return }
                 failure = t(error.localizedDescription)
                 status = completedURL != nil && config.destination == .iOS ? "Signed IPA saved; installation failed" : "Build failed"
                 appendLog(error.localizedDescription)
             }
+            guard operationID == runID else { return }
             operationID = UUID(); isBusy = false; currentTask = nil
         }
     }

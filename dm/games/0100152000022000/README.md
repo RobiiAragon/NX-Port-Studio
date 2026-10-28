@@ -88,7 +88,7 @@ General host changes first needed here; each applies to every game:
 - **BAHS programs with intermediate stages have no direct prebuild pair** (`bahs_variations`): [BAHS intermediate stages are not direct pipeline pairs](../../../docs/reference/shaders.md#bahs-intermediate-stages-are-not-direct-pipeline-pairs).
 
 - **Nextendo account and signed version policy:** [Nextendo account credentials and signed service policy](../../../docs/reference/services.md#nextendo-account-credentials-and-signed-service-policy). Catalog acceptance is distinct from local LAN or a tested native online implementation; the current service requires 4.0.1, while this installed port remains 3.0.5.
-- **Mobile account setup:** [Mobile Nextendo setup without a desktop handoff](../../../docs/reference/services.md#mobile-nextendo-setup-without-a-desktop-handoff). The phone can configure its own account and catalog policy; physical authentication/migration acceptance and a native online match remain pending.
+- **Mobile account setup:** [Mobile Nextendo setup without a desktop handoff](../../../docs/reference/services.md#mobile-nextendo-setup-without-a-desktop-handoff). On 2026-10-28 the user confirmed that the account was linked on the iPhone. The subsequent signed Wi-Fi app update preserved preferences and app data. The browser exchange and Keychain migration were not independently traced, and a native online match remains unvalidated; the installed game is still 3.0.5.
 
 ## Open
 

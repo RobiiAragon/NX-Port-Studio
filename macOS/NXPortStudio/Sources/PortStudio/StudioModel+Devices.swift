@@ -44,22 +44,14 @@ extension StudioModel {
             failure = t("Prepare or select the game's Xcode project first.")
             return
         }
-        guard let device = selectedDevice, device.canInstall else {
+        guard let selected = selectedDevice, selected.canAttemptConnection else {
             failure = t("Connect and pair an iPhone or iPad with iOS 26 or later, and enable Developer Mode.")
             return
         }
         // Keep game-sized copies beside the extracted game on its original volume.
         let buildFolder = projectURL.deletingLastPathComponent().deletingLastPathComponent()
         let derivedData = buildFolder.appendingPathComponent("StudioDeployment", isDirectory: true)
-        let plan: DeploymentPlan
-        do {
-            plan = try DeviceService.deploymentPlan(projectURL: projectURL, teamID: teamID,
-                                                     device: device, derivedDataURL: derivedData)
-        } catch {
-            failure = error.localizedDescription
-            return
-        }
-        UserDefaults.standard.set(teamID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), forKey: "teamID")
+        let signingTeam = teamID
         failure = nil
         isBusy = true
         status = "Signing and installing"
@@ -68,10 +60,17 @@ extension StudioModel {
         stageIndex = 0
         stageTotal = 0
         progress = nil
-        appendLog(plan.buildCommand.redactedDescription)
         let runID = UUID(); operationID = runID
         currentTask = Task { [self] in
             do {
+                let device = try await DeviceService.resolveConnection(selected: selected, using: runner)
+                try Task.checkCancellation()
+                guard operationID == runID else { throw CancellationError() }
+                if let index = devices.firstIndex(where: { $0.id == selected.id }) { devices[index] = device }
+                let plan = try DeviceService.deploymentPlan(projectURL: projectURL, teamID: signingTeam,
+                                                           device: device, derivedDataURL: derivedData)
+                UserDefaults.standard.set(signingTeam.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), forKey: "teamID")
+                appendLog(plan.buildCommand.redactedDescription)
                 let app = try await DeviceService.buildAndInstall(plan, using: runner) { [weak self] line in
                     Task { @MainActor in
                         guard let self, self.operationID == runID else { return }
@@ -79,18 +78,22 @@ extension StudioModel {
                     }
                 }
                 try Task.checkCancellation()
+                guard operationID == runID else { throw CancellationError() }
                 completedURL = app
                 status = "Installed on device"
                 progress = 1
                 appendLog("Installed on \(device.name).")
             } catch is CancellationError {
+                guard operationID == runID else { return }
                 status = "Cancelled"
                 appendLog("Installation cancelled.")
             } catch {
+                guard operationID == runID else { return }
                 failure = t(error.localizedDescription)
                 status = "Installation failed"
                 appendLog(error.localizedDescription)
             }
+            guard operationID == runID else { return }
             operationID = UUID()
             isBusy = false
             currentTask = nil

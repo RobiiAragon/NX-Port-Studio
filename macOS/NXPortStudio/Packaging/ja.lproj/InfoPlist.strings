@@ -1,1 +1,1 @@
-"NSLocalNetworkUsageDescription" = "NX Port Studio は、ローカルブリッジが有効な間、ローカルネットワークを使用して、ゲーム機と iPhone または iPad の間で LAN と LDN のルーム検索を中継します。";
+"NSLocalNetworkUsageDescription" = "NX Port Studio は、インストール時に iPhone または iPad に接続するためローカルネットワークを使用します。ローカルブリッジが有効な場合は、LAN および LDN のルーム検索も中継します。";

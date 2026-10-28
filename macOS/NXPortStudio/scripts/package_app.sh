@@ -103,8 +103,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key><string>NXPortStudio</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleShortVersionString</key><string>1.4.1</string>
-    <key>CFBundleVersion</key><string>10</string>
+    <key>CFBundleShortVersionString</key><string>1.4.2</string>
+    <key>CFBundleVersion</key><string>11</string>
     <key>CFBundleDevelopmentRegion</key><string>es</string>
     <key>CFBundleLocalizations</key><array><string>es</string><string>en</string><string>fr</string><string>ja</string><string>zh-Hans</string></array>
     <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -112,7 +112,7 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>LSArchitecturePriority</key><array><string>arm64</string></array>
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>NSLocalNetworkUsageDescription</key><string>NX Port Studio uses the local network to relay LAN and LDN room discovery between your consoles and iPhone or iPad while the local bridge is enabled.</string>
+    <key>NSLocalNetworkUsageDescription</key><string>NX Port Studio uses the local network to connect to your iPhone or iPad for installation. It also relays LAN and LDN room discovery while the local bridge is enabled.</string>
 </dict>
 </plist>
 PLIST

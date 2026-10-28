@@ -1,1 +1,1 @@
-"NSLocalNetworkUsageDescription" = "NX Port Studio utilise le réseau local pour relayer la découverte des salons LAN et LDN entre vos consoles et votre iPhone ou iPad lorsque le pont local est activé.";
+"NSLocalNetworkUsageDescription" = "NX Port Studio utilise le réseau local pour se connecter à votre iPhone ou iPad lors de l’installation. Le pont local, lorsqu’il est activé, relaie aussi la découverte des salons LAN et LDN.";

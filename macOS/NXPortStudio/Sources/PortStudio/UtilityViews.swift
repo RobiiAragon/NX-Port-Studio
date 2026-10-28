@@ -63,7 +63,7 @@ struct DevicesView: View {
                         Spacer()
                         Button { model.installPreparedProject() } label: { Label(t("Sign and install"), systemImage: "arrow.down.to.line").fontWeight(.semibold) }
                             .buttonStyle(PrimaryButtonStyle())
-                            .disabled(model.isBusy || model.projectURL == nil || model.teamID.trimmingCharacters(in: .whitespacesAndNewlines).count != 10 || model.selectedDevice?.canInstall != true)
+                            .disabled(model.isBusy || model.projectURL == nil || model.teamID.trimmingCharacters(in: .whitespacesAndNewlines).count != 10 || model.selectedDevice?.canAttemptConnection != true)
                     }
                 }
             }
