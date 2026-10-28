@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve audited upstream license and notice bytes.
+dm/third_party/notices/** -text

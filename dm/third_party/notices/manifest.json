@@ -1,0 +1,2128 @@
+{
+  "format": 1,
+  "purpose": "Preserve exact license and attribution texts for redistributed translator dependencies; factual provenance inventory, not legal advice",
+  "dependency_manifest": {
+    "path": "dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate.deps.json",
+    "sha256": "ccd3b1fd022ffceca85fbc37b5b205f482e701db40b7fc707b897fef5a2be7d0",
+    "runtime_target": ".NETCoreApp,Version=v10.0/osx-arm64"
+  },
+  "packages": [
+    {
+      "package": "Gommon",
+      "version": "2.8.1.2",
+      "url": "https://api.nuget.org/v3-flatcontainer/gommon/2.8.1.2/gommon.2.8.1.2.nupkg",
+      "nupkg_sha256": "b49743299beed3613c5e3a2802f4454ce3028ec7bec3c04254ec2c210e4ad338",
+      "metadata": {
+        "id": {
+          "text": "Gommon",
+          "attributes": {}
+        },
+        "version": {
+          "text": "2.8.1.2",
+          "attributes": {}
+        },
+        "authors": {
+          "text": "GreemDev",
+          "attributes": {}
+        },
+        "repository": {
+          "text": null,
+          "attributes": {
+            "type": "Git",
+            "url": "https://github.com/GreemDev/Gommon",
+            "commit": "222084874ac473e02f27faeb10e540f926702976"
+          }
+        }
+      },
+      "notice_entries": [
+        "content/LICENSE",
+        "contentFiles/any/net9.0/LICENSE"
+      ],
+      "notices": [
+        "Gommon/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer/3.0.10/humanizer.3.0.10.nupkg",
+      "nupkg_sha256": "a0d4972b92cb30d88af2203fd07fb341ea0371bac3b93a7ffb3c342c64c408d0",
+      "metadata": {
+        "id": {
+          "text": "Humanizer",
+          "attributes": {}
+        },
+        "version": {
+          "text": "3.0.10",
+          "attributes": {}
+        },
+        "authors": {
+          "text": "Claire Novotny, Mehdi Khalili",
+          "attributes": {}
+        },
+        "license": {
+          "text": "MIT",
+          "attributes": {
+            "type": "expression"
+          }
+        },
+        "licenseUrl": {
+          "text": "https://licenses.nuget.org/MIT",
+          "attributes": {}
+        },
+        "projectUrl": {
+          "text": "https://github.com/Humanizr/Humanizer",
+          "attributes": {}
+        },
+        "copyright": {
+          "text": "Copyright (c) .NET Foundation and Contributors",
+          "attributes": {}
+        },
+        "repository": {
+          "text": null,
+          "attributes": {
+            "type": "git",
+            "url": "https://github.com/Humanizr/Humanizer",
+            "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+          }
+        }
+      },
+      "notice_entries": [],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core/3.0.10/humanizer.core.3.0.10.nupkg",
+      "nupkg_sha256": "99f95210d8c3a1fd40bfd33d44b18441c97857891e55f1f7a88c72feec49e851",
+      "metadata": {
+        "id": {
+          "text": "Humanizer.Core",
+          "attributes": {}
+        },
+        "version": {
+          "text": "3.0.10",
+          "attributes": {}
+        },
+        "authors": {
+          "text": "Claire Novotny, Mehdi Khalili",
+          "attributes": {}
+        },
+        "license": {
+          "text": "MIT",
+          "attributes": {
+            "type": "expression"
+          }
+        },
+        "licenseUrl": {
+          "text": "https://licenses.nuget.org/MIT",
+          "attributes": {}
+        },
+        "projectUrl": {
+          "text": "https://github.com/Humanizr/Humanizer",
+          "attributes": {}
+        },
+        "copyright": {
+          "text": "Copyright (c) .NET Foundation and Contributors",
+          "attributes": {}
+        },
+        "repository": {
+          "text": null,
+          "attributes": {
+            "type": "git",
+            "url": "https://github.com/Humanizr/Humanizer",
+            "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+          }
+        }
+      },
+      "notice_entries": [],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Microsoft.IO.RecyclableMemoryStream",
+      "version": "3.0.1",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.io.recyclablememorystream/3.0.1/microsoft.io.recyclablememorystream.3.0.1.nupkg",
+      "nupkg_sha256": "ba7160ff911c53f5ca25ba1be06b500b8dd87608b95637811acee17e18f8118a",
+      "metadata": {
+        "id": {
+          "text": "Microsoft.IO.RecyclableMemoryStream",
+          "attributes": {}
+        },
+        "version": {
+          "text": "3.0.1",
+          "attributes": {}
+        },
+        "authors": {
+          "text": "Microsoft",
+          "attributes": {}
+        },
+        "license": {
+          "text": "MIT",
+          "attributes": {
+            "type": "expression"
+          }
+        },
+        "licenseUrl": {
+          "text": "https://licenses.nuget.org/MIT",
+          "attributes": {}
+        },
+        "projectUrl": {
+          "text": "https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream",
+          "attributes": {}
+        },
+        "copyright": {
+          "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+          "attributes": {}
+        },
+        "repository": {
+          "text": null,
+          "attributes": {
+            "type": "git",
+            "url": "https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream",
+            "commit": "e29a28387da9018fa9605a1dcb3f7a0435aa9974"
+          }
+        }
+      },
+      "notice_entries": [],
+      "notices": [
+        "RecyclableMemoryStream/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "MsgPack.Cli",
+      "version": "1.0.1",
+      "url": "https://api.nuget.org/v3-flatcontainer/msgpack.cli/1.0.1/msgpack.cli.1.0.1.nupkg",
+      "nupkg_sha256": "19fd0477d5c71f8a05a49224ce183fc610d5a5e9ee9d2a25eb9a9af0865e62b6",
+      "metadata": {
+        "id": {
+          "text": "MsgPack.Cli",
+          "attributes": {}
+        },
+        "version": {
+          "text": "1.0.1",
+          "attributes": {}
+        },
+        "authors": {
+          "text": "FUJIWARA, Yusuke",
+          "attributes": {}
+        },
+        "licenseUrl": {
+          "text": "http://www.apache.org/licenses/LICENSE-2.0",
+          "attributes": {}
+        },
+        "projectUrl": {
+          "text": "https://github.com/msgpack/msgpack-cli",
+          "attributes": {}
+        },
+        "copyright": {
+          "text": "Copyright 2010-2016 FUJIWARA, Yusuke, all rights reserved.",
+          "attributes": {}
+        }
+      },
+      "notice_entries": [],
+      "notices": [
+        "MsgPack.Cli/LICENSE.txt",
+        "MsgPack.Cli/PACKAGE-NOTICE.txt"
+      ]
+    },
+    {
+      "package": "System.CodeDom",
+      "version": "4.4.0",
+      "url": "https://api.nuget.org/v3-flatcontainer/system.codedom/4.4.0/system.codedom.4.4.0.nupkg",
+      "nupkg_sha256": "2f5c72b2927ca4324d54f60a97e14c19fe19c26d2d96ab40c9008d5baa53ebfd",
+      "metadata": {
+        "id": {
+          "text": "System.CodeDom",
+          "attributes": {}
+        },
+        "version": {
+          "text": "4.4.0",
+          "attributes": {}
+        },
+        "authors": {
+          "text": "Microsoft",
+          "attributes": {}
+        },
+        "licenseUrl": {
+          "text": "https://github.com/dotnet/corefx/blob/master/LICENSE.TXT",
+          "attributes": {}
+        },
+        "projectUrl": {
+          "text": "https://dot.net/",
+          "attributes": {}
+        },
+        "copyright": {
+          "text": "\u00a9 Microsoft Corporation.  All rights reserved.",
+          "attributes": {}
+        }
+      },
+      "notice_entries": [
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT"
+      ],
+      "notices": [
+        "System.CodeDom/LICENSE.txt",
+        "System.CodeDom/THIRD-PARTY-NOTICES.txt"
+      ]
+    }
+  ],
+  "humanizer_localization_packages": [
+    {
+      "package": "Humanizer.Core.af",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.af/3.0.10/humanizer.core.af.3.0.10.nupkg",
+      "nupkg_sha256": "c464e6afdcaa319d648f07df9e874213c2a6fed7e5cce5269b0e573dcabceb9c",
+      "license_expression": "MIT",
+      "repository": null,
+      "files": [
+        {
+          "file": "af/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/af/Humanizer.resources.dll",
+          "sha256": "115ee554aa53782a3c502d84e355eb7a9e6250bd56c90d8f7c98163ec67e422b",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ar",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ar/3.0.10/humanizer.core.ar.3.0.10.nupkg",
+      "nupkg_sha256": "d47df0670a69832b7743dc17743be283fc124d881056d953e39778814e54a443",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "ar/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ar/Humanizer.resources.dll",
+          "sha256": "6ae817931f6d8c64f49f7eca97b45dee5f43956de6173a499893498dcfd2d38e",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.az",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.az/3.0.10/humanizer.core.az.3.0.10.nupkg",
+      "nupkg_sha256": "24258432bb295e2134cdfbd4b591f11ee2f3a38eb59ad5d999cb771218281c71",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "az/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/az/Humanizer.resources.dll",
+          "sha256": "f51119e88bb3670099f2a96bf9a66c78a89b338a91cdcc6e228d56b3a044e0c0",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.bg",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.bg/3.0.10/humanizer.core.bg.3.0.10.nupkg",
+      "nupkg_sha256": "bd2ce956f4865ca766b15bfbe39ed6b031445b4374bd5338df47611d19eccfb3",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "bg/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/bg/Humanizer.resources.dll",
+          "sha256": "0c1d79078874928f9d6af55814afa2901cced5584cbf54d6c3a9ef017ce4b579",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.bn",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.bn/3.0.10/humanizer.core.bn.3.0.10.nupkg",
+      "nupkg_sha256": "bc99225d27ce1d747d896d751a593abd171289e77eb5113131c825dffe9d443a",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "bn/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/bn/Humanizer.resources.dll",
+          "sha256": "fd7e26b514107e023fcbf1b5ecd60fae100ccdfd0339ae67ad34322a5b1390c0",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ca",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ca/3.0.10/humanizer.core.ca.3.0.10.nupkg",
+      "nupkg_sha256": "49efc101027666212a197e8c8e5bbc0707c731d632386c049d3c868eae7edaf0",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "ca/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ca/Humanizer.resources.dll",
+          "sha256": "3bf812f8ab2e7dd0cccd72f45bdb3731c788b46de38a695020dd29dda41dbc1b",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.cs",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.cs/3.0.10/humanizer.core.cs.3.0.10.nupkg",
+      "nupkg_sha256": "8da5c481e5dd7b071cebe4dcd377432b6dd3726c488d3c76102769eebb20c8e7",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "cs/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/cs/Humanizer.resources.dll",
+          "sha256": "9e84210a062691e9efbbbc36299c0c534d872df72a59ab573ea156b950e08d8f",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.da",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.da/3.0.10/humanizer.core.da.3.0.10.nupkg",
+      "nupkg_sha256": "86d8f3548cc49fbbfceb3b7f66b5780f5902e57726e138d0a1b6e238206a3631",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "da/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/da/Humanizer.resources.dll",
+          "sha256": "9688d8caf50a5be0819e66a65f3344daed3f330455a42100e1a263788c16399c",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.de",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.de/3.0.10/humanizer.core.de.3.0.10.nupkg",
+      "nupkg_sha256": "b0e8d9065af5f2896c747d5d58ead54b3341868a6a5c1bc5ec30144b769049ea",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "de/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/de/Humanizer.resources.dll",
+          "sha256": "cabfd8bd9fe8841f29b4b29a8cb3fab825d6678d596bb798c7f24d5eec9e6301",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.el",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.el/3.0.10/humanizer.core.el.3.0.10.nupkg",
+      "nupkg_sha256": "51f5428d1bec5abc28378440257571fb9224d2f961dd4a99d5af25346d0c426a",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "el/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/el/Humanizer.resources.dll",
+          "sha256": "652e758c1ceb61d471cf8ee4ca09568400323124e5403748a829715836ed2069",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.es",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.es/3.0.10/humanizer.core.es.3.0.10.nupkg",
+      "nupkg_sha256": "a169adc0c5d9a2998b91f6cfe00f0a765879476d1fde35d1b14e1158df29494b",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "es/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/es/Humanizer.resources.dll",
+          "sha256": "d7ad03cd07e01e497b1ad43da027d79ff4281a92ddd3529c74f1c67922952a73",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.fa",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.fa/3.0.10/humanizer.core.fa.3.0.10.nupkg",
+      "nupkg_sha256": "838c510469afd9516107340689545d83d3a7a506c0118b7db04600d84e290a3a",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "fa/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/fa/Humanizer.resources.dll",
+          "sha256": "36a647b0bcf38242906e92abc4b0159e30bd7094a62b4c258f788184395d98df",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.fi",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.fi/3.0.10/humanizer.core.fi.3.0.10.nupkg",
+      "nupkg_sha256": "11db525ec2f4b4bedc461cb5bd6f993d0904043122875357c4e5398e562e2675",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "fi/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/fi/Humanizer.resources.dll",
+          "sha256": "540d0561305e1bdf69f8ad7d879567584d3f93de1a07450243f9f52f96106afd",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.fil",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.fil/3.0.10/humanizer.core.fil.3.0.10.nupkg",
+      "nupkg_sha256": "c698acd643504019a1f38fdbd28c22ce72fd6cc76e6f3cdcb64894c69c16280a",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "fil/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/fil/Humanizer.resources.dll",
+          "sha256": "d0f7be4976ac88b9753caf74c67c5107a3d5a267a891ca1614f7de9feb96b11c",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.fr",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.fr/3.0.10/humanizer.core.fr.3.0.10.nupkg",
+      "nupkg_sha256": "e3e257baf0a8455d6500afbadb5409dad356459d1dad453c3e1fa14039b8e3af",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "fr/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/fr/Humanizer.resources.dll",
+          "sha256": "e28bfd43f81b2cba939c01659af5bbc7f20e236a52bdd072439f5e4de4ddebda",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.he",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.he/3.0.10/humanizer.core.he.3.0.10.nupkg",
+      "nupkg_sha256": "b393a5b18f7e5298df6d15916735ec5763531e34ae85968b508d3541c882d0c7",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "he/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/he/Humanizer.resources.dll",
+          "sha256": "80d2e32ac0b6c69371063ea62891c56fcff0c04d5b1a1c8cf147ed3fac7810e1",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.hr",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.hr/3.0.10/humanizer.core.hr.3.0.10.nupkg",
+      "nupkg_sha256": "5094ebb222d3133d15a1df4a57d568244ddaabc5e48b03b049c6dfc64baf9ac2",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "hr/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/hr/Humanizer.resources.dll",
+          "sha256": "24f86671d5b7039c7efdf22eb4fd1ed6f5997618773d74af844fd484ad5e5e7b",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.hu",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.hu/3.0.10/humanizer.core.hu.3.0.10.nupkg",
+      "nupkg_sha256": "93b71db11c97d69271d8bb94b9ac4699059b2e4848584008543b7f8fbbd5946d",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "hu/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/hu/Humanizer.resources.dll",
+          "sha256": "724594b505d7fe7601385860e55f30254ef48a03242344b74e27ad068c5f06f6",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.hy",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.hy/3.0.10/humanizer.core.hy.3.0.10.nupkg",
+      "nupkg_sha256": "f2b796bc711b8a021178f575830a38718cea7fd54784b6d78ab186bbbf3309ed",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "hy/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/hy/Humanizer.resources.dll",
+          "sha256": "2edc2ad20b715c11c868bf246a69dbfc6a6b2ee6048abdd1a3691472ff78b011",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.id",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.id/3.0.10/humanizer.core.id.3.0.10.nupkg",
+      "nupkg_sha256": "5b5232e7a09a36132a61f95555ab9667d6cff25d23680b8d62edf3d10a2fcfc1",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "id/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/id/Humanizer.resources.dll",
+          "sha256": "059bf6f470c2f37daed622dc579c57e95b7ff70b49fe7d9f61b028189befd94e",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.is",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.is/3.0.10/humanizer.core.is.3.0.10.nupkg",
+      "nupkg_sha256": "519af4b007edcee52fa01b52f28269fe0d19e752726011a528ffc9a593a9527a",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "is/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/is/Humanizer.resources.dll",
+          "sha256": "753f670c47b3e9e0e4f2c13b26b9661f9da96bd491f8953bf7d1f32861b1fa12",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.it",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.it/3.0.10/humanizer.core.it.3.0.10.nupkg",
+      "nupkg_sha256": "08ee9f11a712693f5152e2925326c3314de590f15af811f13561bfaa2290a7a1",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "it/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/it/Humanizer.resources.dll",
+          "sha256": "29ff9b2e8f9da87e78ccf35a25eff1f0f3a714ea3c37586c1a1e8fc44c35865a",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ja",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ja/3.0.10/humanizer.core.ja.3.0.10.nupkg",
+      "nupkg_sha256": "7d9b995b6994e9b5b22827bb85cdc70928f3fb38cf00115c1448fa3800f37e56",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "ja/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ja/Humanizer.resources.dll",
+          "sha256": "9b7f302967f4c99c07b7b8f6e591703757507c80d19031be5e8a782969c9dc48",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ko",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ko/3.0.10/humanizer.core.ko.3.0.10.nupkg",
+      "nupkg_sha256": "64d844bef4aecb45911c67ed221afadbea402a49b3b034f6e9290b8fd9b16315",
+      "license_expression": "MIT",
+      "repository": null,
+      "files": [
+        {
+          "file": "ko/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ko/Humanizer.resources.dll",
+          "sha256": "09214a51f70d39fc90a05c8f3addf14888609dac9e41fe33985fc83669cc58c6",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ku",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ku/3.0.10/humanizer.core.ku.3.0.10.nupkg",
+      "nupkg_sha256": "9b50198dad06d121098aeacb4c991f62f8b9a5242d99bbe9086ed27dd9ae53ce",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "ku/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ku/Humanizer.resources.dll",
+          "sha256": "9c7f9cc7339b556d81609ba745209fe0a420cc0288296098f9c05ce5d8560619",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.lb",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.lb/3.0.10/humanizer.core.lb.3.0.10.nupkg",
+      "nupkg_sha256": "e8a61926b0d05231d96329f9fd652d7f21bcfea967228a2a6c7a10f64183c980",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "lb/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/lb/Humanizer.resources.dll",
+          "sha256": "26704bbe0fef9a40dde7177310f6f827115fc1be2ea461d8e1b8d3e2620b9202",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.lt",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.lt/3.0.10/humanizer.core.lt.3.0.10.nupkg",
+      "nupkg_sha256": "0630e1dc48df12060514844b3ccbe90b4f2cf201ec1d854c56451fcc6d1c56a2",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "lt/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/lt/Humanizer.resources.dll",
+          "sha256": "3754325b7576d37fb092fec288f4fe01dba97afc4ff1af9d1cc53a6ac4d1f4f1",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.lv",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.lv/3.0.10/humanizer.core.lv.3.0.10.nupkg",
+      "nupkg_sha256": "a3f00c889baceef538ea9d58cdab11a5e798c757cfc3a8ac52977710b3945cd9",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "lv/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/lv/Humanizer.resources.dll",
+          "sha256": "69e93ce4287cda90b6a1bd83314d66d959d3dccd16ebfaf4cd8f4226121c092b",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ms",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ms/3.0.10/humanizer.core.ms.3.0.10.nupkg",
+      "nupkg_sha256": "0970a77d40c6d10d27b5807f79981cf2c39d1a548616bcacbe850a4eb42604bc",
+      "license_expression": "MIT",
+      "repository": null,
+      "files": [
+        {
+          "file": "ms/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ms/Humanizer.resources.dll",
+          "sha256": "8bb27f42dfb37cc2784ed179b8d37ec0140681e5e46ebeca28889c59763bda6b",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.mt",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.mt/3.0.10/humanizer.core.mt.3.0.10.nupkg",
+      "nupkg_sha256": "d8bedcdb9383eea5a835676bda57bb7f3842f3b8b4f98d93cf0bfec87e1f1d90",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "mt/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/mt/Humanizer.resources.dll",
+          "sha256": "57f3e59fd47e0307360a35d146afa415f031b1027218fbeea378d8d1dddf5ef7",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.nb",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.nb/3.0.10/humanizer.core.nb.3.0.10.nupkg",
+      "nupkg_sha256": "ca76825898aee72dc1e4b7a22d0aefb2742b98455abd8bdf78a28ca73599e9fc",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "nb/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/nb/Humanizer.resources.dll",
+          "sha256": "05ab92986dd287872ec51e6d5472254fbebfb7692d39e833ae5434afda73620a",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.nl",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.nl/3.0.10/humanizer.core.nl.3.0.10.nupkg",
+      "nupkg_sha256": "cbf65512c0f3cfd10c097b894999f4315a257fa4ea214e16932e9bc9d3768be5",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "nl/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/nl/Humanizer.resources.dll",
+          "sha256": "0df76e8a85c0e043a78207b763a5f6ff0fe71f7b98625af59deaf6f5c0cac24d",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.pl",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.pl/3.0.10/humanizer.core.pl.3.0.10.nupkg",
+      "nupkg_sha256": "af70e29f73176a80858f8df5795f9600e65446fbba0f85f4b5de4705a3164c68",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "pl/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/pl/Humanizer.resources.dll",
+          "sha256": "61411f7116cf0ddf06231eb0fea2aa4b7f7fed33f9d6616a5301e589e42735f5",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.pt",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.pt/3.0.10/humanizer.core.pt.3.0.10.nupkg",
+      "nupkg_sha256": "ed0ae8cf4607f1779ebfaf69495c282011c0c0fc47d09d3dcf9e9a9d9ca8d731",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "pt/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/pt/Humanizer.resources.dll",
+          "sha256": "f8756a21e4ce373e85b5f6b56c5fdb93c323e167f9d86487c17cebd4ca0ba71c",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.pt-BR",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.pt-br/3.0.10/humanizer.core.pt-br.3.0.10.nupkg",
+      "nupkg_sha256": "3ebb954e9a9745f91594e9b6a69eeb3caf0bf3d4bdf6a1fe18e5d2d187feba90",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "pt-BR/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/pt-BR/Humanizer.resources.dll",
+          "sha256": "a602f1beb3b60d86f54c80e9f2ff462394f51268d2e26826560f9d3f7e59f42e",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ro",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ro/3.0.10/humanizer.core.ro.3.0.10.nupkg",
+      "nupkg_sha256": "90fef36bb2580e3b5963a2a9e68263b0bb13123d0c00ce2a78ae3a66a85116d4",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "ro/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ro/Humanizer.resources.dll",
+          "sha256": "93e670023d105dec3d125eda6f493b909260562104addda42d38c711dde407e4",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.ru",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.ru/3.0.10/humanizer.core.ru.3.0.10.nupkg",
+      "nupkg_sha256": "2743cafa9bbaa3e62ba171347b6d0ef46e25108806043749208ebdd85c4b664d",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "ru/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/ru/Humanizer.resources.dll",
+          "sha256": "a366c0d1b8f6fbf76bd1ca791b1b1a1959cc36b872fb6bd3bc640626cb18aa59",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.sk",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.sk/3.0.10/humanizer.core.sk.3.0.10.nupkg",
+      "nupkg_sha256": "351700c85bbaae2b07838f10f5f52eb243da143e9499763612060d82c8a4a9da",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "sk/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/sk/Humanizer.resources.dll",
+          "sha256": "417b566efaa08d450ed767a0a1ebf7d4ece95c72401ac46fb53abda9154acded",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.sl",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.sl/3.0.10/humanizer.core.sl.3.0.10.nupkg",
+      "nupkg_sha256": "f8e44a531b90d0c5780e95634d08d3f6e29227f0f20eee9be371b7ae74a27a1c",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "sl/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/sl/Humanizer.resources.dll",
+          "sha256": "8fe388b24c9b333d3504878f11571fba14aa8dc939fb7700bb309efc89744671",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.sr",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.sr/3.0.10/humanizer.core.sr.3.0.10.nupkg",
+      "nupkg_sha256": "7fed2e5f687ca705a32efbb847440ed7ca6aec6a9541f58c6acacf29c0c4d1bb",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "sr/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/sr/Humanizer.resources.dll",
+          "sha256": "89283af7732c84135763bb1bb3cdcedd6cf2296ccd0c4a105e70a2ab9aed759c",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.sr-Latn",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.sr-latn/3.0.10/humanizer.core.sr-latn.3.0.10.nupkg",
+      "nupkg_sha256": "edb9d063146298e8624320e7cdf622af855884e559b4e351f7724541b94f8197",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "sr-Latn/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/sr-Latn/Humanizer.resources.dll",
+          "sha256": "6460cc60d6a0bf07856e869958d421dca02de1c82453ad70cab9709fe9b58433",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.sv",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.sv/3.0.10/humanizer.core.sv.3.0.10.nupkg",
+      "nupkg_sha256": "ca51f1bd6d4813225d0492e9cb23f2f550fbf750e63b7eddde3ea8c1b4d5490f",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "sv/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/sv/Humanizer.resources.dll",
+          "sha256": "087c94db842c91a314f65a07d8de25522d373c0206673503c1ebcc9a2c8e47ae",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.th",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.th/3.0.10/humanizer.core.th.3.0.10.nupkg",
+      "nupkg_sha256": "c096cb843c81b12c5cf21965ecba38a7ed7fe9020520596ba6eb4c5f61ac24af",
+      "license_expression": "MIT",
+      "repository": null,
+      "files": [
+        {
+          "file": "th/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/th/Humanizer.resources.dll",
+          "sha256": "e234162be204c34623762a00c2712c009fac2196cfd651a287b6734043daf80a",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.tr",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.tr/3.0.10/humanizer.core.tr.3.0.10.nupkg",
+      "nupkg_sha256": "77392e96c290f93bb27de90d741a9e9f78500ab1ca8c5fe6ffc47315426ff2ca",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "tr/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/tr/Humanizer.resources.dll",
+          "sha256": "1b6eae721ec8a59c9f5f41370cebba49080289d8fa95622af440a1516373a5ff",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.uk",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.uk/3.0.10/humanizer.core.uk.3.0.10.nupkg",
+      "nupkg_sha256": "81b45db84d7bcd4d55a5c1bf1d57a8be6357e2effbabec2c536265e79199ede7",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "uk/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/uk/Humanizer.resources.dll",
+          "sha256": "05c825c9d54a08d186771c079e921b81cdec7b9d5a40e56b5dbfaad01810654d",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.uz-Cyrl-UZ",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.uz-cyrl-uz/3.0.10/humanizer.core.uz-cyrl-uz.3.0.10.nupkg",
+      "nupkg_sha256": "81a925b3f3fd3160e3ce5b62f95a4e1018810c8c43408edbb23d47e63232ca82",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "uz-Cyrl-UZ/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/uz-Cyrl-UZ/Humanizer.resources.dll",
+          "sha256": "f11f093519448851ab242be4230b14b780a4c5689091161400939ceec83efd0c",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.uz-Latn-UZ",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.uz-latn-uz/3.0.10/humanizer.core.uz-latn-uz.3.0.10.nupkg",
+      "nupkg_sha256": "1552cd5bb981d05aeba8d07613047f6e1932d526a3c6820c41fac3448df08ff1",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "uz-Latn-UZ/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/uz-Latn-UZ/Humanizer.resources.dll",
+          "sha256": "dfe69eadce95c5daf3da54ce98f28776f596834d710809aaf888487fdb23f7f7",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.vi",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.vi/3.0.10/humanizer.core.vi.3.0.10.nupkg",
+      "nupkg_sha256": "a83b2beb1dae52715ba6b63a4cf798d94000650f4e146ae391d794417c861ff5",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "vi/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/vi/Humanizer.resources.dll",
+          "sha256": "d4a354c464c5ea8f53777835587a7bcbc2c64904770a6f59233932fd6307b5ed",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.zh-CN",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.zh-cn/3.0.10/humanizer.core.zh-cn.3.0.10.nupkg",
+      "nupkg_sha256": "697ff1124b386f4f8602e157b46b22a6bf8f6e931d977331877d3b107173ba35",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "zh-CN/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/zh-CN/Humanizer.resources.dll",
+          "sha256": "166b5339b0637ad15a4efaff767bd05f4c5fb0d6c842c64df98dc65d37d8a587",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.zh-Hans",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.zh-hans/3.0.10/humanizer.core.zh-hans.3.0.10.nupkg",
+      "nupkg_sha256": "fac2bc8ad744c7bc3325b80a1d960b3b06e1faa3d8efd26eafe4db44e29ba770",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "zh-Hans/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/zh-Hans/Humanizer.resources.dll",
+          "sha256": "1e181e2b9ca93c8e8c1aa6ee0cc589f4b0e13ecad3b2a6637a9367f120f57e8d",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "package": "Humanizer.Core.zh-Hant",
+      "version": "3.0.10",
+      "url": "https://api.nuget.org/v3-flatcontainer/humanizer.core.zh-hant/3.0.10/humanizer.core.zh-hant.3.0.10.nupkg",
+      "nupkg_sha256": "660d0bb61c7d2ed5198100b26e5e51dea2ad4a5b9176b41dad595091151ccca1",
+      "license_expression": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "90f0cb1d7427635f38b46350bb1dc5fca2164f2d"
+      },
+      "files": [
+        {
+          "file": "zh-Hant/Humanizer.resources.dll",
+          "package_entry": "lib/net10.0/zh-Hant/Humanizer.resources.dll",
+          "sha256": "cf2af7b5a8689f887bdb16ce4cb0405b384353cb35e99a745099743526ff43c9",
+          "matches_official_package": true
+        }
+      ],
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    }
+  ],
+  "dotnet_apphost": {
+    "package": "Microsoft.NETCore.App.Host.osx-arm64",
+    "version": "10.0.13",
+    "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.osx-arm64/10.0.13/microsoft.netcore.app.host.osx-arm64.10.0.13.nupkg",
+    "nupkg_sha256": "629ee6c59be0d9746643afe6007f4d2a5a8435613931079c5759d103ff037288",
+    "embedded_apphost_version": "10.0.13",
+    "embedded_commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
+    "template_files": [
+      "runtimes/osx-arm64/native/apphost"
+    ],
+    "notices": [
+      "dotnet-apphost/LICENSE.TXT",
+      "dotnet-apphost/THIRD-PARTY-NOTICES.TXT"
+    ],
+    "source_repository": "https://github.com/dotnet/dotnet/tree/4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
+    "source_commit_resolved_in_official_VMR": true
+  },
+  "notice_texts": [
+    {
+      "path": "Humanizer/LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/Humanizr/Humanizer/90f0cb1d7427635f38b46350bb1dc5fca2164f2d/license.txt",
+      "sha256": "e24ec7f2eea5c5f4b3e2c08308109ba99b49b4b56ea7ff0e0a178f2bdd4bbce8",
+      "bytes": 1565
+    },
+    {
+      "path": "RecyclableMemoryStream/LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/Microsoft.IO.RecyclableMemoryStream/e29a28387da9018fa9605a1dcb3f7a0435aa9974/LICENSE",
+      "sha256": "7d6aa3550cf7aeb25ef542f616d8ead585633e3b607c65e1db4aa804e4971a91",
+      "bytes": 1093
+    },
+    {
+      "path": "MsgPack.Cli/LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/msgpack/msgpack-cli/1.0.1/LICENSE.txt",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
+    },
+    {
+      "path": "Gommon/LICENSE.txt",
+      "url": "https://api.nuget.org/v3-flatcontainer/gommon/2.8.1.2/gommon.2.8.1.2.nupkg",
+      "archive_entry": "content/LICENSE",
+      "sha256": "7c4d2d326bad3f254fc09dfce4db3c38a9ca8e587d1acf698f9ab65e338c3fa9",
+      "bytes": 1088
+    },
+    {
+      "path": "System.CodeDom/LICENSE.txt",
+      "url": "https://api.nuget.org/v3-flatcontainer/system.codedom/4.4.0/system.codedom.4.4.0.nupkg",
+      "archive_entry": "LICENSE.TXT",
+      "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b",
+      "bytes": 1139
+    },
+    {
+      "path": "System.CodeDom/THIRD-PARTY-NOTICES.txt",
+      "url": "https://api.nuget.org/v3-flatcontainer/system.codedom/4.4.0/system.codedom.4.4.0.nupkg",
+      "archive_entry": "THIRD-PARTY-NOTICES.TXT",
+      "sha256": "0ef4dce1f4e8965f19a3b8b2f984f337d5c35e5aaf7f8a36b95aec66c301963a",
+      "bytes": 11591
+    },
+    {
+      "path": "dotnet-apphost/LICENSE.TXT",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.osx-arm64/10.0.13/microsoft.netcore.app.host.osx-arm64.10.0.13.nupkg",
+      "archive_entry": "LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "bytes": 1116,
+      "evidence": "apphost embeddedVersion10.0.13; official NuGet package exactversion"
+    },
+    {
+      "path": "dotnet-apphost/THIRD-PARTY-NOTICES.TXT",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.osx-arm64/10.0.13/microsoft.netcore.app.host.osx-arm64.10.0.13.nupkg",
+      "archive_entry": "THIRD-PARTY-NOTICES.TXT",
+      "sha256": "66f1d4e44973185519bb4aa8a9718eb22fc7af2cc532e3ae9cfc4c127ee7fc54",
+      "bytes": 76623,
+      "evidence": "apphost embeddedVersion10.0.13; official NuGet package exactversion"
+    },
+    {
+      "path": "MsgPack.Cli/PACKAGE-NOTICE.txt",
+      "url": "https://api.nuget.org/v3-flatcontainer/msgpack.cli/1.0.1/msgpack.cli.1.0.1.nupkg",
+      "evidence": "Exact author/copyright/license metadata from official1.0.1 .nuspec; wrapper label authored for this inventory",
+      "sha256": "36c2e4b6141d692e06eef44ea770f28ee330a8a3bdb862f3f7b0dc6a9a01a07e",
+      "bytes": 352
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/Gommon.dll",
+      "sha256": "1648a882b8986d660e8e0063445c41abb0641fe57edc49143af165c3f00f2bd7",
+      "package": "Gommon/2.8.1.2",
+      "official_package_entry": "lib/net9.0/Gommon.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Gommon/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/Humanizer.dll",
+      "sha256": "2769ed8265b691a5482c72506ed274dc52446fa1641997a8c12c66f5b9263d39",
+      "package": "Humanizer.Core/3.0.10",
+      "official_package_entry": "lib/net10.0/Humanizer.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/Microsoft.IO.RecyclableMemoryStream.dll",
+      "sha256": "631a5fc41df9498d032c0655ebd0e1209430ccffbec55667d89c2566b338ccc0",
+      "package": "Microsoft.IO.RecyclableMemoryStream/3.0.1",
+      "official_package_entry": "lib/net6.0/Microsoft.IO.RecyclableMemoryStream.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "RecyclableMemoryStream/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/MsgPack.dll",
+      "sha256": "c7fe37ad67035bffbb634a497847a94496b96de755d42bbce1a3518cac0dd889",
+      "package": "MsgPack.Cli/1.0.1",
+      "official_package_entry": "lib/netstandard2.0/MsgPack.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "MsgPack.Cli/LICENSE.txt",
+        "MsgPack.Cli/PACKAGE-NOTICE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/Ryujinx.Common.dll",
+      "sha256": "50db51f83d8cb36d81baf94c76223e3415d7d27923bbb4e1b0b98f8598baaa88",
+      "component": "source project output; version recorded by deps.json",
+      "notices": [
+        "../ryujinx/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/Ryujinx.Graphics.Shader.dll",
+      "sha256": "5c427183cb7ec561ca54b150714bbbd843866faa1260089c0f3dcc47223819e5",
+      "component": "source project output; version recorded by deps.json",
+      "notices": [
+        "../ryujinx/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/Spv.Generator.dll",
+      "sha256": "5706ec0d5dc076b64a37af2aa592264161689f4958215cfab28fa32e5cac8deb",
+      "component": "source project output; version recorded by deps.json",
+      "notices": [
+        "../ryujinx/src/Spv.Generator/LICENSE"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/System.CodeDom.dll",
+      "sha256": "5aec78c69334fc1cd1c926f4a9c857260dd2e03ff1739e96def1d68296b86b8b",
+      "package": "System.CodeDom/4.4.0",
+      "official_package_entry": "lib/netstandard2.0/System.CodeDom.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "System.CodeDom/LICENSE.txt",
+        "System.CodeDom/THIRD-PARTY-NOTICES.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/af/Humanizer.resources.dll",
+      "sha256": "115ee554aa53782a3c502d84e355eb7a9e6250bd56c90d8f7c98163ec67e422b",
+      "package": "Humanizer.Core.af/3.0.10",
+      "official_package_entry": "lib/net10.0/af/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ar/Humanizer.resources.dll",
+      "sha256": "6ae817931f6d8c64f49f7eca97b45dee5f43956de6173a499893498dcfd2d38e",
+      "package": "Humanizer.Core.ar/3.0.10",
+      "official_package_entry": "lib/net10.0/ar/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/az/Humanizer.resources.dll",
+      "sha256": "f51119e88bb3670099f2a96bf9a66c78a89b338a91cdcc6e228d56b3a044e0c0",
+      "package": "Humanizer.Core.az/3.0.10",
+      "official_package_entry": "lib/net10.0/az/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/bg/Humanizer.resources.dll",
+      "sha256": "0c1d79078874928f9d6af55814afa2901cced5584cbf54d6c3a9ef017ce4b579",
+      "package": "Humanizer.Core.bg/3.0.10",
+      "official_package_entry": "lib/net10.0/bg/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/bn/Humanizer.resources.dll",
+      "sha256": "fd7e26b514107e023fcbf1b5ecd60fae100ccdfd0339ae67ad34322a5b1390c0",
+      "package": "Humanizer.Core.bn/3.0.10",
+      "official_package_entry": "lib/net10.0/bn/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ca/Humanizer.resources.dll",
+      "sha256": "3bf812f8ab2e7dd0cccd72f45bdb3731c788b46de38a695020dd29dda41dbc1b",
+      "package": "Humanizer.Core.ca/3.0.10",
+      "official_package_entry": "lib/net10.0/ca/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/cs/Humanizer.resources.dll",
+      "sha256": "9e84210a062691e9efbbbc36299c0c534d872df72a59ab573ea156b950e08d8f",
+      "package": "Humanizer.Core.cs/3.0.10",
+      "official_package_entry": "lib/net10.0/cs/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/da/Humanizer.resources.dll",
+      "sha256": "9688d8caf50a5be0819e66a65f3344daed3f330455a42100e1a263788c16399c",
+      "package": "Humanizer.Core.da/3.0.10",
+      "official_package_entry": "lib/net10.0/da/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/de/Humanizer.resources.dll",
+      "sha256": "cabfd8bd9fe8841f29b4b29a8cb3fab825d6678d596bb798c7f24d5eec9e6301",
+      "package": "Humanizer.Core.de/3.0.10",
+      "official_package_entry": "lib/net10.0/de/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate",
+      "sha256": "000ac0baf0e4aa352a19365bd2196bc58e1330114278bb2badeb2de6fa2019bd",
+      "component": "generated.NETapphost for dmsh_xlate.dll",
+      "official_package": "Microsoft.NETCore.App.Host.osx-arm64/10.0.13",
+      "embedded_version_commit_match_official_template": true,
+      "byte_exact_match": false,
+      "reason_not_exact": "AppHost templates are bound to the managed entrypoint and carry generated Mach-O signature data",
+      "notices": [
+        "dotnet-apphost/LICENSE.TXT",
+        "dotnet-apphost/THIRD-PARTY-NOTICES.TXT"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate.dll",
+      "sha256": "770e81bc853cde4e22893aec5800d16694de2048a64867a994f5b5528a2b5bd2",
+      "component": "source project output; version recorded by deps.json",
+      "notices": [
+        "../../../LICENSE"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/el/Humanizer.resources.dll",
+      "sha256": "652e758c1ceb61d471cf8ee4ca09568400323124e5403748a829715836ed2069",
+      "package": "Humanizer.Core.el/3.0.10",
+      "official_package_entry": "lib/net10.0/el/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/es/Humanizer.resources.dll",
+      "sha256": "d7ad03cd07e01e497b1ad43da027d79ff4281a92ddd3529c74f1c67922952a73",
+      "package": "Humanizer.Core.es/3.0.10",
+      "official_package_entry": "lib/net10.0/es/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/fa/Humanizer.resources.dll",
+      "sha256": "36a647b0bcf38242906e92abc4b0159e30bd7094a62b4c258f788184395d98df",
+      "package": "Humanizer.Core.fa/3.0.10",
+      "official_package_entry": "lib/net10.0/fa/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/fi/Humanizer.resources.dll",
+      "sha256": "540d0561305e1bdf69f8ad7d879567584d3f93de1a07450243f9f52f96106afd",
+      "package": "Humanizer.Core.fi/3.0.10",
+      "official_package_entry": "lib/net10.0/fi/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/fil/Humanizer.resources.dll",
+      "sha256": "d0f7be4976ac88b9753caf74c67c5107a3d5a267a891ca1614f7de9feb96b11c",
+      "package": "Humanizer.Core.fil/3.0.10",
+      "official_package_entry": "lib/net10.0/fil/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/fr/Humanizer.resources.dll",
+      "sha256": "e28bfd43f81b2cba939c01659af5bbc7f20e236a52bdd072439f5e4de4ddebda",
+      "package": "Humanizer.Core.fr/3.0.10",
+      "official_package_entry": "lib/net10.0/fr/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/he/Humanizer.resources.dll",
+      "sha256": "80d2e32ac0b6c69371063ea62891c56fcff0c04d5b1a1c8cf147ed3fac7810e1",
+      "package": "Humanizer.Core.he/3.0.10",
+      "official_package_entry": "lib/net10.0/he/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/hr/Humanizer.resources.dll",
+      "sha256": "24f86671d5b7039c7efdf22eb4fd1ed6f5997618773d74af844fd484ad5e5e7b",
+      "package": "Humanizer.Core.hr/3.0.10",
+      "official_package_entry": "lib/net10.0/hr/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/hu/Humanizer.resources.dll",
+      "sha256": "724594b505d7fe7601385860e55f30254ef48a03242344b74e27ad068c5f06f6",
+      "package": "Humanizer.Core.hu/3.0.10",
+      "official_package_entry": "lib/net10.0/hu/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/hy/Humanizer.resources.dll",
+      "sha256": "2edc2ad20b715c11c868bf246a69dbfc6a6b2ee6048abdd1a3691472ff78b011",
+      "package": "Humanizer.Core.hy/3.0.10",
+      "official_package_entry": "lib/net10.0/hy/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/id/Humanizer.resources.dll",
+      "sha256": "059bf6f470c2f37daed622dc579c57e95b7ff70b49fe7d9f61b028189befd94e",
+      "package": "Humanizer.Core.id/3.0.10",
+      "official_package_entry": "lib/net10.0/id/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/is/Humanizer.resources.dll",
+      "sha256": "753f670c47b3e9e0e4f2c13b26b9661f9da96bd491f8953bf7d1f32861b1fa12",
+      "package": "Humanizer.Core.is/3.0.10",
+      "official_package_entry": "lib/net10.0/is/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/it/Humanizer.resources.dll",
+      "sha256": "29ff9b2e8f9da87e78ccf35a25eff1f0f3a714ea3c37586c1a1e8fc44c35865a",
+      "package": "Humanizer.Core.it/3.0.10",
+      "official_package_entry": "lib/net10.0/it/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ja/Humanizer.resources.dll",
+      "sha256": "9b7f302967f4c99c07b7b8f6e591703757507c80d19031be5e8a782969c9dc48",
+      "package": "Humanizer.Core.ja/3.0.10",
+      "official_package_entry": "lib/net10.0/ja/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ko/Humanizer.resources.dll",
+      "sha256": "09214a51f70d39fc90a05c8f3addf14888609dac9e41fe33985fc83669cc58c6",
+      "package": "Humanizer.Core.ko/3.0.10",
+      "official_package_entry": "lib/net10.0/ko/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ku/Humanizer.resources.dll",
+      "sha256": "9c7f9cc7339b556d81609ba745209fe0a420cc0288296098f9c05ce5d8560619",
+      "package": "Humanizer.Core.ku/3.0.10",
+      "official_package_entry": "lib/net10.0/ku/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/lb/Humanizer.resources.dll",
+      "sha256": "26704bbe0fef9a40dde7177310f6f827115fc1be2ea461d8e1b8d3e2620b9202",
+      "package": "Humanizer.Core.lb/3.0.10",
+      "official_package_entry": "lib/net10.0/lb/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/lt/Humanizer.resources.dll",
+      "sha256": "3754325b7576d37fb092fec288f4fe01dba97afc4ff1af9d1cc53a6ac4d1f4f1",
+      "package": "Humanizer.Core.lt/3.0.10",
+      "official_package_entry": "lib/net10.0/lt/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/lv/Humanizer.resources.dll",
+      "sha256": "69e93ce4287cda90b6a1bd83314d66d959d3dccd16ebfaf4cd8f4226121c092b",
+      "package": "Humanizer.Core.lv/3.0.10",
+      "official_package_entry": "lib/net10.0/lv/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ms/Humanizer.resources.dll",
+      "sha256": "8bb27f42dfb37cc2784ed179b8d37ec0140681e5e46ebeca28889c59763bda6b",
+      "package": "Humanizer.Core.ms/3.0.10",
+      "official_package_entry": "lib/net10.0/ms/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/mt/Humanizer.resources.dll",
+      "sha256": "57f3e59fd47e0307360a35d146afa415f031b1027218fbeea378d8d1dddf5ef7",
+      "package": "Humanizer.Core.mt/3.0.10",
+      "official_package_entry": "lib/net10.0/mt/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/nb/Humanizer.resources.dll",
+      "sha256": "05ab92986dd287872ec51e6d5472254fbebfb7692d39e833ae5434afda73620a",
+      "package": "Humanizer.Core.nb/3.0.10",
+      "official_package_entry": "lib/net10.0/nb/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/nl/Humanizer.resources.dll",
+      "sha256": "0df76e8a85c0e043a78207b763a5f6ff0fe71f7b98625af59deaf6f5c0cac24d",
+      "package": "Humanizer.Core.nl/3.0.10",
+      "official_package_entry": "lib/net10.0/nl/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/pl/Humanizer.resources.dll",
+      "sha256": "61411f7116cf0ddf06231eb0fea2aa4b7f7fed33f9d6616a5301e589e42735f5",
+      "package": "Humanizer.Core.pl/3.0.10",
+      "official_package_entry": "lib/net10.0/pl/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/pt-BR/Humanizer.resources.dll",
+      "sha256": "a602f1beb3b60d86f54c80e9f2ff462394f51268d2e26826560f9d3f7e59f42e",
+      "package": "Humanizer.Core.pt-BR/3.0.10",
+      "official_package_entry": "lib/net10.0/pt-BR/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/pt/Humanizer.resources.dll",
+      "sha256": "f8756a21e4ce373e85b5f6b56c5fdb93c323e167f9d86487c17cebd4ca0ba71c",
+      "package": "Humanizer.Core.pt/3.0.10",
+      "official_package_entry": "lib/net10.0/pt/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ro/Humanizer.resources.dll",
+      "sha256": "93e670023d105dec3d125eda6f493b909260562104addda42d38c711dde407e4",
+      "package": "Humanizer.Core.ro/3.0.10",
+      "official_package_entry": "lib/net10.0/ro/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/ru/Humanizer.resources.dll",
+      "sha256": "a366c0d1b8f6fbf76bd1ca791b1b1a1959cc36b872fb6bd3bc640626cb18aa59",
+      "package": "Humanizer.Core.ru/3.0.10",
+      "official_package_entry": "lib/net10.0/ru/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/sk/Humanizer.resources.dll",
+      "sha256": "417b566efaa08d450ed767a0a1ebf7d4ece95c72401ac46fb53abda9154acded",
+      "package": "Humanizer.Core.sk/3.0.10",
+      "official_package_entry": "lib/net10.0/sk/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/sl/Humanizer.resources.dll",
+      "sha256": "8fe388b24c9b333d3504878f11571fba14aa8dc939fb7700bb309efc89744671",
+      "package": "Humanizer.Core.sl/3.0.10",
+      "official_package_entry": "lib/net10.0/sl/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/sr-Latn/Humanizer.resources.dll",
+      "sha256": "6460cc60d6a0bf07856e869958d421dca02de1c82453ad70cab9709fe9b58433",
+      "package": "Humanizer.Core.sr-Latn/3.0.10",
+      "official_package_entry": "lib/net10.0/sr-Latn/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/sr/Humanizer.resources.dll",
+      "sha256": "89283af7732c84135763bb1bb3cdcedd6cf2296ccd0c4a105e70a2ab9aed759c",
+      "package": "Humanizer.Core.sr/3.0.10",
+      "official_package_entry": "lib/net10.0/sr/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/sv/Humanizer.resources.dll",
+      "sha256": "087c94db842c91a314f65a07d8de25522d373c0206673503c1ebcc9a2c8e47ae",
+      "package": "Humanizer.Core.sv/3.0.10",
+      "official_package_entry": "lib/net10.0/sv/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/th/Humanizer.resources.dll",
+      "sha256": "e234162be204c34623762a00c2712c009fac2196cfd651a287b6734043daf80a",
+      "package": "Humanizer.Core.th/3.0.10",
+      "official_package_entry": "lib/net10.0/th/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/tr/Humanizer.resources.dll",
+      "sha256": "1b6eae721ec8a59c9f5f41370cebba49080289d8fa95622af440a1516373a5ff",
+      "package": "Humanizer.Core.tr/3.0.10",
+      "official_package_entry": "lib/net10.0/tr/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/uk/Humanizer.resources.dll",
+      "sha256": "05c825c9d54a08d186771c079e921b81cdec7b9d5a40e56b5dbfaad01810654d",
+      "package": "Humanizer.Core.uk/3.0.10",
+      "official_package_entry": "lib/net10.0/uk/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/uz-Cyrl-UZ/Humanizer.resources.dll",
+      "sha256": "f11f093519448851ab242be4230b14b780a4c5689091161400939ceec83efd0c",
+      "package": "Humanizer.Core.uz-Cyrl-UZ/3.0.10",
+      "official_package_entry": "lib/net10.0/uz-Cyrl-UZ/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/uz-Latn-UZ/Humanizer.resources.dll",
+      "sha256": "dfe69eadce95c5daf3da54ce98f28776f596834d710809aaf888487fdb23f7f7",
+      "package": "Humanizer.Core.uz-Latn-UZ/3.0.10",
+      "official_package_entry": "lib/net10.0/uz-Latn-UZ/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/vi/Humanizer.resources.dll",
+      "sha256": "d4a354c464c5ea8f53777835587a7bcbc2c64904770a6f59233932fd6307b5ed",
+      "package": "Humanizer.Core.vi/3.0.10",
+      "official_package_entry": "lib/net10.0/vi/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/zh-CN/Humanizer.resources.dll",
+      "sha256": "166b5339b0637ad15a4efaff767bd05f4c5fb0d6c842c64df98dc65d37d8a587",
+      "package": "Humanizer.Core.zh-CN/3.0.10",
+      "official_package_entry": "lib/net10.0/zh-CN/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/zh-Hans/Humanizer.resources.dll",
+      "sha256": "1e181e2b9ca93c8e8c1aa6ee0cc589f4b0e13ecad3b2a6637a9367f120f57e8d",
+      "package": "Humanizer.Core.zh-Hans/3.0.10",
+      "official_package_entry": "lib/net10.0/zh-Hans/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "dm/gfx/tools/dmsh_xlate_bin/zh-Hant/Humanizer.resources.dll",
+      "sha256": "cf2af7b5a8689f887bdb16ce4cb0405b384353cb35e99a745099743526ff43c9",
+      "package": "Humanizer.Core.zh-Hant/3.0.10",
+      "official_package_entry": "lib/net10.0/zh-Hant/Humanizer.resources.dll",
+      "byte_exact_match": true,
+      "notices": [
+        "Humanizer/LICENSE.txt"
+      ]
+    }
+  ],
+  "coverage": {
+    "runtime_artifacts": 61,
+    "nuget_byte_exact_artifacts": 56,
+    "unmapped_artifacts": [],
+    "unknown_license_terms": []
+  }
+}

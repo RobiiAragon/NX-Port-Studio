@@ -1,0 +1,7 @@
+Package metadata attribution (not a separately published upstream NOTICE file)
+
+MsgPack.Cli 1.0.1
+Copyright 2010-2016 FUJIWARA, Yusuke, all rights reserved.
+Author: FUJIWARA, Yusuke
+License URL recorded by this package: http://www.apache.org/licenses/LICENSE-2.0
+Source: https://api.nuget.org/v3-flatcontainer/msgpack.cli/1.0.1/msgpack.cli.1.0.1.nupkg

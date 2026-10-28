@@ -1,0 +1,30 @@
+// Native launcher network settings.
+"Network" = "Red";
+"Mode" = "Modo";
+"Offline" = "Sin conexión";
+"LAN" = "LAN";
+"Local wireless bridge (LDN)" = "Puente inalámbrico local (LDN)";
+"Nextendo" = "Nextendo";
+"Mode is set by an env file." = "El modo está definido en un archivo env.";
+"Address is set by an env file." = "La dirección está definida en un archivo env.";
+"Enter a valid unicast IPv4 address, without a port." = "Introduce una IPv4 unicast válida, sin puerto.";
+"Network services are disabled." = "Los servicios de red están desactivados.";
+"Uses a LAN bridge for local wireless. The Switch needs a compatible ldn_mitm module and a matching game version." = "Usa un puente LAN para el modo inalámbrico local. La Switch necesita un módulo ldn_mitm compatible y la misma versión del juego.";
+"Nextendo requires a private game credential on this iPhone and a server-accepted game version. Native online play has not been verified." = "Nextendo requiere una credencial de juego privada en este iPhone y una versión admitida por el servidor. El juego en línea nativo aún no se ha verificado.";
+
+// Automatic local discovery and optional manual override.
+"Automatic discovery" = "Descubrimiento automático";
+"Manual discovery address" = "Dirección de descubrimiento manual";
+"Advanced connection settings" = "Ajustes avanzados de conexión";
+"Discovery IPv4 (optional)" = "IPv4 de descubrimiento (opcional)";
+"Automatic" = "Automático";
+"Leave this empty to discover nearby games automatically." = "Déjalo vacío para descubrir juegos cercanos automáticamente.";
+"Use the same local network and matching game versions. Allow Local Network access when iOS asks." = "Usa la misma red local y versiones del juego compatibles. Permite el acceso a la red local cuando iOS lo solicite.";
+"Use the game's LAN mode to find other players on your local network." = "Usa el modo LAN del juego para encontrar otros jugadores en tu red local.";
+
+// Nextendo setup preflight; metadata only.
+"Game credential validated" = "Credencial de juego validada";
+"Game credential needs attention" = "Revisa la credencial de juego";
+"Compatible services are not configured. You can play using Offline or LAN." = "Falta configurar servicios compatibles. Puedes jugar usando Sin conexión o LAN.";
+"The Nextendo service configuration could not be validated. You can play using Offline or LAN." = "No se pudo validar la configuración de servicios de Nextendo. Puedes jugar usando Sin conexión o LAN.";
+"No valid Nextendo game credential is available on this iPhone. Link or renew it in NX Port Studio. You can play using Offline or LAN." = "Este iPhone no tiene una credencial de juego de Nextendo válida. Vincúlala o renuévala en NX Port Studio. Puedes jugar usando Sin conexión o LAN.";

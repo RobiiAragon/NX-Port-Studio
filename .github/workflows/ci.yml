@@ -1,0 +1,48 @@
+name: Source checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  studio:
+    name: Studio / macOS
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: swift --version
+      - name: PortCore tests
+        run: swift test --package-path macOS/NXPortStudio
+      - name: Studio build
+        run: swift build --package-path macOS/NXPortStudio
+  tools:
+    name: Asset-free Python checks
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Documentation and source-only tool tests
+        run: >-
+          python -m unittest
+          dm.tools.tests.test_docs
+          dm.tools.tests.test_nso_syms
+          dm.tools.tests.test_system_data
+          dm.tools.tests.test_launcher_settings

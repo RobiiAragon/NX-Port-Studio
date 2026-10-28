@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "policy": "Only original project artwork and reviewed Studio interface captures; no Nintendo gameplay, covers, game icons or SDK art.",
+  "assets": [
+    {
+      "path": "docs/images/hero.svg",
+      "sha256": "e20b8dda725a9b996b030cbe97ab04dd52a343a25a553d5f276fa30e36c62540",
+      "provenance": "Original vector banner based on the source-drawn NX Port Studio cartridge/export mark."
+    }
+  ]
+}
