@@ -15,6 +15,7 @@ static guest_address guest_addr(uint32_t ip, unsigned port) { return (guest_addr
 #include <net/if.h>
 #include <poll.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -149,6 +150,14 @@ static void peer_fixture(void) {
     dm_ldn_stop(c); close(command[1]);close(result[0]);
 }
 #ifdef DM_NET_TEST
+static _Atomic unsigned ldn_discovery_calls;
+static unsigned ldn_discovery_error_at;
+static long ldn_host_down(int fd,const void *bytes,size_t size,int flags,uint32_t address,uint16_t port) {
+    (void)address;unsigned call=atomic_fetch_add(&ldn_discovery_calls,1);
+    if(call==ldn_discovery_error_at) { errno=EHOSTDOWN;return -1; }
+    struct sockaddr_in to={.sin_len=sizeof to,.sin_family=AF_INET,.sin_port=port,.sin_addr={htonl(INADDR_LOOPBACK)}};
+    return sendto(fd,bytes,size,flags,(struct sockaddr *)&to,sizeof to);
+}
 static void automatic_discovery(void) {
     dm_net_set_multicast_allowed(0); unsetenv("DM_NET_DISCOVERY_PEER");
     // The only reachable loopback neighbor is 127.0.0.1. The validated adapter
@@ -166,12 +175,26 @@ static void automatic_discovery(void) {
     CHECK(!dm_ldn_scan(station,rooms,&count,24,&filter,0));
     CHECK(count==1 && !strcmp(rooms[0].nodes[0].name,"auto host") && rooms[0].nodes[0].ip==INADDR_LOOPBACK);
     dm_ldn_stop(station);
+    // Destination-specific EHOSTDOWN must be skipped both at the first
+    // neighbor and after a successful send in the worker's sweep.
+    for(unsigned fault=0;fault<2;++fault) {
+        dm_net_set_multicast_allowed(0);station=dm_ldn_start(&st,NULL,NULL);CHECK(station);CHECK(!dm_ldn_open(station,0));
+        ldn_discovery_error_at=fault;atomic_store(&ldn_discovery_calls,0);dm_net_test_set_discovery_sender(ldn_host_down);
+        CHECK(!dm_ldn_scan(station,rooms,&count,24,&filter,0)&&count==1&&atomic_load(&ldn_discovery_calls)>fault+1);
+        dm_net_test_set_discovery_sender(NULL);dm_ldn_stop(station);
+    }
     // A capable native sender keeps its original destination and also probes
     // restricted peers. The logical loopback broadcast itself reaches no peer;
     // finding this real host therefore requires the complementary unicast.
     dm_net_set_multicast_allowed(1);station=dm_ldn_start(&st,NULL,NULL);CHECK(station);CHECK(!dm_ldn_open(station,0));
     CHECK(!dm_ldn_scan(station,rooms,&count,24,&filter,0));CHECK(count==1&&dm_net_multicast_allowed()==1);
     dm_ldn_stop(station);
+    // The same error on the original native broadcast remains visible and
+    // must not launch a complementary sweep to the reachable host.
+    station=dm_ldn_start(&st,NULL,NULL);CHECK(station);CHECK(!dm_ldn_open(station,0));
+    ldn_discovery_error_at=0;atomic_store(&ldn_discovery_calls,0);dm_net_test_set_discovery_sender(ldn_host_down);
+    CHECK(dm_ldn_scan(station,rooms,&count,24,&filter,0)!=0&&count==0&&atomic_load(&ldn_discovery_calls)==1);
+    dm_net_test_set_discovery_sender(NULL);dm_ldn_stop(station);
     // Create the actual native socket without SO_BROADCAST, then simulate a
     // claimed capability. The kernel refuses native broadcast: supplemental
     // unicast must not hide that error by discovering the otherwise reachable host.

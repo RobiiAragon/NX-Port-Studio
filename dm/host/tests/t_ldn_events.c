@@ -28,6 +28,9 @@ int dm_net_ipconfig(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d, uint32_t
 int dm_net_discovery_target(uint32_t broadcast, uint32_t *target) { *target=broadcast; return 0; }
 int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *plan) { *plan=(dm_net_discovery_plan){.target=destination,.count=1}; return 0; }
 int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan) { (void)destination;memset(plan,0,sizeof *plan);return 0; }
+long dm_net_discovery_send_native(int fd,const void *bytes,size_t size,int flags,uint32_t address,uint16_t port) {
+    struct sockaddr_in to={.sin_len=sizeof to,.sin_family=AF_INET,.sin_addr={address},.sin_port=port};return sendto(fd,bytes,size,flags,(struct sockaddr *)&to,sizeof to);
+}
 int dm_net_errno(void) { return 13; }
 int dm_net_multicast_allowed(void) { return 0; }
 static void *read_during_finalize(void *argument) {

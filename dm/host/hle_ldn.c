@@ -171,10 +171,9 @@ static void *ldn_worker(void *opaque) {
                 if(!plan->count)break;
                 dm_net_discovery_plan saved = *plan; uint32_t address;
                 if (!dm_net_discovery_next(plan, &address)) { plan->count=0;continue; }
-                struct sockaddr_in dest = ldn_endpoint(address, c->transport.discovery_port);
-                ssize_t result = sendto(c->udp, packet, sizeof packet, 0, (struct sockaddr *)&dest, sizeof dest);
+                ssize_t result=dm_net_discovery_send_native(c->udp,packet,sizeof packet,0,address,htons(c->transport.discovery_port));
                 if (result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == EINTR)) { *plan=saved;break; }
-                if (result < 0 && (!plan->automatic||(errno != EHOSTUNREACH && errno != ENETUNREACH))) {
+                if (result < 0 && (!plan->automatic||!dm_net_discovery_unreachable(errno))) {
                     // A supplemental failure must not replace an accepted
                     // original broadcast's result; native errors stay visible.
                     if(plan==&c->scan_supplement) { plan->count=0;break; }

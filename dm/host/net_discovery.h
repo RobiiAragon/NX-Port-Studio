@@ -3,12 +3,18 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
 
 enum { DM_DISCOVERY_BATCH = 32, DM_DISCOVERY_TICK_MS = 8, DM_DISCOVERY_MAX_HOSTS = 4094 };
 typedef struct {
     uint32_t local, first, last, target, cursor;
     unsigned count, automatic;
 } dm_net_discovery_plan;
+// Darwin can report a negative ARP entry as EHOSTDOWN. These are destination
+// failures, not permission/interface failures; skip that neighbor in a sweep.
+static inline int dm_net_discovery_unreachable(int error) {
+    return error==EHOSTUNREACH||error==ENETUNREACH||error==EHOSTDOWN;
+}
 
 // This takes a validated adapter snapshot, not a guessed address range. /31,
 // /32, noncontiguous masks and networks broader than /20 are not discoverable.

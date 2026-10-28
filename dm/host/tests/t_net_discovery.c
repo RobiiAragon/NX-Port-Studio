@@ -20,10 +20,15 @@ void dm_guest_host_wait_end(void) {}
 void dm_guest_sleep_ns(int64_t ns) { struct timespec t={ns/1000000000,ns%1000000000}; nanosleep(&t,NULL); }
 static uint64_t ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000; }
 static _Atomic unsigned injected_calls;
+static _Atomic int injected_bad_target;
 static int injected_error;
+static unsigned injected_at;
 static long first_unreachable(int fd,const void *bytes,size_t size,int flags,uint32_t ip,uint16_t port) {
     unsigned call=atomic_fetch_add(&injected_calls,1);
-    if(!call) { CHECK(ip==htonl(INADDR_LOOPBACK));errno=injected_error;return -1; }
+    if(call==injected_at) {
+        atomic_store(&injected_bad_target,ip!=htonl(injected_at?0x7f000003:INADDR_LOOPBACK));
+        errno=injected_error;return -1;
+    }
     // Darwin has only 127.0.0.1 assigned: map the next logical neighbor to it.
     // Actual UDP delivery, original fd/source port and bytes remain real.
     struct sockaddr_in to={.sin_len=sizeof to,.sin_family=AF_INET,.sin_port=port,.sin_addr={htonl(INADDR_LOOPBACK)}};
@@ -120,18 +125,28 @@ static void bounds_and_lifetime(void) {
 static void unreachable_neighbor(void) {
     dm_net_test_interface a=adapter(0xfffffff8);dm_net_test_set_interface(&a);
     unsigned port;int native=receiver(&port);address destination=endpoint(UINT32_MAX,port);
-    const int errors[]={EHOSTUNREACH,ENETUNREACH,EACCES,ENETDOWN};
-    for(unsigned i=0;i<4;++i) {
+    const int errors[]={EHOSTUNREACH,ENETUNREACH,EHOSTDOWN,EACCES,ENETDOWN};
+    for(unsigned i=0;i<5;++i) {
         int guest=dm_net_socket(2,2,0);CHECK(guest>=0);CHECK(!dm_net_fcntl(guest,4,0x800));
-        injected_error=errors[i];atomic_store(&injected_calls,0);dm_net_test_set_discovery_sender(first_unreachable);
+        injected_error=errors[i];injected_at=0;atomic_store(&injected_bad_target,0);atomic_store(&injected_calls,0);dm_net_test_set_discovery_sender(first_unreachable);
         uint64_t start=ms();long result=dm_net_send(guest,"later neighbor",14,0,&destination,sizeof destination);
-        if(i<2) {
+        if(i<3) {
             CHECK(result==14 && ms()-start<100 && atomic_load(&injected_calls)>=2);
             char bytes[32];struct sockaddr_in from;CHECK(read_packet(native,bytes,sizeof bytes,&from)==14 && !memcmp(bytes,"later neighbor",14));
-        } else CHECK(result<0 && dm_net_errno()==(i==2?13:100) && atomic_load(&injected_calls)==1);
+        } else CHECK(result<0 && dm_net_errno()==(i==3?13:100) && atomic_load(&injected_calls)==1);
+        CHECK(!atomic_load(&injected_bad_target));
         CHECK(!dm_net_close(guest));dm_net_test_set_discovery_sender(NULL);
         struct pollfd ready={native,POLLIN,0};char drain[32];while(poll(&ready,1,0)>0)recv(native,drain,sizeof drain,0);
     }
+    // The first send succeeds; a later worker neighbor reports EHOSTDOWN.
+    // The worker must skip it and still deliver to the following neighbor.
+    int guest=dm_net_socket(2,2,0);CHECK(guest>=0);injected_error=EHOSTDOWN;injected_at=1;
+    atomic_store(&injected_calls,0);atomic_store(&injected_bad_target,0);dm_net_test_set_discovery_sender(first_unreachable);
+    CHECK(dm_net_send(guest,"worker neighbor",15,0,&destination,sizeof destination)==15);
+    char bytes[32];struct sockaddr_in from;
+    CHECK(read_packet(native,bytes,sizeof bytes,&from)==15&&!memcmp(bytes,"worker neighbor",15));
+    CHECK(read_packet(native,bytes,sizeof bytes,&from)==15&&!memcmp(bytes,"worker neighbor",15));
+    CHECK(atomic_load(&injected_calls)>=3&&!atomic_load(&injected_bad_target));CHECK(!dm_net_close(guest));dm_net_test_set_discovery_sender(NULL);injected_at=0;
     close(native);
 }
 static _Atomic unsigned hybrid_native,hybrid_unicast;
@@ -168,9 +183,9 @@ static void supplemental_queries(void) {
         CHECK(!dm_net_close(guest));
     }
     // Native errors remain errors and never trigger supplemental traffic.
-    const int failures[]={EACCES,EHOSTUNREACH,ENETDOWN},expected[]={13,113,100};
+    const int failures[]={EACCES,EHOSTUNREACH,ENETDOWN,EHOSTDOWN},expected[]={13,113,100,112};
     address destination=endpoint(UINT32_MAX,30000);
-    for(unsigned i=0;i<3;++i) {
+    for(unsigned i=0;i<4;++i) {
         int guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();hybrid_failure=failures[i];
         CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)<0&&dm_net_errno()==expected[i]);
         CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast)&&!dm_net_test_discovery_pending());CHECK(!dm_net_close(guest));

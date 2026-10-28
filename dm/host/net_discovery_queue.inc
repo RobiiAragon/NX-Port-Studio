@@ -22,6 +22,10 @@ static long net_discovery_packet(int fd,const void *bytes,size_t size,int flags,
 #endif
     return sendto(fd,bytes,size,flags,(const struct sockaddr *)destination,sizeof *destination);
 }
+long dm_net_discovery_send_native(int fd,const void *bytes,size_t size,int flags,uint32_t address,uint16_t port) {
+    struct sockaddr_in destination={.sin_len=sizeof destination,.sin_family=AF_INET,.sin_port=port,.sin_addr={address}};
+    return net_discovery_packet(fd,bytes,size,flags,&destination);
+}
 static void net_discovery_drop(unsigned i) {
     net_discovery_job *job = g_discovery_jobs[i];
     if (job) { close(job->socket.fd); free(job); g_discovery_jobs[i] = NULL; }
@@ -60,6 +64,7 @@ static void *net_discovery_worker(void *unused) {
             job->destination.sin_addr.s_addr = address;
             ssize_t result = net_discovery_packet(job->socket.fd, job->bytes, job->size, job->flags,&job->destination);
             if (result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == EINTR)) { job->plan = saved; break; }
+            if(result<0&&!dm_net_discovery_unreachable(errno)) { net_discovery_drop(i);break; }
             // An unreachable neighbor does not prevent discovery of others.
             bytes += (unsigned)job->size;
         }
@@ -108,7 +113,7 @@ static long net_discovery_enqueue(const net_ref *socket, dm_net_discovery_plan p
         result=net_discovery_packet(job->socket.fd,bytes,size,flags,&job->destination);
         if(result>=0)break;
         int error=errno;
-        if(error==EHOSTUNREACH||error==ENETUNREACH) { result=(ssize_t)size;continue; }
+        if(dm_net_discovery_unreachable(error)) { result=(ssize_t)size;continue; }
         close(job->socket.fd);pthread_mutex_unlock(&g_discovery_lock);free(job);return net_error(net_errno(error));
     }
     g_discovery_jobs[free_slot] = job; pthread_cond_signal(&g_discovery_changed);

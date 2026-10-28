@@ -26,6 +26,10 @@ int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *plan);
 // unicast plan, 0 keeps native behavior. Does not alter the real capability,
 // explicit peer choice, or the guest's last errno on native success.
 int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan);
+// Internal native UDP sender shared by both discovery transports. Addresses
+// and ports use network order. This does not apply a discovery policy itself.
+long dm_net_discovery_send_native(int fd,const void *bytes,size_t size,int flags,
+                                  uint32_t address,uint16_t port);
 int dm_net_discovery_target(uint32_t broadcast, uint32_t *target);
 void dm_net_set_multicast_allowed(int allowed);
 int dm_net_multicast_allowed(void);
