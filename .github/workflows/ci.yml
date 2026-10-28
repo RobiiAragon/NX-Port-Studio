@@ -56,6 +56,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Discovery transport and sanitizers
-        run: make -C dm/host/tests net-discovery net-discovery-sanitize
+        run: python3 tools/maintainers/ci_network_checks.py discovery
       - name: Discovery relay and sanitizers
-        run: make -C dm/net test test-sanitize
+        run: python3 tools/maintainers/ci_network_checks.py relay
