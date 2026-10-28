@@ -16,7 +16,7 @@ Priorities follow reproducible results. This roadmap describes intended work, no
 ## 2. Expand verified local multiplayer
 
 - Retain Mario Kart 8 Deluxe 3.0.5 Mac ↔ Switch LAN as the current completed-race baseline.
-- Resolve the physical LDN join/create connection errors found with a compatible Switch, then record each game/build result.
+- Validate physical LDN join/create with a compatible Switch after the local play-history correction; the corrected Mac build reaches its host lobby, while a completed physical session remains pending.
 - Extend the user-confirmed iPhone ↔ Switch LAN lobby entry in both host roles to completed races. Isolate discovery/receive behavior and profile restrictions, including use of the optional Studio relay.
 - Exercise disconnect/reconnect, multiple participants, room changes and longer sessions.
 - Expand controller motion/vibration coverage according to actual platform/device capabilities.

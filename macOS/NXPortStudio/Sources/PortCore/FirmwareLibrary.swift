@@ -93,7 +93,7 @@ public enum FirmwareLibrary {
             throw PortError.invalidConfiguration("Prepare the environment to install .NET before importing firmware.")
         }
         let sourceFolder = repositoryURL.appendingPathComponent("dm/tools/nx_extract", isDirectory: true)
-        let files = ["nx_extract.csproj", "Program.cs", "FirmwareResources.cs"]
+        let files = ["nx_extract.csproj", "Program.cs", "FirmwareResources.cs", "FriendsPlayHistoryResources.cs"]
         var digest = SHA256()
         for file in files { digest.update(data: try Data(contentsOf: sourceFolder.appendingPathComponent(file))) }
         let revision = digest.finalize().map { String(format: "%02x", $0) }.joined()

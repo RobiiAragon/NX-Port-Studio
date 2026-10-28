@@ -1,4 +1,4 @@
-"""Only extracted supported RomFS resources enter game bundles."""
+"""Only validated supported firmware resources enter game bundles."""
 from pathlib import Path
 import sys
 import tempfile
@@ -8,6 +8,41 @@ import system_data
 
 
 class SystemDataTests(unittest.TestCase):
+    def test_private_history_keyring_is_staged_without_system_code(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source, output = base / 'system_data', base / 'stage'
+            files = source / system_data.FRIENDS_TITLE_ID / 'files'
+            files.mkdir(parents=True)
+            synthetic = bytes(range(256))
+            (files / 'play-history.keyring').write_bytes(synthetic)
+            self.assertEqual(system_data.stage(source, output), 1)
+            staged = output / system_data.FRIENDS_TITLE_ID / 'files'
+            self.assertEqual((staged / 'play-history.keyring').read_bytes(), synthetic)
+            self.assertEqual([entry.name for entry in staged.iterdir()], ['play-history.keyring'])
+
+            # A complete sysmodule must never be copied merely because its
+            # title ID is allowed for the extracted data resource.
+            (files / 'main').write_bytes(b'synthetic-system-code')
+            with self.assertRaisesRegex(ValueError, 'invalid private local play-history'):
+                system_data.stage(source, output)
+            self.assertEqual([entry.name for entry in staged.iterdir()], ['play-history.keyring'])
+
+    def test_history_keyring_wrong_size_preserves_previous_resources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source, output = base / 'system_data', base / 'stage'
+            self.fixture(source)
+            system_data.stage(source, output)
+            files = source / system_data.FRIENDS_TITLE_ID / 'files'
+            files.mkdir(parents=True)
+            for size in (0, 255, 257, 1024):
+                with self.subTest(size=size):
+                    (files / 'play-history.keyring').write_bytes(bytes(size))
+                    with self.assertRaisesRegex(ValueError, 'invalid private local play-history'):
+                        system_data.stage(source, output)
+                    self.assertEqual((output / '0100000000000802/files/resource.dat').read_bytes(), b'real-resource')
+
     def test_certstore_resources_are_staged(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)

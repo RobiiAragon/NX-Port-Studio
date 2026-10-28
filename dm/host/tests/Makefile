@@ -52,6 +52,17 @@ $(B)/t_net: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../net_so
 $(B)/t_net_asan: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h ../hle.h ../hle_bigstack.c ../entry.S $(GAME_H) | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer $(GINC) -o $@ t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../hle_bigstack.c ../entry.S
 .PHONY: net net-broadcast net-sanitize
+FRIENDS_HISTORY_SOURCES = t_friends_history.c ../hle_friends_history.c
+FRIENDS_HISTORY_HEADERS = ../friends_history.h ../account_local.h ../hle_friends.c ../hle.h
+$(B)/t_friends_history: $(FRIENDS_HISTORY_SOURCES) $(FRIENDS_HISTORY_HEADERS) $(GAME_H) | $(B)
+	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_FRIENDS_HISTORY_TEST $(GINC) -o $@ $(FRIENDS_HISTORY_SOURCES)
+$(B)/t_friends_history_asan: $(FRIENDS_HISTORY_SOURCES) $(FRIENDS_HISTORY_HEADERS) $(GAME_H) | $(B)
+	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_FRIENDS_HISTORY_TEST -fsanitize=address,undefined -fno-omit-frame-pointer $(GINC) -o $@ $(FRIENDS_HISTORY_SOURCES)
+.PHONY: friends-history friends-history-sanitize
+friends-history: $(B)/t_friends_history
+	$(B)/t_friends_history
+friends-history-sanitize: $(B)/t_friends_history_asan
+	$(B)/t_friends_history_asan
 net: $(B)/t_net
 	$(B)/t_net --no-broadcast
 net-broadcast: $(B)/t_net

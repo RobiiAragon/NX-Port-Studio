@@ -62,3 +62,18 @@ jobs:
         run: python3 tools/maintainers/ci_network_checks.py discovery
       - name: Discovery relay and sanitizers
         run: python3 tools/maintainers/ci_network_checks.py relay
+      - name: Local play-history service and sanitizers
+        run: python3 tools/maintainers/ci_network_checks.py friends-history
+  firmware-tools:
+    name: Firmware parser / synthetic data
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Bounded firmware resource extraction
+        run: dotnet run --project dm/tools/tests/friends_firmware_fixture/FriendsFirmwareTests.csproj --configuration Release

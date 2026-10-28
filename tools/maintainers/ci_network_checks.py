@@ -9,11 +9,12 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=("discovery", "relay"))
+    parser.add_argument("suite", choices=("discovery", "relay", "friends-history"))
     options = parser.parse_args()
     commands = {
         "discovery": ["make", "-C", "dm/host/tests", "net-discovery", "net-discovery-sanitize"],
         "relay": ["make", "-C", "dm/net", "test", "test-sanitize"],
+        "friends-history": ["make", "-C", "dm/host/tests", "friends-history", "friends-history-sanitize"],
     }
     result = subprocess.run(commands[options.suite], cwd=Path(__file__).resolve().parents[2],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

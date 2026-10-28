@@ -11,3 +11,6 @@ dm/games/*/cb_extent.tsv
 .local/
 
 tools/dev-private/
+
+# Imported firmware signing material belongs only in private user resources.
+*.keyring

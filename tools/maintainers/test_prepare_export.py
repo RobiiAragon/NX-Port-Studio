@@ -39,7 +39,7 @@ class ExportGuards(unittest.TestCase):
         self.assertNotIn(b'![',result);self.assertNotIn(b'/Users/'+b'someperson',result)
         self.assertFalse(e.scan('README.md',result))
     def test_private_signing_and_account_files_denied_without_reading(self):
-        for path in ['nextendo-account.json','nextendo-session-backup.json','secrets/client.p12','secrets/client.pfx','signing/profile.mobileprovision','cert/client.key','tls/private.pem','.env.production','android/release.keystore']:
+        for path in ['nextendo-account.json','nextendo-session-backup.json','secrets/client.p12','secrets/client.pfx','signing/profile.mobileprovision','cert/client.key','tls/private.pem','.env.production','android/release.keystore','system_data/010000000000000e/files/play-history.keyring']:
             self.assertIsNotNone(e.filtered(path,set()),path)
     def test_opaque_account_schema_and_oauth_payloads_are_detected(self):
         import json

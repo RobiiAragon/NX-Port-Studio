@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Validate and stage extracted firmware resources, never NCAs or keys.
+"""Validate and stage extracted firmware resources, never NCAs or console keys.
 
 Input: system_data/<title-id>/files from nx_extract --firmware. Only the
-supported system archives and their regular RomFS files enter a game bundle.
+supported system resources enter a game bundle. The optional friends resource
+contains only a privately imported local play-history keyring, never executable
+system code or a Nintendo/Nextendo online account credential.
 """
 import argparse
 import os
@@ -10,7 +12,8 @@ from pathlib import Path
 import shutil
 import tempfile
 
-TITLE_IDS = tuple(f'010000000000{x:04x}' for x in (0x800, 0x802, 0x805, 0x809, *range(0x810, 0x815)))
+FRIENDS_TITLE_ID = '010000000000000e'
+TITLE_IDS = (FRIENDS_TITLE_ID, *(f'010000000000{x:04x}' for x in (0x800, 0x802, 0x805, 0x809, *range(0x810, 0x815))))
 
 
 def archives(root):
@@ -34,6 +37,13 @@ def archives(root):
             count += len(names)
         if not count:
             raise ValueError(f'empty system data archive: {title_id}/files')
+        if title_id == FRIENDS_TITLE_ID:
+            # Never let a sysmodule executable ride along with its extracted
+            # data. Only this exact, bounded keyring belongs in the port.
+            entries = list(files.iterdir())
+            if (len(entries) != 1 or entries[0].name != 'play-history.keyring'
+                    or not entries[0].is_file() or entries[0].stat().st_size != 256):
+                raise ValueError('invalid private local play-history resource')
         found.append((title_id, files))
     if not found:
         raise ValueError(f'no supported extracted system archives in {root}')

@@ -4,11 +4,13 @@
 // Environment switch: DM_NICK=nickname (default Player).
 #include "hle.h"
 #include "nextendo_account.h"
+#include "account_local.h"
 
 typedef struct { uint64_t v[2]; } Uid;                 // nn::account::Uid, 16 bytes
 typedef struct { uint64_t v[3]; } UserHandle;          // nn::account::UserHandle, 24 bytes
 _Static_assert(sizeof(Uid) == 16, "Uid");
 static const Uid k_uid = {{0x78626c0000000001ull, 0x53574e4154495645ull}};   // Non-zero means valid
+int dm_account_uid_exists(const void *uid) { return uid && !memcmp(uid, &k_uid, sizeof k_uid); }
 #define HANDLE_MAGIC 0x55534552484e444cull                                    // "USERHNDL"
 static int online_user(const UserHandle *h) { return h && h->v[2] == HANDLE_MAGIC && h->v[0] == k_uid.v[0] && h->v[1] == k_uid.v[1]; }
 
@@ -105,7 +107,7 @@ HLE_FORCE("_ZN2nn7account18ListQualifiedUsersEPiPNS0_3UidEi", "list of qualified
     int k = 0; if (max > 0 && out) { out[0] = k_uid; k = 1; } *n = k; return RES_OK;
 }
 HLE_FORCE("_ZN2nn7account16GetUserExistenceEPbRKNS0_3UidE", "whether a user exists; true for the local user", Result, h_acc_Exists, uint8_t *out, const Uid *uid) {
-    *out = uid->v[0] == k_uid.v[0] && uid->v[1] == k_uid.v[1]; return RES_OK;
+    *out = dm_account_uid_exists(uid); return RES_OK;
 }
 HLE_FORCE("_ZN2nn7account15ShowUserCreatorEv", "user creation applet; the host already has its local user", Result, h_acc_ShowCreator, void) { return RES_OK; }
 HLE_FORCE("_ZN2nn7account16LoadProfileImageEPmPvmRKNS0_3UidE", "user profile image; the host has none (fails)", Result, h_acc_LoadImage, uint64_t *n, void *buf, uint64_t sz, const Uid *uid) {

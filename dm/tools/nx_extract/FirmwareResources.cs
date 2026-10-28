@@ -1,4 +1,6 @@
-// Import selected data archives from a locally supplied firmware dump. No system executables or keys are retained.
+// Import selected resources from a locally supplied firmware dump. System
+// executables and console decryption keys are never retained. The optional
+// friends keyring is private local-play material, not an online account token.
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -71,6 +73,23 @@ static class FirmwareResources {
                 Progress("Inspecting firmware",scanned,sources.Count,"Inspecting archive "+scanned+" of "+sources.Count);
                 using(var storage=new LocalStorage(file,FileAccess.Read)) {
                     var nca=new Nca(keys,storage);ulong id=nca.Header.TitleId;
+                    if(id==0x010000000000000e && nca.Header.ContentType==NcaContentType.Program) {
+                        string sha=Hash(file);
+                        if(seen.TryGetValue(id,out string existing)) {
+                            if(existing!=sha)throw new IOException("The source contains conflicting versions of FriendsPlayHistory. Use one complete firmware dump.");
+                        } else {
+                            seen[id]=sha;
+                            try {
+                                var resource=ExtractFriendsHistory(nca,destination,sha);
+                                resources.Add(resource);
+                                Console.WriteLine(JsonSerializer.Serialize(new {ev="say",msg="Validated private local play-history resource."}));
+                            } catch(InvalidDataException) {
+                                // Other firmware resources remain usable when a newer friends
+                                // module cannot yet be recognized. Never substitute a fake key.
+                                Console.WriteLine(JsonSerializer.Serialize(new {ev="say",msg="Local play-history data could not be verified for this firmware; games requiring it will need a supported firmware import."}));
+                            }
+                        }
+                    }
                     if(Wanted.TryGetValue(id,out string name) && (nca.Header.ContentType==NcaContentType.Data || nca.Header.ContentType==NcaContentType.PublicData)) {
                         string sha=Hash(file);
                         if(seen.TryGetValue(id,out string existing)) { if(existing!=sha)throw new IOException("The source contains conflicting versions of "+name+". Use one complete firmware dump."); }
@@ -101,6 +120,30 @@ static class FirmwareResources {
             Progress("Firmware resources imported",sources.Count,sources.Count,"Firmware "+version+" validated; "+resources.Count+" resource archives imported.");
             return 0;
         } finally { if(Directory.Exists(temporary))Directory.Delete(temporary,true); }
+    }
+    static Resource ExtractFriendsHistory(Nca nca,string destination,string sourceHash) {
+        using var fs=nca.OpenFileSystem(NcaSectionType.Code,IntegrityCheckLevel.ErrorOnInvalid);
+        using var input=new UniqueRef<IFile>();
+        fs.OpenFile(ref input.Ref,"/main".ToU8Span(),OpenMode.Read).ThrowIfFailure();
+        input.Get.GetSize(out long size).ThrowIfFailure();
+        if(size<0x100 || size>64L*1024*1024)throw new InvalidDataException("Invalid friends module size.");
+        byte[] module=new byte[(int)size];
+        for(int offset=0;offset<module.Length;) {
+            input.Get.Read(out long got,offset,module.AsSpan(offset),ReadOption.None).ThrowIfFailure();
+            if(got<=0)throw new InvalidDataException("Truncated friends module.");
+            offset+=checked((int)got);
+        }
+        byte[] keyring=FriendsPlayHistoryResources.Extract(module);
+        if(keyring.Length!=256)throw new InvalidDataException("Invalid private play-history resource size.");
+        string relative="system_data/010000000000000e/files";
+        string folder=Path.Combine(destination,relative),path=Path.Combine(folder,"play-history.keyring");
+        Directory.CreateDirectory(folder);
+        if(!OperatingSystem.IsWindows())File.SetUnixFileMode(folder,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+        File.WriteAllBytes(path,keyring);
+        if(!OperatingSystem.IsWindows())File.SetUnixFileMode(path,UnixFileMode.UserRead|UnixFileMode.UserWrite);
+        CryptographicOperations.ZeroMemory(keyring);
+        return new Resource("010000000000000e","FriendsPlayHistory",relative,sourceHash,256,
+            new List<ImportedFile>{new("play-history.keyring",256,Hash(path))});
     }
     static string ReadVersion(string directory) {
         string path=Path.Combine(directory,"file");if(!File.Exists(path))throw new IOException("SystemVersion has no version file.");

@@ -33,7 +33,7 @@ Le projet étend aussi le moteur : sockets Horizon, attentes HLE, vérification 
 | --- | --- |
 | LAN Mac ↔ Switch | Une version Mac antérieure a terminé une course complète de Mario Kart 8 Deluxe 3.0.5 avec une Switch physique. Le candidat actuel crée un salon et ouvre les règles de l'hôte. |
 | LAN iPhone ↔ Switch | L'utilisateur a confirmé la participation au salon dans les deux sens, avec chaque appareil comme hôte. Aucune course complète n'est encore déclarée pour ce test. |
-| LDN / mode sans fil | La découverte fonctionne lors du test physique actuel ; l'entrée et la création de salons rencontrent encore une erreur de connexion. Diagnostic en cours. |
+| LDN / mode sans fil | Mario Kart 3.0.5 sur Mac crée désormais un salon après la correction de l'identité d'historique local. Les tentatives physiques précédentes ont échoué ; un nouveau test avec la version corrigée et une Switch reste nécessaire. |
 | Nextendo | OAuth, obtention d'un identifiant NEX vérifié et catalogue signé validés. Aucune partie native en ligne n'est encore validée. |
 | Android / Windows | Prévus après la stabilisation des plateformes Apple ; aucune version disponible. ARM et x86 nécessitent des travaux distincts. |
 

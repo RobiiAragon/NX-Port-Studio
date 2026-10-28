@@ -21,7 +21,7 @@ from urllib.parse import unquote
 TRANSLATOR = 'dm/gfx/tools/dmsh_xlate_bin/'
 ART = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.icns', '.ico', '.heic', '.avif', '.bmp', '.tif', '.tiff'}
 GAME = {'.nsp', '.nsz', '.xci', '.xcz', '.nca', '.nso', '.nro', '.ipa', '.tik', '.cert', '.metallib', '.spv', '.bntx', '.bfres', '.bnsh', '.bnvib', '.bdf', '.bfttf', '.bnk', '.bcstm'}
-PRIVATE_FORMATS = {'.keys','.key','.p12','.pfx','.pem','.mobileprovision','.provisionprofile','.keystore','.jks'}
+PRIVATE_FORMATS = {'.keys','.key','.keyring','.p12','.pfx','.pem','.mobileprovision','.provisionprofile','.keystore','.jks'}
 PRIVATE_NAMES = {'prod.keys','title.keys','dev.keys','keyset','credentials.json','catalog-cache.json','nextendo-account.json','nextendo-session.json','nextendo-token.json','account.json','auth.json','token.json','.netrc','.ds_store','.env'}
 REVIEWED_REDACTOR_FIXTURE = '5b882f0db22ac31658a0d44093732d598f620959bd166c22d15e7bc6c9ece808'
 GENERATED = {'.o', '.a', '.dylib', '.so', '.dll', '.pdb', '.pyc', '.dSYM', '.partial', '.log'}
