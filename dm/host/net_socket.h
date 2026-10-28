@@ -22,6 +22,10 @@ int dm_net_close_generation(int guest, uint64_t generation);
 // Discovery uses native broadcast when permitted, an optional explicit peer, or
 // a bounded unicast sweep of the actual adapter. Ordinary unicast is unchanged.
 int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *plan);
+// For verified discovery queries only: 1 supplies a best-effort complementary
+// unicast plan, 0 keeps native behavior. Does not alter the real capability,
+// explicit peer choice, or the guest's last errno on native success.
+int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan);
 int dm_net_discovery_target(uint32_t broadcast, uint32_t *target);
 void dm_net_set_multicast_allowed(int allowed);
 int dm_net_multicast_allowed(void);

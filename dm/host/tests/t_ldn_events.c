@@ -27,6 +27,7 @@ int hle_signal_system_event_binding(uint64_t id) { for (unsigned i = 0; i < coun
 int dm_net_ipconfig(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d, uint32_t *e) { (void)a;(void)b;(void)c;(void)d;(void)e; return -1; }
 int dm_net_discovery_target(uint32_t broadcast, uint32_t *target) { *target=broadcast; return 0; }
 int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *plan) { *plan=(dm_net_discovery_plan){.target=destination,.count=1}; return 0; }
+int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan) { (void)destination;memset(plan,0,sizeof *plan);return 0; }
 int dm_net_errno(void) { return 13; }
 int dm_net_multicast_allowed(void) { return 0; }
 static void *read_during_finalize(void *argument) {

@@ -46,3 +46,16 @@ jobs:
           dm.tools.tests.test_nso_syms
           dm.tools.tests.test_system_data
           dm.tools.tests.test_launcher_settings
+          tools.maintainers.test_prepare_export
+  networking:
+    name: Local network fixtures / macOS
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Discovery transport and sanitizers
+        run: make -C dm/host/tests net-discovery net-discovery-sanitize
+      - name: Discovery relay and sanitizers
+        run: make -C dm/net test test-sanitize

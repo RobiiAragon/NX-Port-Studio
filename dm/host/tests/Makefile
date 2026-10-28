@@ -47,9 +47,9 @@ run: $(B)/t_heap_size $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_
 run: $(B)/t_nro
 run: $(B)/t_symbols
 run: $(B)/t_net
-$(B)/t_net: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../hle.h ../hle_bigstack.c ../entry.S $(GAME_H) | $(B)
+$(B)/t_net: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h ../hle.h ../hle_bigstack.c ../entry.S $(GAME_H) | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -o $@ t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../hle_bigstack.c ../entry.S
-$(B)/t_net_asan: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../hle.h ../hle_bigstack.c ../entry.S $(GAME_H) | $(B)
+$(B)/t_net_asan: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h ../hle.h ../hle_bigstack.c ../entry.S $(GAME_H) | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer $(GINC) -o $@ t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../hle_bigstack.c ../entry.S
 .PHONY: net net-broadcast net-sanitize
 net: $(B)/t_net
@@ -59,20 +59,26 @@ net-broadcast: $(B)/t_net
 net-sanitize: $(B)/t_net_asan
 	$(B)/t_net_asan --no-broadcast
 DISCOVERY_SOURCES = t_net_discovery.c ../hle_net_backend.c
-DISCOVERY_HEADERS = ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc
+DISCOVERY_HEADERS = ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h
 $(B)/t_net_discovery: $(DISCOVERY_SOURCES) $(DISCOVERY_HEADERS) | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -DDM_NET_TEST -o $@ $(DISCOVERY_SOURCES)
 $(B)/t_net_discovery_asan: $(DISCOVERY_SOURCES) $(DISCOVERY_HEADERS) | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -DDM_NET_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(DISCOVERY_SOURCES)
 .PHONY: net-discovery net-discovery-sanitize
-net-discovery: $(B)/t_net_discovery
+$(B)/t_discovery_protocol: t_discovery_protocol.c ../discovery_protocol.h | $(B)
+	clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -o $@ t_discovery_protocol.c
+$(B)/t_discovery_protocol_asan: t_discovery_protocol.c ../discovery_protocol.h | $(B)
+	clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_discovery_protocol.c
+net-discovery: $(B)/t_net_discovery $(B)/t_discovery_protocol
 	$(B)/t_net_discovery
-net-discovery-sanitize: $(B)/t_net_discovery_asan
+	$(B)/t_discovery_protocol
+net-discovery-sanitize: $(B)/t_net_discovery_asan $(B)/t_discovery_protocol_asan
 	$(B)/t_net_discovery_asan
+	$(B)/t_discovery_protocol_asan
 LDN_SOURCES = t_ldn.c ../hle_ldn.c ../hle_ldn_protocol.c ../hle_net_backend.c
-$(B)/t_ldn: $(LDN_SOURCES) ../hle_ldn.h ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc | $(B)
+$(B)/t_ldn: $(LDN_SOURCES) ../hle_ldn.h ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_NET_TEST -DDM_LDN_TEST -DDM_LDN_NET_TEST -o $@ $(LDN_SOURCES)
-$(B)/t_ldn_asan: $(LDN_SOURCES) ../hle_ldn.h ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc | $(B)
+$(B)/t_ldn_asan: $(LDN_SOURCES) ../hle_ldn.h ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_NET_TEST -DDM_LDN_TEST -DDM_LDN_NET_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(LDN_SOURCES)
 $(B)/t_ldn_events: t_ldn_events.c ../hle_ldn.c ../hle_ldn_protocol.c ../hle_ldn.h ../hle.h $(GAME_H) | $(B)
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_ldn_events.c ../hle_ldn_protocol.c

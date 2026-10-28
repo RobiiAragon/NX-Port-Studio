@@ -6,7 +6,7 @@ Use `prepare_export.py --help` for options. A plan reads Git-tracked and non-ign
 
 Copying requires `--apply --confirm-frozen --expected-digest` with the exact fingerprint from the current plan. Pause source edits first. Any source change invalidates that fingerprint. Existing destination files outside the plan, symlinks, credential findings and broken Markdown links block copying.
 
-The root `public-assets.json` is the explicit allowlist for original public artwork. Inherited images, game and firmware archives, console keys, credentials, signing material, generated products and optional translator debug symbols are excluded. The checked shader translator runtime remains included with third-party notices. This automated policy is an aid to review, not a claim that an arbitrary input repository is safe to publish.
+The root `public-assets.json` is the explicit allowlist for original public artwork and reviewed Studio interface captures. Inherited images, game and firmware archives, console keys, credentials, signing material, generated products and optional translator debug symbols are excluded. The checked shader translator runtime remains included with third-party notices. This automated policy is an aid to review, not a claim that an arbitrary input repository is safe to publish.
 
 Run the synthetic guard tests with:
 

@@ -6,6 +6,21 @@
       "path": "docs/images/hero.svg",
       "sha256": "e20b8dda725a9b996b030cbe97ab04dd52a343a25a553d5f276fa30e36c62540",
       "provenance": "Original vector banner based on the source-drawn NX Port Studio cartridge/export mark."
+    },
+    {
+      "path": "docs/images/studio-new-port.jpg",
+      "sha256": "b6ccfc3aae779041df751cb0995bcc8e25a95b6c77704d1cd731dab9595f3754",
+      "provenance": "Unaltered capture of the installed NX Port Studio interface on macOS, reviewed on 2026-10-28. Contains original Studio UI; no game imagery, key values or account details."
+    },
+    {
+      "path": "docs/images/studio-firmware.jpg",
+      "sha256": "0d28b82e69e4daccf595bdf5168932e3ffc68c0aaed4d31a4bfef587e1c9a8e9",
+      "provenance": "Unaltered capture of the installed NX Port Studio interface on macOS, reviewed on 2026-10-28. Contains original Studio UI; no game imagery, key values or account details."
+    },
+    {
+      "path": "docs/images/studio-local-play.jpg",
+      "sha256": "be4855eb25e7cb30d7ffd3ea8eba30696f536b7bbfba64acaf39b3159d2fd416",
+      "provenance": "Unaltered capture of the installed NX Port Studio interface on macOS, reviewed on 2026-10-28. Contains original Studio UI; no game imagery, key values or account details."
     }
   ]
 }

@@ -4,6 +4,7 @@
 // Modern nn::socket::AddrInfo has addr before canonname; SDK 4's plain addrinfo has
 // the opposite order (verified in MK8 3.0.5's DNSSerializer at sdk+0xafa94). Never cast guest structs to Darwin structs.
 #include "net_socket.h"
+#include "discovery_protocol.h"
 #include <TargetConditionals.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -75,19 +76,7 @@ dm_net_mode_t dm_net_mode(void) {
 int dm_net_enabled(void) { return dm_net_mode() != DM_NET_OFFLINE; }
 void dm_net_set_multicast_allowed(int allowed) { atomic_store(&g_net_multicast_allowed, !!allowed); }
 int dm_net_multicast_allowed(void) { return atomic_load(&g_net_multicast_allowed); }
-int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *p) {
-    if (!p) { dm_net_set_errno(14); return -1; }
-    memset(p, 0, sizeof *p);
-    const char *peer = getenv("DM_NET_DISCOVERY_PEER");
-    if (peer && *peer) {
-        struct in_addr address;
-        if (inet_pton(AF_INET, peer, &address) != 1 || !address.s_addr ||
-            (ntohl(address.s_addr) & 0xf0000000u) == 0xe0000000u ||
-            ntohl(address.s_addr) >= 0xf0000000u) { dm_net_set_errno(22); return -1; }
-        p->target = address.s_addr; p->count = 1;
-        return 0;
-    }
-    if (dm_net_multicast_allowed()) { p->target = destination; p->count = 1; return 0; }
+static int net_discovery_unicast_plan(dm_net_discovery_plan *p) {
     net_interface adapter;
     if (net_interface_get(&adapter) || !adapter.index || !(adapter.flags & IFF_UP) ||
         !(adapter.flags & IFF_BROADCAST) || (adapter.flags & (IFF_LOOPBACK | IFF_POINTOPOINT))) {
@@ -98,6 +87,20 @@ int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *p) {
 #endif
     if (dm_net_discovery_subnet(p, adapter.address, adapter.mask)) { dm_net_set_errno(95); return -1; }
     return 0;
+}
+int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *p) {
+    if (!p) { dm_net_set_errno(14); return -1; }
+    memset(p, 0, sizeof *p);
+    const char *peer = getenv("DM_NET_DISCOVERY_PEER");
+    if (peer && *peer) {
+        struct in_addr address;
+        if (inet_pton(AF_INET, peer, &address) != 1 || !address.s_addr ||
+            (ntohl(address.s_addr) & 0xf0000000u) == 0xe0000000u ||
+            ntohl(address.s_addr) >= 0xf0000000u) { dm_net_set_errno(22); return -1; }
+        p->target = address.s_addr; p->count = 1; return 0;
+    }
+    if (dm_net_multicast_allowed()) { p->target = destination; p->count = 1; return 0; }
+    return net_discovery_unicast_plan(p);
 }
 int dm_net_discovery_target(uint32_t destination, uint32_t *target) {
     if (!target) { dm_net_set_errno(14); return -1; }
@@ -123,6 +126,12 @@ static int net_is_discovery(uint32_t address, int type) {
         discovery = broadcast && address == broadcast;
     }
     return discovery;
+}
+int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan) {
+    if(!plan)return 0;memset(plan,0,sizeof *plan);
+    const char *peer=getenv("DM_NET_DISCOVERY_PEER");dm_net_mode_t mode=dm_net_mode();
+    if(!dm_net_multicast_allowed()||(peer&&*peer)||(mode!=DM_NET_LAN&&mode!=DM_NET_LDN)||!net_is_discovery(destination,2))return 0;
+    int saved=t_net_errno,result=!net_discovery_unicast_plan(plan);t_net_errno=saved;return result;
 }
 int dm_net_errno(void) { return t_net_errno; }
 void dm_net_set_errno(int e) { t_net_errno = e; }
@@ -346,7 +355,8 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
     struct sockaddr_in a; if (addr && net_addr_in(addr, addrlen, &a)) return -1;
     int hostflags = net_message_flags(flags, 1); if (hostflags < 0) return -1;
     net_ref r; if (net_borrow(guest, &r)) return -1;
-    if (addr && net_is_discovery(a.sin_addr.s_addr, r.type)) {
+    int discovery=addr&&net_is_discovery(a.sin_addr.s_addr,r.type);
+    if (discovery) {
         dm_net_discovery_plan plan;
         if (dm_net_discovery_prepare(a.sin_addr.s_addr, &plan)) { close(r.fd); return -1; }
         if (plan.automatic) {
@@ -357,10 +367,20 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
     }
     uint64_t start = net_ms(); long result;
     for (;;) {
-        result = sendto(r.fd, buf, len, hostflags, addr ? (struct sockaddr *)&a : NULL, addr ? sizeof a : 0); int err = errno;
+        result = addr ? net_discovery_packet(r.fd,buf,len,hostflags,&a) : sendto(r.fd,buf,len,hostflags,NULL,0); int err = errno;
         if (result >= 0) break;
         if (err != EAGAIN || r.nonblock || (flags & 0x80)) { result = net_error(net_errno(err)); break; }
         if (net_wait(&r, POLLOUT, r.send_ms, start)) { result = -1; break; }
+    }
+    if(result>=0&&discovery&&dm_discovery_query_protocol(ntohs(a.sin_port),buf,len)) {
+        dm_net_discovery_plan extra;int saved=t_net_errno;
+        if(dm_net_discovery_supplement(a.sin_addr.s_addr,&extra)) {
+            long queued=net_discovery_enqueue(&r,extra,a,buf,len,hostflags);
+            net_trace("send-discovery-extra",guest,queued);
+        }
+        // The original native send owns the result. Queue pressure or an
+        // unavailable bounded subnet must not turn its success into failure.
+        t_net_errno=saved;
     }
     close(r.fd); net_trace("send", guest, result); return result;
 }

@@ -65,9 +65,14 @@ The game builds Mii heads from the console's MiiModel system data, starting at b
 - `run/race.sh` boots from a copy of a save past the Mii pick into a 50cc Grand Prix (Mario, Mushroom Cup) with frame-timed keys and holds accelerate: `DM_KEYS=f960:L+R~0.3,f1260:A,f1500:A,f1740:A,f2000:A,f2240:A,f2400:A,f2560:A,f2800:A,f3040:A,f4300:A~70`.
 - From a fresh save, L+R at the title opens "Select a Mii" (Right, A takes the first default Mii).
 
+## Local network validation
+
+- **Current candidate, 2026-10-28: local LAN room creation (Mac, 3.0.5).** The candidate created a LAN group, passed Mario and kart selection, reached the host lobby and opened its race rules. UDP binds on ports 49152, 40000 and 30000 succeeded; the managed test runtime then stopped cleanly. This establishes local host setup only. Positive UDP send/receive counts can include local broadcast delivery; external-peer discovery or joining and a newly completed race remain unvalidated for this candidate. The earlier physical [Mac ↔ Switch LAN race baseline](../../../README.md#what-is-verified) remains separate from this local check. Physical automatic iPhone discovery and iPhone-hosted rooms through the Studio relay also remain pending.
+
 ## Found on this game
 
 - **Native LDN bridge:** [Native LDN bridge over IP](../../../docs/reference/services.md#native-ldn-bridge-over-ip). The SDK 4 imports and argument layouts are covered by the bridge and isolated two-process tests. Physical Switch/iPhone LDN interoperability remains untested; the ordinary IP LAN race is a separate path.
+- **Capable sender discovery:** [Native broadcast capability and peer discovery are separate](../../../docs/reference/services.md#native-broadcast-capability-and-peer-discovery-are-separate). The PiaLan query contract enables complementary unicast from a capable Mac's original socket; shared-code fixtures cover the mechanism. A physical Mac-to-iPhone-host session remains pending, and this does not enable a restricted phone to receive a Switch's broadcast without a receiving bridge.
 
 General host changes first needed here; each applies to every game:
 

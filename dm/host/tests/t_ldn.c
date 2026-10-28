@@ -165,6 +165,18 @@ static void automatic_discovery(void) {
     dm_ldn_filter filter={0};dm_ldn_network rooms[24];int count=0;
     CHECK(!dm_ldn_scan(station,rooms,&count,24,&filter,0));
     CHECK(count==1 && !strcmp(rooms[0].nodes[0].name,"auto host") && rooms[0].nodes[0].ip==INADDR_LOOPBACK);
+    dm_ldn_stop(station);
+    // A capable native sender keeps its original destination and also probes
+    // restricted peers. The logical loopback broadcast itself reaches no peer;
+    // finding this real host therefore requires the complementary unicast.
+    dm_net_set_multicast_allowed(1);station=dm_ldn_start(&st,NULL,NULL);CHECK(station);CHECK(!dm_ldn_open(station,0));
+    CHECK(!dm_ldn_scan(station,rooms,&count,24,&filter,0));CHECK(count==1&&dm_net_multicast_allowed()==1);
+    dm_ldn_stop(station);
+    // Create the actual native socket without SO_BROADCAST, then simulate a
+    // claimed capability. The kernel refuses native broadcast: supplemental
+    // unicast must not hide that error by discovering the otherwise reachable host.
+    dm_net_set_multicast_allowed(0);st.discovery=htonl(UINT32_MAX);station=dm_ldn_start(&st,NULL,NULL);CHECK(station);CHECK(!dm_ldn_open(station,0));
+    dm_net_set_multicast_allowed(1);CHECK(dm_ldn_scan(station,rooms,&count,24,&filter,0)!=0&&count==0);
     dm_ldn_stop(station);dm_ldn_stop(host);dm_net_test_set_interface(NULL);dm_net_set_multicast_allowed(1);
 }
 #endif

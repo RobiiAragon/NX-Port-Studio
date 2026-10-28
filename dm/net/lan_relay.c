@@ -2,6 +2,7 @@
 // multicast entitlement is used. The game still verifies its opaque challenge.
 #include "lan_relay.h"
 #include "../host/net_discovery.h"
+#include "../host/discovery_protocol.h"
 #include "../host/hle_ldn.h"
 #include <TargetConditionals.h>
 #include <errno.h>
@@ -47,6 +48,8 @@ static uint32_t relay_be32(const uint8_t *p) { return (uint32_t)p[0]<<24|(uint32
 int dm_lan_relay_packet_valid(unsigned protocol,int response,const void *bytes,size_t size) {
     if (!bytes || size>RELAY_PACKET) return 0;
     const uint8_t *p=bytes;
+    if(!response)return (protocol==DM_LAN_RELAY_PIA||protocol==DM_LAN_RELAY_LDN)&&
+        dm_discovery_query_protocol(protocol==DM_LAN_RELAY_PIA?30000:11452,bytes,size)==protocol;
     if(protocol==DM_LAN_RELAY_PIA) {
         if(size<5 || size>1364 || p[0]!=(response?1:0))return 0;
         uint32_t payload=relay_be32(p+1);unsigned extra=response?0x3f:0x12f;
@@ -55,7 +58,6 @@ int dm_lan_relay_packet_valid(unsigned protocol,int response,const void *bytes,s
         return nonzero!=0; // Host and client counters need not be equal.
     }
     if(protocol!=DM_LAN_RELAY_LDN || size<12)return 0;
-    if(!response) { static const uint8_t scan[12]={0,0x14,0x45,0x11};return size==12&&!memcmp(p,scan,12); }
     dm_ldn_network network;unsigned type;
     return dm_ldn_packet_decode(p,size,&type,&network,sizeof network)==sizeof network &&
            type==DM_LDN_SCAN_RESPONSE && dm_ldn_network_valid(&network);

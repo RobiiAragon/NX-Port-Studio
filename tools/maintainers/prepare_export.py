@@ -235,7 +235,7 @@ def main():
     report.mkdir(parents=True,exist_ok=True)
     (report/'dry-run-manifest.json').write_text(json.dumps({'format':1,'sourceCommit':head,'fingerprint':fingerprint,'files':manifest},indent=2))
     (report/'excluded-files.json').write_text(json.dumps([{'path':p,'reason':r} for p,r in sorted(excluded.items())],indent=2))
-    (report/'secret-scan.json').write_text(json.dumps({'valuesRedacted':True,'filesScanned':len(outputs),'findings':findings,'imagePolicy':'all inherited images denied; original hero only','NintendoAssetsExported':False},indent=2))
+    (report/'secret-scan.json').write_text(json.dumps({'valuesRedacted':True,'filesScanned':len(outputs),'findings':findings,'imagePolicy':'inherited images denied; hash-reviewed original artwork and Studio UI allowlist','NintendoAssetsExported':False},indent=2))
     (report/'link-check.json').write_text(json.dumps({'issues':missing},indent=2))
     (report/'binary-audit.json').write_text(json.dumps({'binaries':binary,'symlinksExcluded':symlinks},indent=2))
     summary={'plannedFiles':len(outputs),'plannedBytes':sum(len(x) for x in outputs.values()),'excludedFiles':len(excluded),'excludedImages':sum(PurePosixPath(x).suffix.lower() in ART for x in excluded),'findings':len(findings),'linkIssues':len(missing),'fingerprint':fingerprint,'copied':False}

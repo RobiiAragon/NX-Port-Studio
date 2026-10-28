@@ -33,7 +33,7 @@ struct dm_ldn_context {
     pthread_mutex_t lock; pthread_cond_t changed; pthread_t worker;
     dm_ldn_transport transport; dm_ldn_notify notify; void *opaque;
     int udp, listener, wake[2], stopping, state, reason, scanning;
-    dm_net_discovery_plan scan_plan; uint64_t scan_next; int scan_tx_failed;
+    dm_net_discovery_plan scan_plan,scan_supplement; uint64_t scan_next; int scan_tx_failed;
     uint64_t generation; dm_ldn_network network; dm_ldn_network_config config;
     dm_ldn_update updates[8]; ldn_peer peers[8]; ldn_room rooms[LDN_ROOM_MAX]; int room_count;
     uint8_t filters[8][6]; int filter_count; dm_ldn_address private_addresses[8]; int private_count;
@@ -156,7 +156,7 @@ static void *ldn_worker(void *opaque) {
         fds[0] = (struct pollfd){c->wake[0], POLLIN, 0}; fds[1] = (struct pollfd){c->udp, POLLIN, 0}; fds[2] = (struct pollfd){c->listener, POLLIN, 0};
         for (int i = 0; i < 8; ++i) { ldn_peer *p = &c->peers[i]; fds[3+i] = (struct pollfd){p->fd, POLLIN | (p->queued > p->sent ? POLLOUT : 0), 0}; generations[i] = p->generation; }
         int timeout = 100;
-        if (c->scanning && c->scan_plan.count) {
+        if (c->scanning && (c->scan_plan.count||c->scan_supplement.count)) {
             uint64_t now = ldn_ms(); timeout = c->scan_next > now ? (int)(c->scan_next - now) : 0;
             if (timeout > 100) timeout = 100;
         }
@@ -164,16 +164,21 @@ static void *ldn_worker(void *opaque) {
         if (ready < 0 && errno != EINTR) break;
         pthread_mutex_lock(&c->lock);
         if (fds[0].revents & POLLIN) { uint8_t drain[64]; while (read(c->wake[0], drain, sizeof drain) > 0) {} }
-        if (c->scanning && c->scan_plan.count && ldn_ms() >= c->scan_next) {
+        if (c->scanning && (c->scan_plan.count||c->scan_supplement.count) && ldn_ms() >= c->scan_next) {
             uint8_t packet[12]; dm_ldn_packet_encode(packet, sizeof packet, DM_LDN_SCAN, NULL, 0, 0);
             for (unsigned i = 0; i < DM_DISCOVERY_BATCH; ++i) {
-                dm_net_discovery_plan saved = c->scan_plan; uint32_t address;
-                if (!dm_net_discovery_next(&c->scan_plan, &address)) { c->scan_plan.count = 0; break; }
+                dm_net_discovery_plan *plan=c->scan_plan.count?&c->scan_plan:&c->scan_supplement;
+                if(!plan->count)break;
+                dm_net_discovery_plan saved = *plan; uint32_t address;
+                if (!dm_net_discovery_next(plan, &address)) { plan->count=0;continue; }
                 struct sockaddr_in dest = ldn_endpoint(address, c->transport.discovery_port);
                 ssize_t result = sendto(c->udp, packet, sizeof packet, 0, (struct sockaddr *)&dest, sizeof dest);
-                if (result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == EINTR)) { c->scan_plan = saved; break; }
-                if (result < 0 && errno != EHOSTUNREACH && errno != ENETUNREACH) {
-                    c->scan_tx_failed = 1; c->scan_plan.count = 0; pthread_cond_broadcast(&c->changed); break;
+                if (result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == EINTR)) { *plan=saved;break; }
+                if (result < 0 && (!plan->automatic||(errno != EHOSTUNREACH && errno != ENETUNREACH))) {
+                    // A supplemental failure must not replace an accepted
+                    // original broadcast's result; native errors stay visible.
+                    if(plan==&c->scan_supplement) { plan->count=0;break; }
+                    c->scan_tx_failed=1;c->scan_plan.count=c->scan_supplement.count=0;pthread_cond_broadcast(&c->changed);break;
                 }
             }
             c->scan_next = ldn_ms() + DM_DISCOVERY_TICK_MS;
@@ -255,13 +260,15 @@ uint32_t dm_ldn_scan(dm_ldn_context *c, dm_ldn_network *out, int *count, int max
     if ((host == UINT32_MAX || (host & 0xf0000000u) == 0xe0000000u ||
          c->transport.discovery == (c->transport.address | ~c->transport.mask)) &&
         dm_net_discovery_prepare(c->transport.discovery, &plan)) { pthread_mutex_unlock(&c->lock); return LDN_CONNECT_FAILED; }
-    c->scanning = 1; c->room_count = 0; c->scan_plan = plan; c->scan_next = 0; c->scan_tx_failed = 0; ldn_wake(c);
+    dm_net_discovery_plan extra={0};
+    if(!plan.automatic)dm_net_discovery_supplement(c->transport.discovery,&extra);
+    c->scanning=1;c->room_count=0;c->scan_plan=plan;c->scan_supplement=extra;c->scan_next=0;c->scan_tx_failed=0;ldn_wake(c);
     // Keep the ordinary response window after the paced sweep, rather than
     // penalizing a console near the end of a larger (at most /20) subnet.
-    struct timespec until = ldn_deadline(c->transport.scan_ms + dm_net_discovery_duration(&plan));
+    struct timespec until=ldn_deadline(c->transport.scan_ms+dm_net_discovery_duration(&plan)+dm_net_discovery_duration(&extra));
     while (!c->stopping && !c->scan_tx_failed && (c->state == LDN_STATION || c->state == LDN_CONNECTED || c->state == LDN_CREATED))
         if (pthread_cond_timedwait(&c->changed, &c->lock, &until) == ETIMEDOUT) break;
-    c->scan_plan.count = 0;
+    c->scan_plan.count=c->scan_supplement.count=0;
     if (c->scan_tx_failed) { c->scanning = 0; pthread_mutex_unlock(&c->lock); return LDN_CONNECT_FAILED; }
     if (c->stopping || (c->state != LDN_STATION && c->state != LDN_CONNECTED && c->state != LDN_CREATED)) { c->scanning = 0; pthread_mutex_unlock(&c->lock); return LDN_INVALID_STATE; }
     for (int i = 0; i < c->room_count && *count < max; ++i) if (dm_ldn_filter_match(&c->rooms[i].network, f, channel)) out[(*count)++] = c->rooms[i].network;

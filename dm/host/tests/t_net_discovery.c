@@ -134,8 +134,84 @@ static void unreachable_neighbor(void) {
     }
     close(native);
 }
+static _Atomic unsigned hybrid_native,hybrid_unicast;
+static unsigned hybrid_native_port,hybrid_phone_port;
+static int hybrid_failure;
+static long hybrid_sender(int fd,const void *bytes,size_t size,int flags,uint32_t ip,uint16_t port) {
+    (void)port;unsigned destination;
+    if(ntohl(ip)==UINT32_MAX) {
+        atomic_fetch_add(&hybrid_native,1);
+        if(hybrid_failure) { errno=hybrid_failure;return -1; }
+        destination=hybrid_native_port;
+    } else { atomic_fetch_add(&hybrid_unicast,1);destination=hybrid_phone_port; }
+    struct sockaddr_in to={.sin_len=sizeof to,.sin_family=AF_INET,.sin_port=htons((uint16_t)destination),.sin_addr={htonl(INADDR_LOOPBACK)}};
+    return sendto(fd,bytes,size,flags,(struct sockaddr *)&to,sizeof to);
+}
+static void hybrid_reset(void) { atomic_store(&hybrid_native,0);atomic_store(&hybrid_unicast,0);hybrid_failure=0; }
+static void drain(int fd) { struct pollfd p={fd,POLLIN,0};char bytes[2048];while(poll(&p,1,0)>0)recv(fd,bytes,sizeof bytes,0); }
+static void supplemental_queries(void) {
+    dm_net_test_interface a=adapter(0xfffffffc);dm_net_test_set_interface(&a);dm_net_set_multicast_allowed(1);
+    int native=receiver(&hybrid_native_port),phone=receiver(&hybrid_phone_port);dm_net_test_set_discovery_sender(hybrid_sender);
+    unsigned char pia[0x12f]={0};pia[5]=1;pia[14]=1;
+    const unsigned char ldn[12]={0,0x14,0x45,0x11};
+    for(unsigned protocol=0;protocol<2;++protocol) {
+        const void *query=protocol?(const void *)ldn:(const void *)pia;size_t size=protocol?sizeof ldn:sizeof pia;
+        int guest=dm_net_socket(2,2,0);CHECK(guest>=0);address own=endpoint(INADDR_LOOPBACK,0);CHECK(!dm_net_bind(guest,&own,sizeof own));unsigned length=sizeof own;CHECK(!dm_net_name(guest,&own,&length,0));
+        address destination=endpoint(UINT32_MAX,protocol?11452:30000);hybrid_reset();dm_net_set_errno(777);
+        CHECK(dm_net_send(guest,query,size,0,&destination,sizeof destination)==(long)size&&dm_net_errno()==777);
+        unsigned char bytes[1024];struct sockaddr_in from;
+        CHECK(read_packet(native,bytes,sizeof bytes,&from)==(ssize_t)size&&!memcmp(bytes,query,size)&&from.sin_port==own.port);
+        CHECK(read_packet(phone,bytes,sizeof bytes,&from)==(ssize_t)size&&!memcmp(bytes,query,size)&&from.sin_port==own.port);
+        CHECK(atomic_load(&hybrid_native)==1&&atomic_load(&hybrid_unicast)==1&&dm_net_multicast_allowed()==1);
+        CHECK(sendto(phone,"phone reply",11,0,(struct sockaddr *)&from,sizeof from)==11);
+        dm_net_pollfd ready={guest,1,0};CHECK(dm_net_poll(&ready,1,1000)==1);CHECK(dm_net_recv(guest,bytes,sizeof bytes,0,NULL,NULL)==11&&!memcmp(bytes,"phone reply",11));
+        CHECK(!dm_net_close(guest));
+    }
+    // Native errors remain errors and never trigger supplemental traffic.
+    const int failures[]={EACCES,EHOSTUNREACH,ENETDOWN},expected[]={13,113,100};
+    address destination=endpoint(UINT32_MAX,30000);
+    for(unsigned i=0;i<3;++i) {
+        int guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();hybrid_failure=failures[i];
+        CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)<0&&dm_net_errno()==expected[i]);
+        CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast)&&!dm_net_test_discovery_pending());CHECK(!dm_net_close(guest));
+    }
+    // Unknown game data, replies and ports retain the sole native send.
+    for(unsigned i=0;i<4;++i) {
+        int guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();unsigned char packet[0x12f];memcpy(packet,pia,sizeof packet);
+        size_t packet_size=sizeof packet;
+        if(i==0) { packet[0]=1;packet[14]=17;packet_size=0x3f; } // valid host response, not a query
+        if(i==1)packet[5]=2;if(i==3) { memcpy(packet,"gameplay",8);packet_size=8; }
+        destination=endpoint(UINT32_MAX,i==2?30001:30000);
+        CHECK(dm_net_send(guest,packet,packet_size,0,&destination,sizeof destination)==(long)packet_size);
+        CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast)&&!dm_net_test_discovery_pending());CHECK(!dm_net_close(guest));
+    }
+    drain(native);drain(phone);
+    int guest=dm_net_socket(2,2,0);CHECK(guest>=0);destination=endpoint(INADDR_LOOPBACK,30000);hybrid_reset();
+    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(!atomic_load(&hybrid_native)&&atomic_load(&hybrid_unicast)==1&&!dm_net_test_discovery_pending());CHECK(!dm_net_close(guest));
+    // A user-selected peer stays a single unicast, with no additional sweep.
+    guest=dm_net_socket(2,2,0);CHECK(guest>=0);setenv("DM_NET_DISCOVERY_PEER","127.0.0.1",1);destination=endpoint(UINT32_MAX,30000);hybrid_reset();
+    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(!atomic_load(&hybrid_native)&&atomic_load(&hybrid_unicast)==1&&!dm_net_test_discovery_pending());CHECK(!dm_net_close(guest));unsetenv("DM_NET_DISCOVERY_PEER");
+    // No extra discovery is inferred in the online mode.
+    guest=dm_net_socket(2,2,0);CHECK(guest>=0);setenv("DM_NETWORK","nextendo",1);hybrid_reset();
+    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast));CHECK(!dm_net_close(guest));setenv("DM_NETWORK","lan",1);
+    // A /16 cannot be swept, but its accepted native broadcast still succeeds.
+    a=adapter(0xffff0000);dm_net_test_set_interface(&a);guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();dm_net_set_errno(777);
+    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia&&dm_net_errno()==777);CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast));CHECK(!dm_net_close(guest));
+    // Cap0 remains unicast-only, preserving the current phone path.
+    a=adapter(0xfffffffc);dm_net_test_set_interface(&a);dm_net_set_multicast_allowed(0);guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();
+    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(!atomic_load(&hybrid_native)&&atomic_load(&hybrid_unicast)==1);CHECK(!dm_net_close(guest));
+    // Extra queue pressure must not change the accepted native result.
+    a=adapter(0xfffff000);dm_net_test_set_interface(&a);dm_net_set_multicast_allowed(1);guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();
+    pia[14]=1;for(unsigned repeat=0;repeat<3;++repeat) { dm_net_set_errno(777);CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia&&dm_net_errno()==777); }
+    CHECK(atomic_load(&hybrid_native)==3&&dm_net_test_discovery_pending()==1); // native retries stay native; extra sweep coalesces
+    for(unsigned i=2;i<=3;++i) { pia[14]=(unsigned char)i;dm_net_set_errno(777);CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia&&dm_net_errno()==777); }
+    CHECK(atomic_load(&hybrid_native)==5&&dm_net_test_discovery_pending()==2);CHECK(!dm_net_close(guest)&&!dm_net_test_discovery_pending());
+    unsigned sent=atomic_load(&hybrid_unicast);usleep(20000);CHECK(atomic_load(&hybrid_unicast)==sent);drain(phone);
+    int reused=dm_net_socket(2,2,0);CHECK(reused==guest);destination=endpoint(INADDR_LOOPBACK,30000);CHECK(dm_net_send(reused,"ordinary",8,0,&destination,sizeof destination)==8);CHECK(!dm_net_test_discovery_pending());CHECK(!dm_net_close(reused));
+    dm_net_test_set_discovery_sender(NULL);dm_net_set_multicast_allowed(0);close(native);close(phone);
+}
 int main(void) {
     setenv("DM_NETWORK","lan",1); unsetenv("DM_NET_DISCOVERY_PEER"); dm_net_set_multicast_allowed(0);
-    ranges(); traffic(); unreachable_neighbor(); bounds_and_lifetime(); dm_net_test_set_interface(NULL);
+    ranges(); traffic(); unreachable_neighbor(); supplemental_queries(); bounds_and_lifetime(); dm_net_test_set_interface(NULL);
     printf("automatic discovery: %u checks passed (real UDP reply, ranges, bounded queue, close/reuse).\n",checks); return 0;
 }

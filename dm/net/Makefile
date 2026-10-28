@@ -1,7 +1,7 @@
 CC = clang
 CFLAGS = -std=c11 -O1 -g -Wall -Wextra -Werror
 SOURCES = lan_relay.c ../host/hle_ldn_protocol.c
-HEADERS = lan_relay.h ../host/net_discovery.h ../host/hle_ldn.h
+HEADERS = lan_relay.h ../host/net_discovery.h ../host/discovery_protocol.h ../host/hle_ldn.h
 .PHONY: all test test-sanitize
 all: build/nx-discovery-relay
 build:

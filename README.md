@@ -10,6 +10,16 @@
 
 This is an independent project built on [seedds/nxnative](https://github.com/seedds/nxnative). The upstream native-execution engine, its authors and their original MIT notice remain credited and preserved. See [Credits](CREDITS.md) and [License](LICENSE).
 
+## Inside Studio
+
+Captured from Studio on macOS. The current interface is Spanish.
+
+![New port — choose your inputs and Apple platform](docs/images/studio-new-port.jpg)
+
+| Versioned system resources | Local room discovery |
+| :---: | :---: |
+| [![Firmware resource library](docs/images/studio-firmware.jpg)](docs/images/studio-firmware.jpg) | [![Local discovery bridge, shown inactive](docs/images/studio-local-play.jpg)](docs/images/studio-local-play.jpg) |
+
 ## One workspace, from input to app
 
 - **Real build progress.** Choose one game's base files, updates and DLC; follow the engine's actual stages and actionable errors.
@@ -82,7 +92,7 @@ The current app interface is Spanish. Technical tool output retains its original
 
 ## Network modes have different requirements
 
-**LAN** uses a game's own LAN mode and real IP sockets. Use matching game versions and the same network. The earlier completed Mario Kart race above is the physical interoperability baseline; it does not certify a later runtime candidate.
+**LAN** uses a game's own LAN mode and real IP sockets. Use matching game versions and the same network. The earlier completed Mario Kart race above is the physical interoperability baseline; it does not certify a later runtime candidate. The current 3.0.5 Mac candidate can [create a local LAN room](dm/games/0100152000022000/README.md#local-network-validation), reaching the host lobby and rules. An external peer joining and a newly completed race remain unvalidated for that candidate.
 
 **LDN** bridges local-wireless service discovery and membership over IP. It needs a compatible peer/module and a matching game. Passing peer fixtures is not a substitute for testing a physical console.
 

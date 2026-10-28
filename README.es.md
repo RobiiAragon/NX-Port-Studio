@@ -10,6 +10,16 @@
 
 Es un proyecto independiente basado en [seedds/nxnative](https://github.com/seedds/nxnative). Se conservan el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
+## Capturas de Studio
+
+Capturas de la app funcionando en macOS, con su interfaz actual en español.
+
+![Nuevo port — archivos de entrada y plataforma Apple](docs/images/studio-new-port.jpg)
+
+| Recursos del sistema por versión | Descubrimiento de salas locales |
+| :---: | :---: |
+| [![Biblioteca de recursos de firmware](docs/images/studio-firmware.jpg)](docs/images/studio-firmware.jpg) | [![Puente de descubrimiento local, desactivado](docs/images/studio-local-play.jpg)](docs/images/studio-local-play.jpg) |
+
 ## Del archivo a la app
 
 - **Progreso real:** una carpeta por juego con su base, actualizaciones y DLC; etapas y errores del motor visibles.
@@ -82,7 +92,7 @@ La interfaz actual está en español; la salida técnica mantiene su idioma orig
 
 ## Cada modo de red tiene requisitos distintos
 
-**LAN:** utiliza el modo LAN propio del juego y sockets IP reales. Requiere versiones coincidentes y la misma red. La carrera del build anterior es la referencia física; no certifica un candidato posterior del runtime.
+**LAN:** utiliza el modo LAN propio del juego y sockets IP reales. Requiere versiones coincidentes y la misma red. La carrera del build anterior es la referencia física; no certifica un candidato posterior del runtime. El candidato actual 3.0.5 para Mac ya [crea una sala LAN local](dm/games/0100152000022000/README.md#local-network-validation) y llega al lobby y a las reglas del anfitrión. La incorporación de otro dispositivo y una nueva carrera siguen pendientes para ese candidato.
 
 **LDN:** transporta por IP el descubrimiento y los participantes del servicio inalámbrico local. Requiere un peer/módulo compatible y un juego coincidente. Las pruebas entre procesos no sustituyen una comprobación física.
 
