@@ -243,7 +243,7 @@ final class StudioModel {
         failure = nil; completedURL = nil; projectURL = nil
         progress = nil; stageIndex = 0; stageTotal = 0; stageName = ""; logs = []
         isBusy = true; status = "Building port"
-        let config = BuildConfiguration(repositoryURL: URL(fileURLWithPath: repositoryPath), gameDirectoryURL: URL(fileURLWithPath: gamePath), keysURL: URL(fileURLWithPath: keysPath), outputURL: outputURL, destination: destination, appName: appName, language: language, showFPS: showFPS, prepareXcode: destination == .iOS, teamID: teamID.isEmpty ? nil : teamID, systemDataURL: selectedSystemDataURL)
+        let config = BuildConfiguration(repositoryURL: URL(fileURLWithPath: repositoryPath), gameDirectoryURL: URL(fileURLWithPath: gamePath), keysURL: URL(fileURLWithPath: keysPath), outputURL: outputURL, destination: destination, appName: appName, language: language, showFPS: showFPS, prepareXcode: destination == .iOS, teamID: teamID.isEmpty ? nil : teamID, systemDataURL: selectedSystemDataURL, nextendoClientID: nextendoClientID)
         let signingDevice = selectedDevice
         let installAfterBuild = installMode
         let runID = UUID(); operationID = runID

@@ -67,12 +67,14 @@ The game builds Mii heads from the console's MiiModel system data, starting at b
 
 ## Local network validation
 
-- **Current candidate, 2026-10-28: local LAN room creation (Mac, 3.0.5).** The candidate created a LAN group, passed Mario and kart selection, reached the host lobby and opened its race rules. UDP binds on ports 49152, 40000 and 30000 succeeded; the managed test runtime then stopped cleanly. This establishes local host setup only. Positive UDP send/receive counts can include local broadcast delivery; external-peer discovery or joining and a newly completed race remain unvalidated for this candidate. The earlier physical [Mac ↔ Switch LAN race baseline](../../../README.md#what-is-verified) remains separate from this local check. Physical automatic iPhone discovery and iPhone-hosted rooms through the Studio relay also remain pending.
+- **Physical LAN lobby entry, 2026-10-28 (iPhone 3.0.5, iOS 27.2; Switch 3.0.5).** The user confirmed that the Switch joined an iPhone-hosted LAN room and that the reverse host arrangement worked too, after the automatic discovery and unreachable-neighbor fixes. No completed iPhone race was reported. Relay use and the exact receive path were not isolated in this test; this is lobby interoperability evidence for the tested devices, not a claim about every provisioning profile or network.
+
+- **Current candidate, 2026-10-28: local LAN room creation (Mac, 3.0.5).** The candidate created a LAN group, passed Mario and kart selection, reached the host lobby and opened its race rules. UDP binds on ports 49152, 40000 and 30000 succeeded; the managed test runtime then stopped cleanly. This establishes local host setup only. Positive UDP send/receive counts can include local broadcast delivery; external-peer discovery or joining and a newly completed race remain unvalidated for this candidate. The earlier physical [Mac ↔ Switch LAN race baseline](../../../README.md#what-is-verified) remains separate from this local check. The subsequent physical iPhone LAN lobby results are recorded separately below.
 
 ## Found on this game
 
-- **Native LDN bridge:** [Native LDN bridge over IP](../../../docs/reference/services.md#native-ldn-bridge-over-ip). The SDK 4 imports and argument layouts are covered by the bridge and isolated two-process tests. Physical Switch/iPhone LDN interoperability remains untested; the ordinary IP LAN race is a separate path.
-- **Capable sender discovery:** [Native broadcast capability and peer discovery are separate](../../../docs/reference/services.md#native-broadcast-capability-and-peer-discovery-are-separate). The PiaLan query contract enables complementary unicast from a capable Mac's original socket; shared-code fixtures cover the mechanism. A physical Mac-to-iPhone-host session remains pending, and this does not enable a restricted phone to receive a Switch's broadcast without a receiving bridge.
+- **Native LDN bridge:** [Native LDN bridge over IP](../../../docs/reference/services.md#native-ldn-bridge-over-ip). The SDK 4 imports and argument layouts are covered by the bridge and isolated two-process tests. A physical test found the Switch room but failed to join it, and iPhone room creation also returned a connection error. A Mac reproduction confirms successful service creation, IP/security queries and UDP socket/bind before the game tears the room down. The post-creation failure is under diagnosis; the ordinary IP LAN results are a separate path.
+- **Capable sender discovery:** [Native broadcast capability and peer discovery are separate](../../../docs/reference/services.md#native-broadcast-capability-and-peer-discovery-are-separate). The PiaLan query contract enables complementary unicast from a capable Mac's original socket; shared-code fixtures cover the mechanism. A physical Mac-to-iPhone-host session remains pending, and the tested phone's receive path has not been isolated separately. The Studio relay remains an optional compatibility path rather than evidence that every iOS profile receives broadcast.
 
 General host changes first needed here; each applies to every game:
 
@@ -83,6 +85,7 @@ General host changes first needed here; each applies to every game:
 - **BAHS programs with intermediate stages have no direct prebuild pair** (`bahs_variations`): [BAHS intermediate stages are not direct pipeline pairs](../../../docs/reference/shaders.md#bahs-intermediate-stages-are-not-direct-pipeline-pairs).
 
 - **Nextendo account and signed version policy:** [Nextendo account credentials and signed service policy](../../../docs/reference/services.md#nextendo-account-credentials-and-signed-service-policy). Catalog acceptance is distinct from local LAN or a tested native online implementation; the current service requires 4.0.1, while this installed port remains 3.0.5.
+- **Mobile account setup:** [Mobile Nextendo setup without a desktop handoff](../../../docs/reference/services.md#mobile-nextendo-setup-without-a-desktop-handoff). The phone can configure its own account and catalog policy; physical authentication/migration acceptance and a native online match remain pending.
 
 ## Open
 

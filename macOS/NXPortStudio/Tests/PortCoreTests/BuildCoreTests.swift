@@ -91,6 +91,24 @@ final class BuildCoreTests: XCTestCase {
         }
     }
 
+    func testIOSPublicOAuthClientIsPassedOnlyThroughBuildEnvironment() throws {
+        let (root, original) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var config = original
+        config.destination = .iOS; config.teamID = "SYNTHETIC1"
+        config.outputURL = root.appendingPathComponent("Signed.ipa")
+        let clientID = "nxc_" + "fixture_port"
+        config.nextendoClientID = " \(clientID) "
+        let command = try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL)
+        XCTAssertEqual(command.environment["DM_NEXTENDO_CLIENT_ID"], clientID)
+        XCTAssertFalse(command.arguments.contains { $0.contains(clientID) })
+        XCTAssertFalse(command.redactedDescription.contains(clientID))
+        config.nextendoClientID = "unregistered\ninvalid"
+        XCTAssertThrowsError(try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL))
+        config.nextendoClientID = nil
+        XCTAssertNil(try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL).environment["DM_NEXTENDO_CLIENT_ID"])
+    }
+
     func testIOSPreparationRejectsExistingIPAAndInvalidExportPaths() throws {
         let (root, original) = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }

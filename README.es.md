@@ -1,10 +1,12 @@
 <p align="center">
-  <img src="docs/images/hero.svg" alt="NX Port Studio — Tus juegos de Switch, en apps nativas para Apple" width="100%">
+  <img src="docs/images/hero.es.svg" alt="NX Port Studio — Tus juegos de Switch, en apps nativas para Apple" width="100%">
 </p>
 
 <p align="center">
-  <a href="#primeros-pasos">Primeros pasos</a> · <a href="#qué-está-verificado">Estado verificado</a> · <a href="ROADMAP.md">Hoja de ruta</a> · <a href="CONTRIBUTING.md">Colaborar</a> · <a href="CREDITS.md">Créditos</a> · <a href="README.md">English</a>
+  <a href="#primeros-pasos">Primeros pasos</a> · <a href="#qué-está-verificado">Estado verificado</a> · <a href="ROADMAP.md">Hoja de ruta</a> · <a href="CONTRIBUTING.md">Colaborar</a> · <a href="CREDITS.md">Créditos</a>
 </p>
+
+<p align="center"><a href="README.md">English</a> · <strong>Español</strong> · <a href="README.fr.md">Français</a> · <a href="README.ja.md">日本語</a> · <a href="README.zh-Hans.md">简体中文</a></p>
 
 **NX Port Studio es un espacio de trabajo para macOS que convierte tus propios archivos de juegos de Nintendo Switch en apps nativas para Apple.** Selecciona un juego, prepara las herramientas y recursos, y crea una app de Mac o un port de iPhone/iPad firmado mediante Xcode.
 
@@ -12,13 +14,13 @@ Es un proyecto independiente basado en [seedds/nxnative](https://github.com/seed
 
 ## Capturas de Studio
 
-Capturas de la app funcionando en macOS, con su interfaz actual en español.
+Capturas de la app funcionando en macOS, en español.
 
-![Nuevo port — archivos de entrada y plataforma Apple](docs/images/studio-new-port.jpg)
+![Nuevo port — archivos de entrada y plataforma Apple](docs/images/es/studio-new-port.jpg)
 
 | Recursos del sistema por versión | Descubrimiento de salas locales |
 | :---: | :---: |
-| [![Biblioteca de recursos de firmware](docs/images/studio-firmware.jpg)](docs/images/studio-firmware.jpg) | [![Puente de descubrimiento local, desactivado](docs/images/studio-local-play.jpg)](docs/images/studio-local-play.jpg) |
+| [![Biblioteca de recursos de firmware](docs/images/es/studio-firmware.jpg)](docs/images/es/studio-firmware.jpg) | [![Puente de descubrimiento local, desactivado](docs/images/es/studio-local-play.jpg)](docs/images/es/studio-local-play.jpg) |
 
 ## Del archivo a la app
 
@@ -49,9 +51,9 @@ Cada mecanismo tiene pruebas y alcances distintos. Esto no demuestra que todos l
 | --- | --- | --- |
 | Studio en macOS | Pasan las pruebas de compilación, configuración, procesos, recursos y firma Xcode. | Apple silicon; Studio requiere macOS 14+. Algunos juegos necesitan funciones más recientes de macOS/Metal. |
 | LAN Mac ↔ Switch | Un build anterior probado **completó una carrera de Mario Kart 8 Deluxe 3.0.5** con una Switch física. | Es una referencia histórica con versiones coincidentes y modo LAN. El candidato actual no ha repetido esa carrera. |
-| Puente LDN | Implementación C original compatible con `ldn_mitm`, probada con protocolo, datos malformados, participantes y dos procesos. | Falta comprobar la interoperabilidad con una Switch física. Es una ruta diferente de la LAN IP del juego. |
+| Puente LDN | Implementación C original compatible con `ldn_mitm`, probada con protocolo, datos malformados, participantes y dos procesos. | La prueba física encuentra salas, pero entrar y crear devuelve errores de conexión; el diagnóstico sigue en curso. Es una ruta diferente de la LAN IP del juego. |
 | Nextendo | Están verificados OAuth con aplicación propia, la obtención de NEX ligada a identidad, su lectura desde el Llavero y el catálogo firmado. | OAuth limitado y la credencial NEX son estados distintos. **No se ha validado una partida NEX online nativa.** |
-| iPhone/iPad | Está implementada la infraestructura de exportación firmada e instalación. La integración actual de ports y redes sigue en curso. | Este README no afirma un resultado multijugador en iPhone. Siguen aplicando restricciones de dispositivo, firma y plataforma. |
+| iPhone/iPad | El usuario confirmó que el build firmado de Mario Kart 3.0.5 entra a salas LAN con una Switch física, con ambos dispositivos como anfitrión. | Está comprobada la entrada a la sala; falta validar una carrera completa. Siguen aplicando restricciones de dispositivo, firma y plataforma. |
 | Android/Windows | Planeados después de estabilizar la base Apple. | Aún no hay builds ni compatibilidad anunciada; ARM y x86 requieren trabajo propio. |
 
 ## Primeros pasos
@@ -88,7 +90,7 @@ El script no sobrescribe un destino existente. Su firma ad-hoc predeterminada co
 4. Elige **Mac** o **iPhone/iPad**. En iOS, selecciona un dispositivo apto emparejado e introduce tu Team ID de Xcode.
 5. Crea el port. En iOS, la operación sólo termina correctamente después de firmar y verificar el IPA. **Instalar al terminar** controla la instalación, no la firma.
 
-La interfaz actual está en español; la salida técnica mantiene su idioma original. Los productos de compilación y datos extraídos permanecen junto al juego seleccionado. Las exportaciones se guardan en Descargas de forma predeterminada.
+La interfaz inicia en español y permite elegir inglés, francés, japonés y chino simplificado en la barra lateral o en el menú Idioma. El idioma de la interfaz y el del juego se configuran por separado. La salida técnica mantiene su idioma original. Los productos de compilación y datos extraídos permanecen junto al juego seleccionado. Las exportaciones se guardan en Descargas de forma predeterminada.
 
 ## Cada modo de red tiene requisitos distintos
 
@@ -98,9 +100,9 @@ La interfaz actual está en español; la salida técnica mantiene su idioma orig
 
 **Nextendo:** integra autorización de cuenta y políticas firmadas del servicio. Studio utiliza el ID de tu aplicación registrada y guarda las credenciales en el Llavero de esta Mac. OAuth con permisos de cuenta no se convierte automáticamente en una credencial NEX de juego. Una solicitud explícita puede obtener una credencial NEX verificada contra la identidad; ese paso de cuenta ya fue comprobado. Un servidor habilitado, una versión aceptada y una credencial guardada describen requisitos distintos; ninguno demuestra una partida online nativa. Consulta la política vigente en el catálogo firmado de la app.
 
-En iOS, el runtime implementa el descubrimiento unicast automático en una subred IPv4 local apta y acotada cuando no dispone de broadcast/multicast. La dirección de peer avanzada es opcional. Falta validar este descubrimiento automático en un iPhone físico.
+En iOS, el runtime implementa el descubrimiento unicast automático en una subred IPv4 local apta y acotada cuando no dispone de broadcast/multicast. La dirección de peer avanzada es opcional. El usuario confirmó la entrada a salas LAN en ambos roles con una Switch física; falta validar una carrera completa.
 
-Para las salas creadas en el iPhone/iPad, **Juego local → Activar puente** habilita un [puente de descubrimiento local](dm/net/lan_relay.c) opcional en el Mac. Mantén Studio abierto en la misma red. El puente retransmite el descubrimiento LAN/LDN compatible; la partida conecta directamente a los participantes. Se inicia apagado, muestra tráfico y errores reales, y no requiere cuenta ni introducir una IP. **La interoperabilidad física de salas alojadas en el iPhone sigue pendiente.**
+Para las salas creadas en el iPhone/iPad, **Juego local → Activar puente** habilita un [puente de descubrimiento local](dm/net/lan_relay.c) opcional en el Mac. Mantén Studio abierto en la misma red. El puente retransmite el descubrimiento LAN/LDN compatible; la partida conecta directamente a los participantes. Se inicia apagado, muestra tráfico y errores reales, y no requiere cuenta ni introducir una IP. **La entrada a salas LAN está confirmada por el usuario en ambos roles. Las carreras y la interoperabilidad LDN siguen pendientes.**
 
 ### Bloqueos actuales de servicios de juego
 

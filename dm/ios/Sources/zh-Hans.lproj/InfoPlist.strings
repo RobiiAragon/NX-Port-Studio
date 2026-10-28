@@ -1,0 +1,2 @@
+// Local network permission.
+"NSLocalNetworkUsageDescription" = "连接同一局域网中的 Switch 和其他玩家。";

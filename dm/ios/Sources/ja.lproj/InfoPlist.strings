@@ -1,0 +1,2 @@
+// Local network permission.
+"NSLocalNetworkUsageDescription" = "ローカルネットワーク上のSwitchやほかのプレイヤーに接続します。";

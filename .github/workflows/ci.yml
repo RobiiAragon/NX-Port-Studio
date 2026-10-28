@@ -46,6 +46,9 @@ jobs:
           dm.tools.tests.test_nso_syms
           dm.tools.tests.test_system_data
           dm.tools.tests.test_launcher_settings
+          dm.ios.tests.test_launcher_storage
+          dm.ios.tests.test_mobile_nextendo
+          dm.ios.tests.test_nextendo_resources
           tools.maintainers.test_prepare_export
   networking:
     name: Local network fixtures / macOS

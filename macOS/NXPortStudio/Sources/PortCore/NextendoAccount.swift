@@ -285,7 +285,14 @@ public actor NextendoAccountService {
     private var pending: Pending?
     private var gameCredentialRequestID: UUID?
     public init(store: any NextendoCredentialStore = NextendoKeychainStore(), http: any NextendoHTTPClient = NextendoURLSessionClient(),
-                makeReceiver: @escaping @Sendable () throws -> any NextendoCallbackReceiver = { try NextendoLoopbackServer() },
+                makeReceiver: @escaping @Sendable () throws -> any NextendoCallbackReceiver = {
+                    #if os(macOS)
+                    return try NextendoLoopbackServer()
+                    #else
+                    // Mobile callers supply their system web-authentication receiver.
+                    throw NextendoError.invalidConfiguration
+                    #endif
+                },
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.store = store; self.http = http; self.makeReceiver = makeReceiver; self.now = now
     }
@@ -380,11 +387,16 @@ public actor NextendoAccountService {
 
     static func validRedirect(_ url: URL) -> Bool {
         guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
-        return c.scheme == "http" && c.host == "127.0.0.1" && (c.port ?? 0) > 0 && c.path == "/callback" && c.user == nil && c.password == nil && c.query == nil && c.fragment == nil
+        guard c.user == nil, c.password == nil, c.query == nil, c.fragment == nil else { return false }
+        if url.absoluteString == "nxnative-nextendo://callback" { return true }
+        return c.scheme == "http" && c.host == "127.0.0.1" && c.percentEncodedHost == "127.0.0.1" &&
+            (1...65535).contains(c.port ?? 0) && c.percentEncodedPath == "/callback"
     }
     static func authorizationCode(callback: URL, redirect: URL, expectedState: String) throws -> String {
-        guard let c = URLComponents(url: callback, resolvingAgainstBaseURL: false), c.scheme == redirect.scheme,
+        guard validRedirect(redirect), let c = URLComponents(url: callback, resolvingAgainstBaseURL: false), c.scheme == redirect.scheme,
               c.host == redirect.host, c.port == redirect.port, c.path == redirect.path, c.fragment == nil, c.user == nil, c.password == nil else { throw NextendoError.callbackRejected }
+        var endpoint = c; endpoint.query = nil
+        guard endpoint.url?.absoluteString == redirect.absoluteString else { throw NextendoError.callbackRejected }
         let items = c.queryItems ?? []
         var values: [String: String] = [:]
         for item in items {

@@ -33,6 +33,6 @@ The engine's vendored dependency inventory remains the authoritative map for inc
 
 The banner in `docs/images/hero.svg` is original SVG artwork based on Studio's source-drawn cartridge/export icon. It contains no game artwork or invented application screenshot.
 
-The Studio interface captures in `docs/images/studio-*.jpg` were taken from the running macOS app. Their reviewed hashes and provenance are recorded in `public-assets.json`.
+The Studio interface captures in the language folders under `docs/images/` were taken from the running macOS app. Their reviewed hashes and provenance are recorded in `public-assets.json`.
 
 Nintendo gameplay screenshots, covers, artwork, game icons, firmware, game content and original SDK files are excluded from this public repository. Test results may be documented in text; excluding artwork does not remove the obligation to credit upstream software authors.

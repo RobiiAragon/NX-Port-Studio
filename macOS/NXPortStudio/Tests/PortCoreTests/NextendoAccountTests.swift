@@ -21,7 +21,8 @@ private actor MockNextendoHTTP: NextendoHTTPClient {
     func first() -> URLRequest? { requests.first }
 }
 private actor MockNextendoCallback: NextendoCallbackReceiver {
-    let redirect = URL(string: "http://127.0.0.1:41923/callback")!
+    let redirect: URL
+    init(redirect: URL = URL(string: "http://127.0.0.1:41923/callback")!) { self.redirect = redirect }
     var value: URL?
     var continuation: CheckedContinuation<URL, Error>?
     var cancelled = false
@@ -130,6 +131,56 @@ private actor DelayedNEXUpgradeHTTP: NextendoHTTPClient {
                       "http://127.0.0.1:43210/callback?code=a&state=expected#fragment"] {
             XCTAssertThrowsError(try NextendoAccountService.authorizationCode(callback: URL(string: value)!, redirect: redirect, expectedState: "expected"))
         }
+    }
+    func testRedirectAcceptsOnlyExactMobileEndpointOrBoundIPv4Loopback() throws {
+        for endpoint in ["nxnative-nextendo://callback", "http://127.0.0.1:43210/callback"] {
+            XCTAssertTrue(NextendoAccountService.validRedirect(try XCTUnwrap(URL(string: endpoint))))
+        }
+        for endpoint in ["nxnative-nextendo://callback/", "nxnative-nextendo://callback/path",
+                         "nxnative-nextendo://callback:123", "nxnative-nextendo://callback?extra=1",
+                         "nxnative-nextendo://callback#fragment", "nxnative-nextendo://user@callback",
+                         "nxnative-nextendo://call%62ack", "nxnative-nextendo://other",
+                         "NXNATIVE-NEXTENDO://callback", "nxnative-nextendo:/callback",
+                         "http://127.0.0.1:0/callback", "http://127.0.0.1:65536/callback",
+                         "http://localhost:43210/callback", "http://127.0.0.%31:43210/callback"] {
+            XCTAssertFalse(NextendoAccountService.validRedirect(try XCTUnwrap(URL(string: endpoint))), endpoint)
+        }
+    }
+    func testMobileCallbackUsesSameStateDuplicateAndEndpointGuards() throws {
+        let redirect = URL(string: "nxnative-nextendo://callback")!
+        XCTAssertEqual(try NextendoAccountService.authorizationCode(callback: URL(string: "nxnative-nextendo://callback?code=a%2Bb&state=expected")!, redirect: redirect, expectedState: "expected"), "a+b")
+        for endpoint in ["nxnative-nextendo://callback?code=a&state=wrong",
+                         "nxnative-nextendo://callback?code=a&code=b&state=expected",
+                         "nxnative-nextendo://callback?code=a&state=expected&state=expected",
+                         "nxnative-nextendo://callback?code=a&state=expected#fragment",
+                         "nxnative-nextendo://callback/?code=a&state=expected",
+                         "nxnative-nextendo://callback:123?code=a&state=expected",
+                         "nxnative-nextendo://user@callback?code=a&state=expected",
+                         "nxnative-nextendo://call%62ack?code=a&state=expected"] {
+            XCTAssertThrowsError(try NextendoAccountService.authorizationCode(callback: URL(string: endpoint)!, redirect: redirect, expectedState: "expected"), endpoint)
+        }
+    }
+    func testMobileReceiverCompletesPKCEExchangeAndRejectsReplay() async throws {
+        let redirect = URL(string: "nxnative-nextendo://callback")!
+        let callback = MockNextendoCallback(redirect: redirect), store = MemoryNextendoStore()
+        let http = MockNextendoHTTP([.init(data: Data(#"{"access_token":"mobile-fixture","token_type":"Bearer","scope":"identity","expires_in":3600}"#.utf8), statusCode: 200)])
+        let service = NextendoAccountService(store: store, http: http, makeReceiver: { callback })
+        let request = try await service.beginSignIn(configuration: configuration())
+        let query = try XCTUnwrap(URLComponents(url: request.authorizationURL, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(query.first { $0.name == "redirect_uri" }?.value, redirect.absoluteString)
+        await callback.resolve(URL(string: redirect.absoluteString + "?state=\(state(request))&code=mobile%2Bcode")!)
+        let summary = try await service.finishSignIn(request.id)
+        XCTAssertEqual(summary.tokenKind, .oauth); XCTAssertFalse(summary.hasNEXCredential)
+        let sent = await http.first()
+        let first = try XCTUnwrap(sent)
+        let fields = try XCTUnwrap(URLComponents(string: "https://example.test/?" + String(data: first.httpBody!, encoding: .utf8)!)?.queryItems)
+        XCTAssertEqual(fields.first { $0.name == "redirect_uri" }?.value, redirect.absoluteString)
+        XCTAssertEqual(fields.first { $0.name == "code" }?.value, "mobile+code")
+        let verifier = try XCTUnwrap(fields.first { $0.name == "code_verifier" }?.value)
+        XCTAssertEqual(try NextendoPKCE.challenge(for: verifier), query.first { $0.name == "code_challenge" }?.value)
+        do { _ = try await service.finishSignIn(request.id); XCTFail("mobile callback replay accepted") }
+        catch { XCTAssertEqual(error as? NextendoError, .authorizationUnavailable) }
+        let count = await http.count(); XCTAssertEqual(count, 1)
     }
     func testScopedOAuthIsNeverReportedAsNEXAndReplayDoesNotExchangeAgain() async throws {
         let callback = MockNextendoCallback(), store = MemoryNextendoStore()

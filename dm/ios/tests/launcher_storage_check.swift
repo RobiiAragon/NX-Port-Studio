@@ -15,6 +15,11 @@ import Foundation
         d.set("1", forKey: "launcher.DM_FPS_HOLD")       // a value the toggle does not take (on / off): the default
         setenv("DM_ENV_FILE_KEYS", "DM_METAL_HUD", 1); setenv("DM_METAL_HUD", "1", 1)   // set by Documents/env.txt
         let m = LauncherModel(file.settings, defaults: d)
+        expect(m.uiLanguage == .spanish, "app interface defaults to Spanish")
+        let preservedGameLanguage = m.values["DM_LANG"]
+        m.uiLanguage = .japanese
+        expect(d.string(forKey: "launcher.uiLanguage") == "ja" && m.values["DM_LANG"] == preservedGameLanguage, "app UI language is separate from the game language")
+        expect(LauncherModel(file.settings, defaults: d).uiLanguage == .japanese, "app UI language survives recreation")
         let scale = file.settings.first { $0.env == "DM_RENDER_SCALE" }!
         expect(["nan", "inf", "-inf", "0.49", "1.01", "invalid"].allSatisfy { !scale.accepts($0) } && scale.accepts("0.5") && scale.accepts("1.00"), "saved ranges reject nonfinite and out-of-range values")
         d.set("nan", forKey: "launcher.DM_RENDER_SCALE")
@@ -31,6 +36,7 @@ import Foundation
         m.reset()
         expect(d.string(forKey: "launcher.DM_PSO_MTL4") == nil && m.values["DM_PSO_MTL4"] == "1", "Reset clears performance choices and shows the defaults")
         expect(d.string(forKey: "launcher.DM_FPS_TARGET") == nil && m.values["DM_FPS_TARGET"] == file.settings.first { $0.env == "DM_FPS_TARGET" }!.def, "Reset also clears game choices")
+        expect(m.uiLanguage == .japanese, "resetting game settings retains the app UI language")
         expect(m.values["DM_METAL_HUD"] == "1" && !m.changed, "Reset leaves the env file's value; nothing left to reset")
         let network = LauncherModel([], defaults: d, environment: [:])
         expect(network.networkMode == .offline && network.networkValidationError == nil, "network starts offline")

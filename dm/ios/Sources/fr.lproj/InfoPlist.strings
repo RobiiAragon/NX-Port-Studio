@@ -1,0 +1,2 @@
+// Local network permission.
+"NSLocalNetworkUsageDescription" = "Connexion à votre Switch et aux autres joueurs de votre réseau local.";

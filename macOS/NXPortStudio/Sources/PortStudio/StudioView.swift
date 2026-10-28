@@ -12,6 +12,7 @@ enum StudioStyle {
 
 struct StudioView: View {
     @Bindable var model: StudioModel
+    @Bindable private var localization = StudioLocalization.shared
     var body: some View {
         HStack(spacing: 0) {
             sidebar.frame(width: 202)
@@ -73,6 +74,14 @@ struct StudioView: View {
             }
             Spacer(minLength: 40)
             VStack(alignment: .leading, spacing: 10) {
+                Picker(t("Interface language"), selection: $localization.language) {
+                    ForEach(StudioLanguage.allCases) { language in
+                        Text(verbatim: language.nativeName).tag(language)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel(t("Interface language"))
+                .controlSize(.small)
                 Text("NX Port Studio").font(.system(size: 14, weight: .medium))
                 Text(t("Your games. Apple hardware.")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
                 Button { model.openURL("https://github.com/RobiiAragon/NX-Port-Studio") } label: {

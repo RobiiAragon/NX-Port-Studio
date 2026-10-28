@@ -39,7 +39,7 @@ struct LocalPlayView: View {
                     if model.localRelaySnapshot.isRunning || model.localRelaySnapshot.queriesReceived > 0 {
                         RelayTrafficView(snapshot: model.localRelaySnapshot)
                     }
-                    Text(t("Only room discovery is relayed. Gameplay connects the devices directly. Physical iPhone-to-Switch hosting is still pending validation."))
+                    Text(t("Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation."))
                         .font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }

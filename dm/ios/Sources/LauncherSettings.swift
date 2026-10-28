@@ -39,9 +39,9 @@ struct LauncherNextendoStatus: Equatable {
     }
     var canStart: Bool { routesStatus == 0 && hasValidCredential }
     var blockingMessage: String? {
-        if routesStatus == 1 { return "Compatible services are not configured. You can play using Offline or LAN." }
-        if routesStatus != 0 { return "The Nextendo service configuration could not be validated. You can play using Offline or LAN." }
-        if !hasValidCredential { return "No valid Nextendo game credential is available on this iPhone. Link or renew it in NX Port Studio. You can play using Offline or LAN." }
+        if routesStatus == 1 { return "Game services still need a verified connection profile. Open Nextendo setup on this iPhone." }
+        if routesStatus != 0 { return "The game service profile could not be validated. Open Nextendo setup for details." }
+        if !hasValidCredential { return "Link or renew your Nextendo game credential in this iPhone’s Nextendo setup." }
         return nil
     }
 }
@@ -80,6 +80,9 @@ final class LauncherModel: ObservableObject {
     @Published var networkMode: LauncherNetworkMode = .offline
     @Published var discoveryPeer = ""
     @Published var nextendoStatus: LauncherNextendoStatus?
+    @Published var uiLanguage: LauncherUILanguage = .spanish {
+        didSet { defaults.set(uiLanguage.rawValue, forKey: "launcher.uiLanguage") }
+    }
 
     private let defaults: UserDefaults
 
@@ -87,6 +90,7 @@ final class LauncherModel: ObservableObject {
          environment: [String: String] = ProcessInfo.processInfo.environment) {
         self.defaults = defaults
         self.settings = settings
+        self.uiLanguage = defaults.string(forKey: "launcher.uiLanguage").flatMap(LauncherUILanguage.init(rawValue:)) ?? .spanish
         // The previous launcher required an address. That forced value was not
         // an explicit choice to override automatic discovery. Migrate once.
         if defaults.string(forKey: "launcher.discoveryStyle") == nil {

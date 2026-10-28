@@ -5,22 +5,102 @@
     {
       "path": "docs/images/hero.svg",
       "sha256": "e20b8dda725a9b996b030cbe97ab04dd52a343a25a553d5f276fa30e36c62540",
-      "provenance": "Original vector banner based on the source-drawn NX Port Studio cartridge/export mark."
+      "provenance": "Original vector banner based on Studio source-drawn cartridge/export mark."
     },
     {
-      "path": "docs/images/studio-new-port.jpg",
-      "sha256": "b6ccfc3aae779041df751cb0995bcc8e25a95b6c77704d1cd731dab9595f3754",
-      "provenance": "Unaltered capture of the installed NX Port Studio interface on macOS, reviewed on 2026-10-28. Contains original Studio UI; no game imagery, key values or account details."
+      "path": "docs/images/hero.es.svg",
+      "sha256": "ab4cff0f84d4acce5f3f8f8696c2f0e54d03215f35a51d016da3f9854c342858",
+      "provenance": "Original project vector banner, localized into es; no game artwork."
     },
     {
-      "path": "docs/images/studio-firmware.jpg",
-      "sha256": "0d28b82e69e4daccf595bdf5168932e3ffc68c0aaed4d31a4bfef587e1c9a8e9",
-      "provenance": "Unaltered capture of the installed NX Port Studio interface on macOS, reviewed on 2026-10-28. Contains original Studio UI; no game imagery, key values or account details."
+      "path": "docs/images/hero.fr.svg",
+      "sha256": "9636699c3d5c7e8c921b006788d0c11716560b5e1fe01e98eddac5007c3f379d",
+      "provenance": "Original project vector banner, localized into fr; no game artwork."
     },
     {
-      "path": "docs/images/studio-local-play.jpg",
-      "sha256": "be4855eb25e7cb30d7ffd3ea8eba30696f536b7bbfba64acaf39b3159d2fd416",
-      "provenance": "Unaltered capture of the installed NX Port Studio interface on macOS, reviewed on 2026-10-28. Contains original Studio UI; no game imagery, key values or account details."
+      "path": "docs/images/hero.ja.svg",
+      "sha256": "c4b5beaed8327f7f01c4f406d1e9458cfba2a3eaed859428f25b7008a094a3fd",
+      "provenance": "Original project vector banner, localized into ja; no game artwork."
+    },
+    {
+      "path": "docs/images/hero.zh-Hans.svg",
+      "sha256": "e9f618232ad0cd7a94e4990dc3d876591c2697ada348633403786a3650c1d348",
+      "provenance": "Original project vector banner, localized into zh-Hans; no game artwork."
+    },
+    {
+      "path": "docs/images/en/studio-new-port.jpg",
+      "sha256": "aed4288eadff84c8689ce3c4f175c0f8f96310b6fc8318ce92785381b4ade3c7",
+      "provenance": "Unaltered capture of the running Studio interface in en, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/en/studio-firmware.jpg",
+      "sha256": "fc50be6fa79fb09d22121cf90d2f444efce572b4d17d668ef3cb849fa28e83b5",
+      "provenance": "Unaltered capture of the running Studio interface in en, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/en/studio-local-play.jpg",
+      "sha256": "fcf95e8f5f9dddeea570576639273622238ade7695898a2aa21bd6a2ce7d786c",
+      "provenance": "Unaltered capture of the running Studio interface in en, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/es/studio-new-port.jpg",
+      "sha256": "5e3e6be5effb78c01c66253b48cea60feadb5f5d52ef66597fc6ec3560bfd8e9",
+      "provenance": "Unaltered capture of the running Studio interface in es, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/es/studio-firmware.jpg",
+      "sha256": "b41e97211dfddc9733233d037de79ba3137616ff6e243a99f66c8c96de8490b8",
+      "provenance": "Unaltered capture of the running Studio interface in es, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/es/studio-local-play.jpg",
+      "sha256": "3113ea63ca4fd01916beda1aed396ef31f1282c49ecb1b838363cc7b714c2d8b",
+      "provenance": "Unaltered capture of the running Studio interface in es, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/fr/studio-new-port.jpg",
+      "sha256": "900fbe8a2fa1b2ae637b201bf22a53ffe0fc7905796855008066d906cc833a51",
+      "provenance": "Unaltered capture of the running Studio interface in fr, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/fr/studio-firmware.jpg",
+      "sha256": "21abc952a95ed0dcac5fb812e85026e63eb6ba3e01592956cdce5cae14e8c80a",
+      "provenance": "Unaltered capture of the running Studio interface in fr, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/fr/studio-local-play.jpg",
+      "sha256": "59ca060365caade1db8e0c7b5feb08367dab73d84ec026e2240c199dc291f8ff",
+      "provenance": "Unaltered capture of the running Studio interface in fr, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/ja/studio-new-port.jpg",
+      "sha256": "ec815cf9c779e3624e4b2773f9ab03ce95e02e4b48645edfd2e36484b81f4f39",
+      "provenance": "Unaltered capture of the running Studio interface in ja, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/ja/studio-firmware.jpg",
+      "sha256": "2b82bbacb31c0d0a0de673901d0b103ea3487cf01174cd671a22ed0e734b15a1",
+      "provenance": "Unaltered capture of the running Studio interface in ja, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/ja/studio-local-play.jpg",
+      "sha256": "f5f4636fa24e9d0b18378ac29d0de683b9a5f7ad35da3852f59af245dfcaa789",
+      "provenance": "Unaltered capture of the running Studio interface in ja, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/zh-Hans/studio-new-port.jpg",
+      "sha256": "39dc3e0bd6a1a393ed340055c440550c84ab637000bb50589101da26507c264b",
+      "provenance": "Unaltered capture of the running Studio interface in zh-Hans, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/zh-Hans/studio-firmware.jpg",
+      "sha256": "8d03325127c31241d6cbc31a7018ca4a01ec4b4ffd411dffb58153ec3f2c2026",
+      "provenance": "Unaltered capture of the running Studio interface in zh-Hans, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
+    },
+    {
+      "path": "docs/images/zh-Hans/studio-local-play.jpg",
+      "sha256": "f6caecbb32742ea05be03f1f22f9bc9855b411af20c6da605edbab0abcfbea1f",
+      "provenance": "Unaltered capture of the running Studio interface in zh-Hans, reviewed independently on 2026-10-28; original UI only, no game artwork, key values or account details."
     }
   ]
 }

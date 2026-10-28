@@ -288,3 +288,13 @@
 "Local Network access was denied. Allow NX Port Studio in System Settings → Privacy & Security → Local Network, then try again." = "Se denegó el acceso a la red local. Permite NX Port Studio en Ajustes del Sistema → Privacidad y seguridad → Red local y vuelve a intentarlo.";
 "The local discovery bridge could not allocate its working memory." = "El puente de descubrimiento local no pudo reservar su memoria de trabajo.";
 "The local discovery bridge configuration is invalid." = "La configuración del puente de descubrimiento local no es válida.";
+
+"Language" = "Idioma";
+
+"Interface language" = "Idioma de la interfaz";
+
+"Homebrew" = "Homebrew";
+
+"Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation." = "El puente solo retransmite el descubrimiento de salas. La partida conecta los dispositivos directamente. Se verificó el ingreso a salas LAN con un iPhone y una Switch física como anfitrión o cliente; las carreras y LDN aún requieren validación.";
+
+"Enter a valid registered Nextendo application client ID." = "Introduce un ID de cliente válido de una aplicación registrada en Nextendo.";

@@ -8,6 +8,7 @@ import os
 
 private func info(_ key: String) -> Any? { Bundle.main.object(forInfoDictionaryKey: key) }
 @_silgen_name("dm_launcher_nextendo_preflight") private func nextendoPreflight() -> UInt32
+@_silgen_name("dm_mobile_nextendo_use_keychain") private func installMobileNextendoKeychain()
 
 private extension LauncherModel {
     func binding(_ s: Setting) -> Binding<String> { Binding(get: { self.values[s.env] ?? s.def }, set: { self.values[s.env] = $0 }) }
@@ -19,7 +20,8 @@ private struct SettingRow: View {
 
     private var locked: Bool { m.fromFile.contains(s.env) }
     private var note: String {
-        locked ? (s.note.isEmpty ? "" : s.note + " · ") + "Set by an env file" : s.note
+        let base = launcherText(s.note, language: m.uiLanguage)
+        return locked ? (base.isEmpty ? "" : base + " · ") + launcherText("Set by an env file", language: m.uiLanguage) : base
     }
     private var rangeValue: Binding<Double> {
         Binding(get: { Double(m.values[s.env] ?? s.def) ?? s.max ?? 1 },
@@ -29,7 +31,7 @@ private struct SettingRow: View {
 
     private var settingLabel: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(s.label)
+            Text(LocalizedStringKey(s.label))
             if !note.isEmpty { Text(note).font(.footnote).foregroundStyle(.secondary) }
         }
     }
@@ -39,7 +41,7 @@ private struct SettingRow: View {
             switch s.kind {
             case "choice":
                 Picker(selection: m.binding(s)) {
-                    ForEach(s.options ?? [], id: \.[0]) { Text($0[1]).tag($0[0]) }
+                    ForEach(s.options ?? [], id: \.[0]) { Text(LocalizedStringKey($0[1])).tag($0[0]) }
                 } label: {
                     settingLabel
                 }
@@ -67,6 +69,7 @@ private struct SettingRow: View {
 
 private struct LauncherNetworkSection: View {
     @ObservedObject var model: LauncherModel
+    let openNextendo: () -> Void
     @FocusState private var peerFocused: Bool
     @State private var showingAdvanced = false
 
@@ -107,6 +110,10 @@ private struct LauncherNetworkSection: View {
                 }
             }
             Text(LocalizedStringKey(explanation)).font(.footnote).foregroundStyle(.secondary)
+            if model.networkMode == .nextendo {
+                Button("Set up Nextendo") { openNextendo() }
+                Text("Link your account and check this game’s requirements on this iPhone.").font(.footnote).foregroundStyle(.secondary)
+            }
             if model.networkMode == .nextendo, let status = model.nextendoStatus {
                 Label(LocalizedStringKey(status.hasValidCredential ? "Game credential validated" : "Game credential needs attention"), systemImage: status.hasValidCredential ? "checkmark.shield" : "exclamationmark.shield")
                     .font(.footnote)
@@ -135,7 +142,9 @@ private struct LauncherNetworkSection: View {
 
 private struct LauncherView: View {
     @ObservedObject var m: LauncherModel
+    @ObservedObject var nextendo: MobileNextendoModel
     let play: () -> Void
+    @State private var showingNextendo = false
     @State private var memory = os_proc_available_memory()
 
     var body: some View {
@@ -156,9 +165,15 @@ private struct LauncherView: View {
                 .padding(16)
                 .frame(width: geometry.size.width / 3, height: geometry.size.height)
                 List {
-                    LauncherNetworkSection(model: m)
+                    Section {
+                        Picker("App language", selection: $m.uiLanguage) {
+                            ForEach(LauncherUILanguage.allCases) { language in Text(verbatim: language.title).tag(language) }
+                        }
+                        Text("Changes the app interface only. The game language is kept separately.").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    LauncherNetworkSection(model: m, openNextendo: { showingNextendo = true })
                     ForEach(m.sections, id: \.self) { section in
-                        Section(section) {
+                        Section(LocalizedStringKey(section)) {
                             ForEach(m.settings.filter { $0.sectionTitle == section }) { SettingRow(s: $0, m: m) }
                         }
                     }
@@ -182,6 +197,10 @@ private struct LauncherView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .environment(\.locale, m.uiLanguage.locale)
+        .sheet(isPresented: $showingNextendo, onDismiss: { nextendo.cancel() }) {
+            MobileNextendoSetupView(model: nextendo, launcher: m, checkServices: checkNextendoServices)
+        }
         .task {
             while !Task.isCancelled {
                 memory = os_proc_available_memory()
@@ -191,9 +210,28 @@ private struct LauncherView: View {
     }
 
     @ViewBuilder var playButton: some View {
-        let button = Button(action: play) { Text("Play").font(.title3.weight(.semibold)).frame(maxWidth: 220) }
+        let button = Button(action: attemptPlay) { Text("Play").font(.title3.weight(.semibold)).frame(maxWidth: 220) }
             .controlSize(.large).disabled(m.networkValidationError != nil)
         if #available(iOS 26.0, *) { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.borderedProminent) }
+    }
+
+    private func checkNextendoServices() {
+        guard m.apply() else { return }
+        let status = LauncherNextendoStatus(rawValue: nextendoPreflight())
+        m.nextendoStatus = status
+        nextendo.updateRoutes(status.routesStatus)
+    }
+
+    private func attemptPlay() {
+        guard m.apply() else { return }
+        if m.networkMode == .nextendo {
+            checkNextendoServices()
+            guard m.nextendoStatus?.canStart == true, nextendo.mayAttemptGame else {
+                showingNextendo = true
+                return
+            }
+        }
+        play()
     }
 
     private func appIcon() -> UIImage? {
@@ -205,22 +243,19 @@ private struct LauncherView: View {
 }
 
 // Shows the launcher over the root view controller and calls done once the settings are in the environment; false (done is not called) when there is no launcher
-@_cdecl("dm_show_launcher")
+@MainActor @_cdecl("dm_show_launcher")
 public func dmShowLauncher(_ viewController: UnsafeMutableRawPointer, _ done: @convention(c) () -> Void) -> Bool {
+    // Keychain stays authoritative even when the user disables the launcher.
+    installMobileNextendoKeychain()
     if ProcessInfo.processInfo.environment["DM_LAUNCHER"] == "0" { fputs("launcher: off (DM_LAUNCHER=0)\n", stderr); return false }
     guard let url = Bundle.main.resourceURL?.appendingPathComponent("dm/launcher.json"), let data = try? Data(contentsOf: url) else { return false }
     guard let file = try? JSONDecoder().decode(SettingsFile.self, from: data), !file.settings.isEmpty else { fputs("[RED] launcher: dm/launcher.json cannot be read; starting the game\n", stderr); return false }
     let parent = Unmanaged<UIViewController>.fromOpaque(viewController).takeUnretainedValue()
     let model = LauncherModel(file.settings)
+    let nextendo = MobileNextendoModel(browser: MobileNextendoBrowser())
     var host: UIViewController?
-    let view = LauncherView(m: model) {
+    let view = LauncherView(m: model, nextendo: nextendo) {
         guard let h = host else { return }
-        guard model.apply() else { return }
-        if model.networkMode == .nextendo {
-            let status = LauncherNextendoStatus(rawValue: nextendoPreflight())
-            model.nextendoStatus = status
-            guard status.canStart else { return }
-        }
         host = nil
         h.dismiss(animated: false) { done() }
     }

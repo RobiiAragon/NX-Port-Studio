@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title description">
+<title id="title">NX Port Studio</title>
+<desc id="description">Tus juegos de Switch. Apps nativas para Apple. Un proyecto independiente basado en nxnative.</desc>
+<!-- Original banner. Cartridge/export mark adapted from Studio's source-drawn icon. No game artwork. -->
+<rect width="1280" height="360" rx="24" fill="#0c0f13"/>
+<rect x="1" y="1" width="1278" height="358" rx="23" fill="none" stroke="#252a32" stroke-width="2"/>
+<path d="M270 66V294" stroke="#2a3038" stroke-width="2"/>
+<g transform="translate(49 73) scale(.215)">
+<rect width="976" height="976" rx="216" fill="#1b1b1b"/>
+<path d="M240 726V224Q240 192 272 192H528L624 288V726Z" fill="#e5e5e5"/>
+<rect x="292" y="296" width="280" height="164" rx="20" fill="#1b1b1b"/>
+<g fill="#1b1b1b"><rect x="300" y="586" width="28" height="96" rx="9"/><rect x="359" y="586" width="28" height="96" rx="9"/><rect x="418" y="586" width="28" height="96" rx="9"/><rect x="477" y="586" width="28" height="96" rx="9"/><rect x="536" y="586" width="28" height="96" rx="9"/></g>
+<path d="M494 522H796M692 418L796 522L692 626" fill="none" stroke="#1b1b1b" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M494 522H796M692 418L796 522L692 626" fill="none" stroke="#f7b03d" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+<text x="316" y="94" fill="#f7b03d" font-size="14" font-weight="600" letter-spacing="2.3">APPLE PRIMERO / CÓDIGO ABIERTO</text>
+<text x="312" y="174" fill="#f5f6f8" font-size="68" font-weight="700" letter-spacing="-2">NX Port Studio</text>
+<text x="316" y="224" fill="#bdc5d0" font-size="29" font-weight="400">Tus juegos de Switch. Apps nativas para Apple.</text>
+<text x="316" y="287" fill="#818c9c" font-size="17">Proyecto independiente basado en nxnative</text>
+<path d="M316 307H1196" stroke="#2a3038"/>
+<text x="1196" y="287" text-anchor="end" fill="#c3ccd8" font-size="15">Studio macOS · Firma con Xcode</text>
+</g>
+</svg>

@@ -4,9 +4,11 @@ import AppKit
 @main
 struct StudioApp: App {
     @State private var model = StudioModel()
+    @State private var localization = StudioLocalization.shared
     var body: some Scene {
         Window("NX Port Studio", id: "main") {
             StudioView(model: model)
+                .environment(\.locale, localization.locale)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 900, minHeight: 660)
                 .task { await model.initialize() }
@@ -16,6 +18,13 @@ struct StudioApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) { }
+            CommandMenu(t("Language")) {
+                Picker(t("Interface language"), selection: $localization.language) {
+                    ForEach(StudioLanguage.allCases) { language in
+                        Text(verbatim: language.nativeName).tag(language)
+                    }
+                }
+            }
             CommandGroup(after: .help) {
                 Button(t("NX Port Studio documentation")) { model.openURL("https://github.com/RobiiAragon/NX-Port-Studio") }
                 Button(t("nxnative documentation")) { model.openURL("https://github.com/seedds/nxnative") }
@@ -23,10 +32,4 @@ struct StudioApp: App {
             }
         }
     }
-}
-
-func t(_ key: String) -> String {
-    guard let url = Bundle.module.url(forResource: "es", withExtension: "lproj", subdirectory: "Resources"),
-          let bundle = Bundle(url: url) else { return key }
-    return bundle.localizedString(forKey: key, value: key, table: nil)
 }

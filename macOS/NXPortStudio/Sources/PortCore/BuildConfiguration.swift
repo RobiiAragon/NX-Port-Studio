@@ -17,14 +17,17 @@ public struct BuildConfiguration: Sendable {
     public var prepareXcode: Bool
     public var teamID: String?
     public var systemDataURL: URL?
+    public var nextendoClientID: String?
 
     public init(repositoryURL: URL, gameDirectoryURL: URL, keysURL: URL, outputURL: URL,
                 destination: BuildDestination, appName: String = "", language: String = "",
-                showFPS: Bool = false, prepareXcode: Bool = false, teamID: String? = nil, systemDataURL: URL? = nil) {
+                showFPS: Bool = false, prepareXcode: Bool = false, teamID: String? = nil, systemDataURL: URL? = nil,
+                nextendoClientID: String? = nil) {
         self.repositoryURL = repositoryURL; self.gameDirectoryURL = gameDirectoryURL
         self.keysURL = keysURL; self.outputURL = outputURL; self.destination = destination
         self.appName = appName; self.language = language; self.showFPS = showFPS
         self.prepareXcode = prepareXcode; self.teamID = teamID; self.systemDataURL = systemDataURL
+        self.nextendoClientID = nextendoClientID
     }
 }
 
@@ -117,6 +120,15 @@ public enum BuildCommand {
         }
         var env = ToolEnvironment.values
         env["PYTHONUNBUFFERED"] = "1"
+        // The public OAuth client belongs to the port's creator. Account tokens
+        // never enter this configuration, command line or build log.
+        env.removeValue(forKey: "DM_NEXTENDO_CLIENT_ID")
+        if preparesXcode, let clientID = c.nextendoClientID?.trimmingCharacters(in: .whitespacesAndNewlines), !clientID.isEmpty {
+            guard clientID.range(of: "^nxc_[A-Za-z0-9_-]{3,128}$", options: .regularExpression) != nil else {
+                throw PortError.invalidConfiguration("Enter a valid registered Nextendo application client ID.")
+            }
+            env["DM_NEXTENDO_CLIENT_ID"] = clientID
+        }
         return ProcessCommand(executableURL: pythonURL, arguments: args, workingDirectoryURL: c.repositoryURL,
                               environment: env, redactedDescription: "nxnative: \(c.destination.rawValue), structured progress; keys path hidden")
     }

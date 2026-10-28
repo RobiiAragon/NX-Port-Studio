@@ -292,7 +292,7 @@ int dm_net_accept(int guest, void *addr, unsigned *len) {
     if (result >= 0) net_addr_out(addr, len, &a);
     return result;
 }
-int dm_net_name(int guest, void *addr, unsigned *len, int peer) {
+static int net_name_impl(int guest, void *addr, unsigned *len, int peer) {
     if (!net_gate()) return -1;
     if (!addr || !len) return net_error(14);
     net_ref r; if (net_borrow(guest, &r)) return -1;
@@ -307,7 +307,7 @@ int dm_net_shutdown(int guest, int how) {
     net_ref r; if (net_borrow(guest, &r)) return -1;
     int methods[] = {SHUT_RD, SHUT_WR, SHUT_RDWR}; int result = shutdown(r.fd, methods[how]), err = errno; close(r.fd); return net_host_result(result, err);
 }
-int dm_net_fcntl(int guest, int cmd, int flags) {
+static int net_fcntl_impl(int guest, int cmd, int flags) {
     net_ref r; if (net_borrow(guest, &r)) return -1;
     close(r.fd);
     if (cmd == 3) return r.nonblock ? NX_NONBLOCK : 0;
@@ -420,7 +420,7 @@ static int net_option(int level, int option, int *hostlevel, int *hostoption, un
     } else return net_error(92);
     return 0;
 }
-int dm_net_sockopt(int guest, int level, int option, void *value, unsigned *len, int set) {
+static int net_sockopt_impl(int guest, int level, int option, void *value, unsigned *len, int set) {
     if (!net_gate()) return -1;
     if (!value || !len) return net_error(14);
     if (set && level == 0 && option == 12 && !dm_net_multicast_allowed()) return net_error(13);
@@ -704,4 +704,28 @@ int dm_net_ipconfig(uint32_t *address, uint32_t *mask, uint32_t *gateway, uint32
     FILE *f = fopen("/etc/resolv.conf", "r");
     if (f) { char line[512], ip[64]; int n = 3; while (n < 5 && fgets(line, sizeof line, f)) if (sscanf(line, "nameserver %63s", ip) == 1 && inet_pton(AF_INET, ip, &values[n]) == 1) n++; fclose(f); }
     for (int i = 0; i < 5; i++) if (outputs[i]) *outputs[i] = values[i]; return 0;
+}
+
+// Error-only diagnostics for control operations. Record numeric ABI metadata,
+// never option contents, socket addresses or application data.
+static void net_control_trace(const char *operation, int guest, int result, int a, int b) {
+    int saved = errno; const char *flag = getenv("DM_NET_TRACE");
+    if (result < 0 && flag && atoi(flag))
+        fprintf(stderr,"net: %s guest_fd=%d result=%d errno=%d arg0=%d arg1=%d\n", operation, guest, result, t_net_errno, a, b);
+    errno = saved;
+}
+int dm_net_name(int guest, void *addr, unsigned *len, int peer) {
+    int result = net_name_impl(guest, addr, len, peer);
+    net_control_trace(peer ? "getpeername" : "getsockname", guest, result, 0, 0);
+    return result;
+}
+int dm_net_fcntl(int guest, int command, int flags) {
+    int result = net_fcntl_impl(guest, command, flags);
+    net_control_trace("fcntl", guest, result, command, flags);
+    return result;
+}
+int dm_net_sockopt(int guest, int level, int option, void *value, unsigned *len, int set) {
+    int result = net_sockopt_impl(guest, level, option, value, len, set);
+    net_control_trace(set ? "setsockopt" : "getsockopt", guest, result, level, option);
+    return result;
 }
