@@ -35,6 +35,13 @@ mkdir -p "$CONTENTS/MacOS" "$ENGINE"
 cp "$BIN_DIR/NXPortStudio" "$CONTENTS/MacOS/NXPortStudio"
 cp -R "$RESOURCE_BUNDLE" "$CONTENTS/Resources/"
 ln -s ../Resources/NXPortStudio_PortStudio.bundle "$CONTENTS/MacOS/NXPortStudio_PortStudio.bundle"
+# System permission prompts read the main app bundle rather than SwiftPM's
+# resource bundle used by the interface.
+for LANGUAGE in es en fr ja zh-Hans; do
+    mkdir -p "$CONTENTS/Resources/$LANGUAGE.lproj"
+    cp "$PROJECT_DIR/Packaging/$LANGUAGE.lproj/InfoPlist.strings" \
+        "$CONTENTS/Resources/$LANGUAGE.lproj/"
+done
 
 # Keep the translator's checked-in dmsh_xlate_bin and third-party licenses.
 # Generated compilers, game data, test fixtures and the GUI itself are omitted.
@@ -97,7 +104,7 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleShortVersionString</key><string>1.4.0</string>
-    <key>CFBundleVersion</key><string>7</string>
+    <key>CFBundleVersion</key><string>8</string>
     <key>CFBundleDevelopmentRegion</key><string>es</string>
     <key>CFBundleLocalizations</key><array><string>es</string><string>en</string><string>fr</string><string>ja</string><string>zh-Hans</string></array>
     <key>CFBundleIconFile</key><string>AppIcon</string>
