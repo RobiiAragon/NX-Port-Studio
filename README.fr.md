@@ -23,6 +23,7 @@ L'interface démarre en espagnol. Son sélecteur propose aussi l'anglais, le fra
 - Importation de vos ressources de firmware : modèles Mii, polices et certificats.
 - Mappage des contrôles, mouvement et vibrations selon les capacités du système et des manettes.
 - Transport réseau natif, découverte LAN/LDN et intégration expérimentale de Nextendo.
+- Configuration Nextendo depuis l’iPhone/iPad : navigateur du système, Trousseau de l’app et vérification des exigences du jeu et du service.
 
 Le projet étend aussi le moteur : sockets Horizon, attentes HLE, vérification TLS, comptes et prise en charge des Joy-Con. La compatibilité dépend du jeu, de sa version et de l'appareil.
 

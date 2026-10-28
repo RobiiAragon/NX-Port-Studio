@@ -8,6 +8,7 @@ Priorities follow reproducible results. This roadmap describes intended work, no
 - Validate each game/update profile independently and retain exact build/version notes.
 - Finish current iPhone integration and verify launch, rendering, controls, saving and installation on physical devices.
 - Improve actionable diagnostics and recovery while preserving existing user data and exports.
+- Retain the five implemented interface languages and matching documentation captures; verify new screens in every language.
 - Review packaging, dependency notices, signing and notarization before a public binary release.
 
 **Exit evidence:** repeatable build/install flows and documented gameplay for the exact supported configurations.
@@ -15,8 +16,8 @@ Priorities follow reproducible results. This roadmap describes intended work, no
 ## 2. Expand verified local multiplayer
 
 - Retain Mario Kart 8 Deluxe 3.0.5 Mac ↔ Switch LAN as the current completed-race baseline.
-- Test the LDN bridge against a physical Switch running a compatible module, then record each game/build result.
-- Validate automatic iPhone unicast discovery and iPhone-hosted rooms using the optional Studio Mac relay; record discovery restrictions and actual physical results.
+- Resolve the physical LDN join/create connection errors found with a compatible Switch, then record each game/build result.
+- Extend the user-confirmed iPhone ↔ Switch LAN lobby entry in both host roles to completed races. Isolate discovery/receive behavior and profile restrictions, including use of the optional Studio relay.
 - Exercise disconnect/reconnect, multiple participants, room changes and longer sessions.
 - Expand controller motion/vibration coverage according to actual platform/device capabilities.
 
@@ -32,7 +33,7 @@ Own-application OAuth → identity-checked NEX credential acquisition and Keycha
 - Obtain and validate an eligible Mario Kart game build: the available LAN-tested 3.0.5 build does not meet the current signed 4.0.1 service requirement.
 - Establish an actual authorized NEX game session and complete an online match on a supported game/version.
 - Add per-title network status with evidence, failures and reproducible versions.
-- Design a separate supported account flow for mobile devices rather than assuming Mac Keychain access transfers to iOS.
+- Physically validate the implemented mobile account flow: system-browser authorization, identity-checked NEX acquisition, per-app Keychain storage and migration from the earlier private credential cache.
 
 **Exit evidence:** a documented native online match. Server policy acceptance and an OAuth token alone do not meet this milestone.
 
