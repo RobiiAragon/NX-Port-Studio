@@ -248,6 +248,7 @@
 "Nextendo's service catalog returned HTTP %d." = "NextendoのサービスカタログからHTTP %dが返されました。";
 "Based on nxnative" = "nxnativeをベースに開発";
 "NX Port Studio documentation" = "NX Port Studioのドキュメント";
+"Local play history" = "ローカルプレイ履歴";
 "System certificate store" = "システム証明書ストア";
 "Get game credential" = "ゲーム用認証情報を取得";
 "Requesting a game credential…" = "ゲーム用認証情報をリクエスト中…";

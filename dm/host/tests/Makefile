@@ -53,11 +53,14 @@ $(B)/t_net_asan: t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../n
 	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer $(GINC) -o $@ t_net.c ../hle_net.c ../hle_offline.c ../hle_net_backend.c ../hle_bigstack.c ../entry.S
 .PHONY: net net-broadcast net-sanitize
 FRIENDS_HISTORY_SOURCES = t_friends_history.c ../hle_friends_history.c
-FRIENDS_HISTORY_HEADERS = ../friends_history.h ../account_local.h ../hle_friends.c ../hle.h
-$(B)/t_friends_history: $(FRIENDS_HISTORY_SOURCES) $(FRIENDS_HISTORY_HEADERS) $(GAME_H) | $(B)
-	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_FRIENDS_HISTORY_TEST $(GINC) -o $@ $(FRIENDS_HISTORY_SOURCES)
-$(B)/t_friends_history_asan: $(FRIENDS_HISTORY_SOURCES) $(FRIENDS_HISTORY_HEADERS) $(GAME_H) | $(B)
-	clang -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_FRIENDS_HISTORY_TEST -fsanitize=address,undefined -fno-omit-frame-pointer $(GINC) -o $@ $(FRIENDS_HISTORY_SOURCES)
+FRIENDS_HISTORY_HEADERS = ../friends_history.h ../account_local.h ../hle_friends.c ../hle.h ../dm.h memory_profile/game_profile.h
+# Only dm.h's declarations are needed; use the checked-in synthetic header,
+# independently of GAME and the host's generated game-profile cache.
+FRIENDS_HISTORY_FLAGS = -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_FRIENDS_HISTORY_TEST -Imemory_profile
+$(B)/t_friends_history: $(FRIENDS_HISTORY_SOURCES) $(FRIENDS_HISTORY_HEADERS) | $(B)
+	clang $(FRIENDS_HISTORY_FLAGS) -o $@ $(FRIENDS_HISTORY_SOURCES)
+$(B)/t_friends_history_asan: $(FRIENDS_HISTORY_SOURCES) $(FRIENDS_HISTORY_HEADERS) | $(B)
+	clang $(FRIENDS_HISTORY_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(FRIENDS_HISTORY_SOURCES)
 .PHONY: friends-history friends-history-sanitize
 friends-history: $(B)/t_friends_history
 	$(B)/t_friends_history

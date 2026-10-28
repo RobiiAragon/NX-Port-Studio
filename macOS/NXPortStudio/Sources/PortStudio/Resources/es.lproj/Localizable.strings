@@ -251,6 +251,7 @@
 "Nextendo's service catalog returned HTTP %d." = "El catálogo de Nextendo respondió con HTTP %d.";
 "Based on nxnative" = "Basado en nxnative";
 "NX Port Studio documentation" = "Documentación de NX Port Studio";
+"Local play history" = "Historial de juego local";
 "System certificate store" = "Certificados del sistema";
 
 "Get game credential" = "Obtener credencial para juegos";

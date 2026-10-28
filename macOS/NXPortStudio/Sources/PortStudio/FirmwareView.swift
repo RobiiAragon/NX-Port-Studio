@@ -79,6 +79,7 @@ struct FirmwareView: View {
     }
     private func resourceName(_ resource: FirmwareCatalog.Resource) -> String {
         switch resource.titleId {
+        case "010000000000000e": t("Local play history")
         case "0100000000000800": t("System certificate store")
         case "0100000000000802": t("Mii models and textures")
         case "0100000000000809": t("Verified system version")

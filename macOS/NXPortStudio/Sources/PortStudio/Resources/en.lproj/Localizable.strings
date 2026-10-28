@@ -248,6 +248,7 @@
 "Nextendo's service catalog returned HTTP %d." = "Nextendo's service catalog returned HTTP %d.";
 "Based on nxnative" = "Based on nxnative";
 "NX Port Studio documentation" = "NX Port Studio documentation";
+"Local play history" = "Local play history";
 "System certificate store" = "System certificate store";
 "Get game credential" = "Get game credential";
 "Requesting a game credential…" = "Requesting a game credential…";
