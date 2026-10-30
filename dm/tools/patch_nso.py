@@ -67,6 +67,7 @@ else:
 #   OBS = {build ID: [(offset, number, original instruction word, reason)]}: observation gates. Numbers match OBS_* in the host's hle.h; the original instruction must be position
 #     independent (no PC-relative / branch / anything involving x18 or tpidr), asserted offline; when the host has no callback attached the gate block goes in and out once and returns
 #   FRAME_STEP = {build ID: function(ctx)}: the frame step stubs of a main ("Frame step in whole vsyncs" below)
+#   DISPLAY_ASPECT = {build ID: function(ctx)}: opt-in camera/UI stubs, same context and original-byte checks, state +0x38 multiplier / +0x3c output aspect; no frame-step changes
 #   MATCH_CUTS = {module name: [nso_match rule, ...]}: fallback for modules without registered CUTS. Only the profile selected by DM_GAME participates; a derived profile uses
 #     the repository's rules, an external-only provisional profile its own. Missing or ambiguous matches are reported and skipped; known builds retain their exact CUTS.
 PATCH_FILES = [os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sdk_patches.py')] + sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../games/*/patches.py')))
@@ -77,7 +78,7 @@ patch_paths = {}
 for path in PATCH_FILES: patch_paths.setdefault(os.path.realpath(path), path)   # repeated roots and symlinks name the same file, not competing build claims
 PATCH_FILES = list(patch_paths.values())
 def load_patches():
-    tables, where = {'CUTS': {}, 'OBS': {}, 'FRAME_STEP': {}, 'MATCH_CUTS': {}}, {}
+    tables, where = {'CUTS': {}, 'OBS': {}, 'FRAME_STEP': {}, 'DISPLAY_ASPECT': {}, 'MATCH_CUTS': {}}, {}
     for n, path in enumerate(PATCH_FILES):
         spec = importlib.util.spec_from_file_location(f'patches_{n}', path); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
         for kind, table in tables.items():
@@ -996,13 +997,16 @@ for off, oid, ow, why in obs:
 # State page = the page after the key page (zero in the file, read-write in both loaders): +0 float target fps written by the loader (fps_target, DM_FPS_TARGET; 0 = every stub
 # runs the original instructions), +4 30 fps movie/cinematic flag, +8 double lead (TOTK), +0x10 float render scale (TOTK, BotW), +0x18 double game seconds (TOTK),
 # +0x20 u32 step in vsyncs (host; 0 = not decided yet), +0x24 u32 a step the game fixes itself (BotW's VFR override; 0 = none), +0x28 u32 AoC's vsyncs per update, marked by
-# its first stub (0 = off), +0x30 u64 vsyncs stepped (the stubs; logged by the host to check the game's speed). Stub bodies assembled with clang
+# its first stub (0 = off), +0x30 u64 vsyncs stepped (the stubs; logged by the host to check the game's speed), +0x38 float display aspect multiplier and
+# +0x3c float output aspect (DISPLAY_ASPECT stubs; 1 / 0 = unchanged). Display-only stubs never enable the frame step. Stub bodies assembled with clang
 # A build's stubs are FRAME_STEP[build ID](ctx) in its patches.py: ctx.here() / ctx.emit(word) assemble into the patch area, ctx.site(offset, original bytes) asserts a site and that it is
 # no rewrite site, ctx.put(offset, words, reason) writes it (listed with the cuts), ctx.state is the state page's offset, and ctx.render_scale = 1 marks a render-scale stub
 FRAME_STEP = PATCHES['FRAME_STEP']
 FS_STATE_OFF = 0
 RENDER_SCALE = 0   # 1 = the build has a render-scale stub (state +0x10): the fixups table says so (RENDER_SCALE), and the iOS launcher offers the setting (dm/games/settings.tsv)
-if BUILD_ID in FRAME_STEP and NAME == 'main':
+DISPLAY_ASPECT = PATCHES['DISPLAY_ASPECT']
+HAS_DISPLAY_ASPECT = BUILD_ID in DISPLAY_ASPECT and NAME == 'main'
+if (BUILD_ID in FRAME_STEP or HAS_DISPLAY_ASPECT) and NAME == 'main':
     FS_STATE_OFF = KEY_PAGE_OFF + 0x4000
     if FAR:
         # The loader supplies zero-filled BSS/key pages for a front patch area.
@@ -1017,10 +1021,15 @@ if BUILD_ID in FRAME_STEP and NAME == 'main':
     def fs_put(off, words, why):
         old = bytes(IMG[off:off + 4 * len(words)])
         for i, w in enumerate(words): struct.pack_into('<I', IMG, off + 4 * i, w)
-        cuts.append((off, old.hex(), bytes(IMG[off:off + 4 * len(words)]).hex(), why)); stat('frame_step')
+        cuts.append((off, old.hex(), bytes(IMG[off:off + 4 * len(words)]).hex(), why)); stat(FS_STUB_KIND)
 if FS_STATE_OFF:   # the build's stubs (FRAME_STEP of its patches.py)
     fs = types.SimpleNamespace(here=here, emit=emit, site=fs_site, put=fs_put, state=FS_STATE_OFF, render_scale=0)
-    FRAME_STEP[BUILD_ID](fs); RENDER_SCALE = fs.render_scale
+    FS_STUB_KIND = 'frame_step'
+    if BUILD_ID in FRAME_STEP: FRAME_STEP[BUILD_ID](fs)
+    if HAS_DISPLAY_ASPECT:
+        FS_STUB_KIND = 'display_aspect'
+        DISPLAY_ASPECT[BUILD_ID](fs)
+    RENDER_SCALE = fs.render_scale
 
 # ---- Spin waits (every module) ----
 # A guest loop that polls memory until another thread changes it fills only its own core on the Switch, where any higher-priority thread pinned there preempts it, so the
@@ -1328,6 +1337,7 @@ with open(P('fixups.tsv'), 'w') as f:
     if FAR: f.write(f'# IMAGE_SIZE\t{IMAGE_SIZE:#x}\n# FILE_IMAGE_LEN\t{FILE_IMAGE_LEN:#x}\n')   # patch area before the base (negative PATCH_OFF): whole image size, length of the image part of the file
     for k in KEY_INDEX: f.write(f'# KEY_{k}_IDX\t{KEY_INDEX[k]}\n')
     if FS_STATE_OFF: f.write(f'# FPS_STATE_OFF\t{FS_STATE_OFF:#x}\n')   # frame step state page (FRAME_STEP): the loader writes the target fps there
+    if HAS_DISPLAY_ASPECT: f.write('# DISPLAY_ASPECT\t1\n')   # exact-build camera/UI stubs, opt-in and qualified separately from their installation
     if RENDER_SCALE: f.write('# RENDER_SCALE\t1\n')   # a render-scale stub reads state +0x10 (the loader ignores the key; dm/games/settings.py offers the setting by it)
     f.write(f'# BUILD_ID\t{BUILD_ID}\n')   # the host identifies the build by it: features with hard-coded addresses only run on the build they belong to
 with open(P('gates.tsv'), 'w') as f:

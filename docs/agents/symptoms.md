@@ -386,6 +386,7 @@ One line per symptom in the [subsystem references](../reference/): what you see 
 - the NSP script took the game for an OpenGL one (`main imports EGL and names glShaderSource`), the GL shader capture found no shader, and the capture boot stopped with `[nvn-mtl] FATAL cannot read the shader map` from `h_nvnQueueSubmitCommands` called in an NRO (`nro8+0xc10d0`). → [NVN in NROs under an SDL main that names GL](../reference/rendering.md#nvn-in-nros-under-an-sdl-main-that-names-gl)
 - a jump to address 0 right after `glGetFloatv(0xb12)` (`lr=main+0x2d58c4`). → [Which GL functions a game calls](../reference/rendering.md#which-gl-functions-a-game-calls)
 - in a capture run every program links with no uniforms; the game's first `Shader:send` raises a Lua error and, on the Switch, its error handler quits (Any Lua error quits a LÖVE game). → [GL shaders put together at run time and captured](../reference/rendering.md#gl-shaders-put-together-at-run-time-and-captured)
+- changing the output aspect alone deforms the game; a camera-only mod can leave HUD elements stretched or expose unpainted menu backgrounds. → [Exact-build camera aspect candidates require UI qualification](../reference/rendering.md#exact-build-camera-aspect-candidates-require-ui-qualification)
 
 ## Shaders
 

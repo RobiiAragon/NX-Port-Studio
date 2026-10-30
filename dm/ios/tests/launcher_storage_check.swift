@@ -26,6 +26,14 @@ import Foundation
         expect(LauncherModel(file.settings, defaults: d).values["DM_RENDER_SCALE"] == scale.def, "an invalid saved range loads the default")
         expect(m.values["DM_FPS_TARGET"] == "30" && m.values["DM_PSO_MTL4"] == "0" && m.values["DM_FPS_HOLD"] == "on" && m.values["DM_METAL_HUD"] == "1", "stored choices and the env file are read")
         expect(m.changed, "Reset is offered with changed settings")
+        let wide = file.settings.first { $0.env == "DM_DISPLAY_WIDE" }!
+        let highFPS = file.settings.first { $0.env == "DM_FPS_120" }!
+        expect(wide.unavailable != nil && highFPS.unavailable != nil && !wide.accepts("1") && !highFPS.accepts("1"), "camera and timing mods require platform qualification")
+        d.set("1", forKey: "launcher.DM_DISPLAY_WIDE")
+        let unsupported = LauncherModel([wide, highFPS], defaults: d, environment: ["DM_ENV_FILE_KEYS":"DM_DISPLAY_WIDE DM_FPS_120", "DM_DISPLAY_WIDE":"1", "DM_FPS_120":"1"], maximumFramesPerSecond: 120)
+        expect(unsupported.values["DM_DISPLAY_WIDE"] == "0" && unsupported.values["DM_FPS_120"] == "0", "saved values, env files and a 120 Hz screen cannot grant unsupported mods")
+        unsupported.values["DM_FPS_120"] = "1"
+        expect(unsupported.apply() && String(cString: getenv("DM_FPS_120")) == "0" && d.string(forKey: "launcher.DM_DISPLAY_WIDE") == nil, "apply rejects a programmatic unsupported mod and removes stale saved choices")
         m.values["DM_RENDER_SCALE"] = "1.00"   // the slider's format of the default
         m.apply()
         expect(d.string(forKey: "launcher.DM_PRESENT_SNAP") == nil, "a value equal to the default is not stored (and an old one is dropped)")

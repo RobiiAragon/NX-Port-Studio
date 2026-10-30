@@ -52,6 +52,7 @@ struct Setting: Decodable, Identifiable {
     let options: [[String]]?   // choice: [value, label]
     let min, max, step: Double?   // range
     let on, off: String?   // toggle: the values the variable takes (1 / 0 when not given)
+    let unavailable: String?   // capability gate; defaults cannot be bypassed by saved choices or an env file
     var id: String { env }
     var sectionTitle: String { section ?? "Game" }
     var onValue: String { on ?? "1" }
@@ -60,6 +61,7 @@ struct Setting: Decodable, Identifiable {
         kind == "range" ? abs((Double(v) ?? .nan) - (Double(def) ?? .nan)) < 1e-6 : v == def
     }
     func accepts(_ v: String) -> Bool {   // a saved choice the game still offers
+        if unavailable != nil && !isDefault(v) { return false }
         switch kind {
         case "choice": return options?.contains { $0[0] == v } ?? false
         case "range":
@@ -69,13 +71,14 @@ struct Setting: Decodable, Identifiable {
         default: return true
         }
     }
-    enum CodingKeys: String, CodingKey { case env, kind, label, note, def = "default", section, options, min, max, step, on, off }
+    enum CodingKeys: String, CodingKey { case env, kind, label, note, def = "default", section, options, min, max, step, on, off, unavailable }
 }
 struct SettingsFile: Decodable { let settings: [Setting] }
 
 final class LauncherModel: ObservableObject {
     let settings: [Setting]
     let fromFile: Set<String>   // set by an env file: shown, not changed
+    let maximumFramesPerSecond: Int
     @Published var values: [String: String] = [:]
     @Published var networkMode: LauncherNetworkMode = .offline
     @Published var discoveryPeer = ""
@@ -87,9 +90,11 @@ final class LauncherModel: ObservableObject {
     private let defaults: UserDefaults
 
     init(_ settings: [Setting], defaults: UserDefaults = .standard,
-         environment: [String: String] = ProcessInfo.processInfo.environment) {
+         environment: [String: String] = ProcessInfo.processInfo.environment,
+         maximumFramesPerSecond: Int = 0) {
         self.defaults = defaults
         self.settings = settings
+        self.maximumFramesPerSecond = maximumFramesPerSecond
         self.uiLanguage = defaults.string(forKey: "launcher.uiLanguage").flatMap(LauncherUILanguage.init(rawValue:)) ?? .spanish
         // The previous launcher required an address. That forced value was not
         // an explicit choice to override automatic discovery. Migrate once.
@@ -99,6 +104,7 @@ final class LauncherModel: ObservableObject {
         }
         fromFile = Set((environment["DM_ENV_FILE_KEYS"] ?? "").split(separator: " ").map(String.init))
         for s in settings {
+            if s.unavailable != nil { values[s.env] = s.def; continue }
             if fromFile.contains(s.env), let v = environment[s.env] { values[s.env] = v; continue }
             let saved = defaults.string(forKey: "launcher." + s.env)
             values[s.env] = saved.flatMap { s.accepts($0) ? $0 : nil } ?? s.def   // a saved choice the game no longer offers: its default
@@ -126,7 +132,7 @@ final class LauncherModel: ObservableObject {
         nextendoStatus = nil
         for s in settings {
             defaults.removeObject(forKey: "launcher." + s.env)
-            if !fromFile.contains(s.env) { values[s.env] = s.def }
+            if s.unavailable != nil || !fromFile.contains(s.env) { values[s.env] = s.def }
         }
         defaults.removeObject(forKey: "launcher.DM_NETWORK")
         defaults.removeObject(forKey: "launcher.DM_NET_DISCOVERY_PEER")
@@ -141,6 +147,12 @@ final class LauncherModel: ObservableObject {
     @discardableResult func apply() -> Bool {
         guard networkValidationError == nil else { return false }
         for s in settings {
+            if s.unavailable != nil {
+                values[s.env] = s.def
+                defaults.removeObject(forKey: "launcher." + s.env)
+                setenv(s.env, s.def, 1)
+                continue
+            }
             let v = values[s.env] ?? s.def
             if fromFile.contains(s.env) { fputs("launcher: \(s.env) kept at \(v) (env file)\n", stderr); continue }
             if s.isDefault(v) { defaults.removeObject(forKey: "launcher." + s.env) } else { defaults.set(v, forKey: "launcher." + s.env) }

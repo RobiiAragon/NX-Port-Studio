@@ -18,9 +18,13 @@ private struct SettingRow: View {
     let s: Setting
     @ObservedObject var m: LauncherModel
 
-    private var locked: Bool { m.fromFile.contains(s.env) }
+    private var locked: Bool { m.fromFile.contains(s.env) || s.unavailable != nil }
     private var note: String {
-        let base = launcherText(s.note, language: m.uiLanguage)
+        var base = launcherText(s.unavailable ?? s.note, language: m.uiLanguage)
+        if s.env == "DM_FPS_120" && m.maximumFramesPerSecond < 120 {
+            base += " · " + launcherText("The connected display does not report 120 Hz support.", language: m.uiLanguage)
+        }
+        if s.unavailable != nil { return base }
         return locked ? (base.isEmpty ? "" : base + " · ") + launcherText("Set by an env file", language: m.uiLanguage) : base
     }
     private var rangeValue: Binding<Double> {
@@ -251,7 +255,7 @@ public func dmShowLauncher(_ viewController: UnsafeMutableRawPointer, _ done: @c
     guard let url = Bundle.main.resourceURL?.appendingPathComponent("dm/launcher.json"), let data = try? Data(contentsOf: url) else { return false }
     guard let file = try? JSONDecoder().decode(SettingsFile.self, from: data), !file.settings.isEmpty else { fputs("[RED] launcher: dm/launcher.json cannot be read; starting the game\n", stderr); return false }
     let parent = Unmanaged<UIViewController>.fromOpaque(viewController).takeUnretainedValue()
-    let model = LauncherModel(file.settings)
+    let model = LauncherModel(file.settings, maximumFramesPerSecond: parent.view.window?.windowScene?.screen.maximumFramesPerSecond ?? 0)
     let nextendo = MobileNextendoModel(browser: MobileNextendoBrowser())
     var host: UIViewController?
     let view = LauncherView(m: model, nextendo: nextendo) {

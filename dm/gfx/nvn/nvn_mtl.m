@@ -9725,13 +9725,14 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
     return v;
 }
 // The rectangle of the canvas (dw x dh) the picture (cw x ch) is drawn into: the picture's aspect ratio kept and centred, black bars in the rest (no stretching when the screen's ratio
-// differs from the game's, e.g. iPhone about 19.5:9 against the game's 16:9); when the ratios differ by under 1 % (the remainder from a game width that is a multiple of 8 in the
-// full-screen setup, e.g. 1952x900 against 2868x1320 differs by 0.17 %) the whole canvas, leaving no border of a few pixels
+// differs from the game's, e.g. iPhone about 19.5:9 against the game's 16:9). Rounding is to pixels; a near match is not stretched to fill the canvas.
+#include "../../host/display_mode.h"
 static MTLViewport present_viewport(double cw, double ch, double dw, double dh) {
-    double s = fmin(dw / cw, dh / ch);
-    MTLViewport vp = {floor((dw - cw * s) / 2), floor((dh - ch * s) / 2), round(cw * s), round(ch * s), 0, 1};
-    if (fabs((dw / dh) / (cw / ch) - 1) < 0.01) vp = (MTLViewport){0, 0, dw, dh, 0, 1};
-    return vp;
+    // A ratio override is valid only with the exact-build camera and UI stubs.
+    // Otherwise the original image is fitted proportionally, including near matches.
+    double aspect = dm_display_output_aspect();
+    dm_display_rect r = dm_display_fit(aspect > 0 ? aspect * ch : cw, ch, dw, dh);
+    return (MTLViewport){r.x, r.y, r.width, r.height, 0, 1};
 }
 // The valid source rectangle of a present (x, y, width, height; the crop of nvnWindowSetCrop, zero = the whole texture); 0 when it lies outside the texture
 static int present_crop_rect(id<MTLTexture> src, const int crop[4], NSUInteger r[4]) {

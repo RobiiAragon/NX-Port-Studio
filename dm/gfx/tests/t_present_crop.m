@@ -94,7 +94,7 @@ int main(void) { @autoreleasepool {
     {   // DM_PRESENT_UPSCALE: which content MetalFX scales, and to which size (the picture's rectangle on the canvas)
         const struct { unsigned cw,ch,dw,dh,w,h; int upscale; } sizes[] = {
             {1280,720,2868,1320,2347,1320,1},   // handheld, letterboxed on an iPhone
-            {1952,900,2868,1320,2868,1320,1},   // ratios within 1 % fill the canvas
+            {1952,900,2868,1320,2863,1320,1},   // near matches keep their aspect too
             {1280,720,2560,1440,2560,1440,1},   // Retina window
             {1280,720,1280,720,1280,720,0},     // native size
             {1600,900,1280,720,1280,720,0},     // downscale

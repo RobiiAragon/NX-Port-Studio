@@ -126,3 +126,15 @@
 "Certificate resources included" = "Certificate resources included";
 "Certificate resources not included" = "Certificate resources not included";
 "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification." = "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification.";
+
+// Display modes and per-build qualification.
+"Display" = "Display";
+"Use full display resolution" = "Use full display resolution";
+"Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged." = "Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged.";
+"Expand game view" = "Expand game view";
+"Needs a verified camera and HUD mod for this exact game version." = "Needs a verified camera and HUD mod for this exact game version.";
+"120 FPS" = "120 FPS";
+"Needs a verified game-timing mod and a display capable of at least 120 Hz." = "Needs a verified game-timing mod and a display capable of at least 120 Hz.";
+"No camera and HUD mod has been verified for this game build on iPhone." = "No camera and HUD mod has been verified for this game build on iPhone.";
+"No 120 FPS game-timing mod has been verified for this game build." = "No 120 FPS game-timing mod has been verified for this game build.";
+"The connected display does not report 120 Hz support." = "The connected display does not report 120 Hz support.";

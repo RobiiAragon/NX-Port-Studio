@@ -779,3 +779,9 @@ Digimon Story Cyber Sleuth: Complete Edition (Media.Vision's MVGL engine, SDK 6.
 ### GL movies decoded by the SDK's movie library
 
 - **Found on:** [Digimon Story Cyber Sleuth: Complete Edition](../../dm/games/010014E00DB56000/README.md): the USM movies' H.264 is decoded through the SDK's movie library (the host's decoder) into NV12 buffers (3,110,400 bytes a 1920x1080 frame); the game uploads the planes into a `GL_RED` and a `GL_RG` texture (two `glTexSubImage2D` a frame) and converts YUV in its own shader (in `main`, `SamplerY` / `SamplerUV`).
+### Exact-build camera aspect candidates require UI qualification
+
+- **Symptom:** changing the output aspect alone deforms the game; a camera-only mod can leave HUD elements stretched or expose unpainted menu backgrounds.
+- **Cause:** drawable resolution, the game's perspective ratio, UI matrices and output aspect are separate. A 16:9 game's menu artwork can remain 16:9 after its 3D projection is widened.
+- **Fix / open qualification:** `DISPLAY_ASPECT` rewrite functions use the existing original-byte checks and a dedicated pair of fields at state `+0x38` / `+0x3c`. The runtime requires the exact main build, installed rewrite marker and matching state page before applying an opt-in multiplier; it leaves the frame-step fields untouched. Presentation uses the compensated output aspect and fits it with borders. Normal UI availability is separate from successful rewriting and remains off until camera, HUD, menu backgrounds and split-screen pass visual checks on the target platform. Unsupported builds keep the original picture. The aspect-fit helper also preserves near matches rather than stretching ratios that differ by under 1%.
+- **Found on:** [Mario Kart 8 Deluxe display candidate](../../dm/games/0100152000022000/README.md#display-mod-candidate). Native synthetic tests prove stub arithmetic and build gates; they do not qualify gameplay.

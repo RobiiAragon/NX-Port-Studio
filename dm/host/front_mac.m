@@ -299,8 +299,9 @@ __attribute__((constructor)) static void hud_env(void) { front_hud_env(); }
 // Endpoint policy is initialized after per-game preferences select the mode.
 #include "nextendo_routes.h"
 #include "net_socket.h"
+#include "display_mac.inc"
 void front_run(void (*guest)(void)) {
-    @autoreleasepool { network_load(network_preferences()); }
+    @autoreleasepool { network_load(network_preferences()); display_load(display_preferences()); }
     // A capability can be restricted for diagnostics, never granted by an env var.
     if (getenv("DM_NET_DISABLE_MULTICAST") && !strcmp(getenv("DM_NET_DISABLE_MULTICAST"), "1"))
         dm_net_set_multicast_allowed(0);
@@ -315,6 +316,9 @@ void front_run(void (*guest)(void)) {
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         NSRect r = NSMakeRect(0, 0, 1280, 720);
+        const char *size = getenv("DM_WINDOW_SIZE"); int width, height; char extra;
+        if (size && sscanf(size, "%dx%d%c", &width, &height, &extra) == 2 && width >= 320 && height >= 240 && width <= 8192 && height <= 8192)
+            r.size = NSMakeSize(width, height);
         NSWindow *win = [[NSWindow alloc] initWithContentRect:r
                                                     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
                                                       backing:NSBackingStoreBuffered defer:NO];
@@ -334,17 +338,23 @@ void front_run(void (*guest)(void)) {
         [win makeKeyAndOrderFront:nil];
         g_screen_fps = (int)(win.screen ?: NSScreen.mainScreen).maximumFramesPerSecond;
         g_win = win;
+        // The initial screen aspect remains fixed for this session: UI matrices
+        // are initialized at boot. Resizing still fits this aspect with borders.
+        NSScreen *displayScreen = win.screen ?: NSScreen.mainScreen;
+        NSSize launchSize = display_explicit_on("DM_FULLSCREEN") ? displayScreen.frame.size : win.contentView.bounds.size;
+        dm_display_configure(launchSize.width, launchSize.height);
         [NSApp activateIgnoringOtherApps:YES];
         // Main menu: AppKit runs ⌘ shortcuts only through menu items, so ⌘Q quits and ⌃⌘F toggles fullscreen from here (AppKit shows the item as Globe-F and keeps ⌃⌘F as a hidden twin)
         NSMenu *bar = [NSMenu new], *app = [NSMenu new], *wm = [[NSMenu alloc] initWithTitle:@"Window"];
         [[bar addItemWithTitle:@"" action:nil keyEquivalent:@""] setSubmenu:app];
         controls_add_menu(app);
         network_add_menu(app);
+        display_add_menu(app);
         [app addItemWithTitle:@"Quit " DM_GAME_NAME action:@selector(terminate:) keyEquivalent:@"q"];
         [[bar addItemWithTitle:@"Window" action:nil keyEquivalent:@""] setSubmenu:wm];
         [wm addItemWithTitle:@"Enter Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"].keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;
         NSApp.mainMenu = bar;
-        if (getenv("DM_FULLSCREEN")) dispatch_async(dispatch_get_main_queue(), ^{ [win toggleFullScreen:nil]; });   // start in fullscreen
+        if (display_explicit_on("DM_FULLSCREEN")) dispatch_async(dispatch_get_main_queue(), ^{ [win toggleFullScreen:nil]; });
         for (NSNotificationName nm in @[GCControllerDidConnectNotification, GCControllerDidDisconnectNotification])
             [NSNotificationCenter.defaultCenter addObserverForName:nm object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n) {
                 GCController *c = n.object; int conn = n.name == GCControllerDidConnectNotification;

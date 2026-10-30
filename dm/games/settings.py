@@ -9,7 +9,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent / 'tools'))
 import game, nacp
 
-SECTIONS = ('Game', 'Controls', 'Performance')   # headings on the single settings screen
+SECTIONS = ('Game', 'Display', 'Controls', 'Performance')   # headings on the single settings screen
 
 
 def rows():
@@ -56,6 +56,10 @@ def build(gid, patched, control):
     for n, (var, kind, values, default, cond, section, label, note) in rows():
         if not shown(cond, n): continue
         s = {'env': var, 'kind': kind, 'section': section, 'label': label, 'note': note, 'default': value(default, n)}
+        # These are capability states, not an instruction to stretch the image
+        # or raise a cap. The MK8 3.0.5 camera candidate is not iPhone-qualified.
+        if var == 'DM_DISPLAY_WIDE': s['unavailable'] = 'No camera and HUD mod has been verified for this game build on iPhone.'
+        if var == 'DM_FPS_120': s['unavailable'] = 'No 120 FPS game-timing mod has been verified for this game build.'
         if kind == 'choice':
             opts = [list(l) for l in langs] if values == 'languages' else [v.split('=', 1) for v in values.split(',')]
             if any(len(o) != 2 for o in opts): sys.exit(f'settings.tsv:{n}: choice values are value=label,...')

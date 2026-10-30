@@ -21,6 +21,14 @@ def build(gid, api):
 
 
 class LauncherSettingsTests(unittest.TestCase):
+    def test_display_controls_do_not_claim_unqualified_mods(self):
+        for gid in (BOTW, WONDER, '0100152000022000'):
+            rows = build(gid, 'nvn')
+            self.assertEqual(rows['DM_DISPLAY_FULL']['default'], '0')
+            for env in ('DM_DISPLAY_WIDE', 'DM_FPS_120'):
+                self.assertEqual(rows[env]['default'], '0')
+                self.assertIn('verified', rows[env]['unavailable'])
+
     def test_upscaling_is_opt_in_for_every_graphics_api(self):
         for api, gid in [('nvn', BOTW), ('vulkan', '0100535012974000'), ('gl', '010014E00DB56000')]:
             with self.subTest(api=api):
@@ -44,7 +52,7 @@ class LauncherSettingsTests(unittest.TestCase):
         self.assertEqual(botw['DM_PSO_MTL4']['default'], '1')   # pso_mtl4 on
         self.assertEqual((wonder['DM_PRESENT_SNAP']['default'], wonder['DM_PSO_MTL4']['default']), ('0', '0'))
         self.assertEqual((botw['DM_PSO_PREBUILD']['default'], botw['DM_NVN_ENC_THREAD']['default'], botw['DM_METAL_HUD']['default']), ('1', '1', '0'))   # the host's iOS defaults
-        self.assertEqual(list(dict.fromkeys(s['section'] for s in botw.values())), ['Game', 'Controls', 'Performance'])
+        self.assertEqual(list(dict.fromkeys(s['section'] for s in botw.values())), ['Game', 'Display', 'Controls', 'Performance'])
         self.assertNotIn('DM_FPS_HOLD', wonder)   # no frame step, as the Frame rate row
         self.assertIn('first start', botw['DM_PSO_PREBUILD']['note'])   # it runs once in the prepare step, before the first frame
 
