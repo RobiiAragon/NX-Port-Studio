@@ -147,9 +147,13 @@ final class StudioModel {
                 }
                 repositoryPath = target.path
             } else {
+                #if DEBUG
                 let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
                 guard fm.isReadableFile(atPath: source.appendingPathComponent("scripts/build_ipa_from_nsp.py").path) else { throw PortError.invalidConfiguration(t("Select the nxnative source folder in Environment.")) }
                 repositoryPath = source.path
+                #else
+                throw PortError.invalidConfiguration(t("Select the nxnative source folder in Environment."))
+                #endif
             }
             status = "Ready to configure"
         } catch { failure = error.localizedDescription; status = "Engine unavailable" }

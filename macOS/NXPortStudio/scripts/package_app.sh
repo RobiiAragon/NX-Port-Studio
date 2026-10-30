@@ -12,7 +12,7 @@ case "$OUTPUT" in
 esac
 mkdir -p "$(dirname "$OUTPUT")"
 OUTPUT="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"
-if [ -e "$OUTPUT" ]; then
+if [ -e "$OUTPUT" ] || [ -L "$OUTPUT" ]; then
     printf 'Output already exists: %s\nChoose another path or move the previous app first.\n' "$OUTPUT" >&2
     exit 1
 fi
@@ -33,6 +33,9 @@ CONTENTS="$APP/Contents"
 ENGINE="$CONTENTS/Resources/nxnative"
 mkdir -p "$CONTENTS/MacOS" "$ENGINE"
 cp "$BIN_DIR/NXPortStudio" "$CONTENTS/MacOS/NXPortStudio"
+# Remove linker debug records containing local object-file paths before signing.
+# Runtime symbols and the source fallback in DEBUG builds remain available.
+/usr/bin/strip -S "$CONTENTS/MacOS/NXPortStudio"
 cp -R "$RESOURCE_BUNDLE" "$CONTENTS/Resources/"
 ln -s ../Resources/NXPortStudio_PortStudio.bundle "$CONTENTS/MacOS/NXPortStudio_PortStudio.bundle"
 # System permission prompts read the main app bundle rather than SwiftPM's
@@ -47,7 +50,7 @@ done
 # Generated compilers, game data, test fixtures and the GUI itself are omitted.
 for SOURCE in dm scripts docs; do
     /usr/bin/rsync -a \
-        --exclude='.git/' --exclude='.build/' --exclude='.swiftpm/' \
+        --exclude='.git/' --exclude='.build/' --exclude='build/' --exclude='.swiftpm/' \
         --exclude='__pycache__/' --exclude='*.pyc' --exclude='.DS_Store' \
         --exclude='tests/' --exclude='test/' --exclude='obj/' --exclude='bin/' \
         --exclude='*.dSYM/' --exclude='*.partial' --exclude='*_build/' \

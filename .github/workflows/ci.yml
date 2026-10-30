@@ -28,6 +28,10 @@ jobs:
         run: swift test --package-path macOS/NXPortStudio
       - name: Studio build
         run: swift build --package-path macOS/NXPortStudio
+      - name: Package release and verify its contents
+        run: |
+          bash macOS/NXPortStudio/scripts/package_app.sh "${{ runner.temp }}/NX Port Studio.app"
+          python3 tools/maintainers/check_studio_package.py "${{ runner.temp }}/NX Port Studio.app"
   tools:
     name: Asset-free Python checks
     runs-on: macos-latest
