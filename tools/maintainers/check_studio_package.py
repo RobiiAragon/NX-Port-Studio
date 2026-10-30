@@ -21,6 +21,10 @@ def verify(bundle):
     engine = root / 'Contents/Resources/nxnative'
     if not (engine / 'ENGINE_REVISION').is_file():
         raise ValueError('The embedded engine has no revision stamp')
+    translations = root / 'Contents/Resources/NXPortStudio_PortStudio.bundle/Resources'
+    for language in ('es', 'en', 'fr', 'ja', 'zh-Hans'):
+        if not (translations / f'{language}.lproj/Localizable.strings').is_file():
+            raise ValueError('A release translation is missing')
     for path in root.rglob('*'):
         if path.is_symlink():
             if not path.resolve(strict=True).is_relative_to(root):

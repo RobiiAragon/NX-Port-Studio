@@ -20,6 +20,16 @@ enum StudioLanguage: String, CaseIterable, Identifiable, Sendable {
 final class StudioLocalization {
     static let shared = StudioLocalization()
     static let preferenceKey = "appInterfaceLanguage"
+    private static let resources: Bundle? = {
+        #if DEBUG
+        return Bundle.module
+        #else
+        // SwiftPM's development fallback embeds an absolute checkout path.
+        // A release app resolves the copied resource bundle beside itself.
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("NXPortStudio_PortStudio.bundle") else { return nil }
+        return Bundle(url: url)
+        #endif
+    }()
     @ObservationIgnored private let defaults: UserDefaults
 
     var language: StudioLanguage {
@@ -36,7 +46,7 @@ final class StudioLocalization {
     func string(_ key: String) -> String {
         // Reading the observable preference here invalidates the views that
         // resolve text. Switching language keeps their models and tasks alive.
-        guard let url = Bundle.module.url(forResource: language.rawValue, withExtension: "lproj", subdirectory: "Resources"),
+        guard let url = Self.resources?.url(forResource: language.rawValue, withExtension: "lproj", subdirectory: "Resources"),
               let bundle = Bundle(url: url) else { return key }
         return bundle.localizedString(forKey: key, value: key, table: nil)
     }
