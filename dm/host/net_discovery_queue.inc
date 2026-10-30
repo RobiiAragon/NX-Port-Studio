@@ -13,6 +13,11 @@ static net_discovery_job *g_discovery_jobs[NET_DISCOVERY_JOBS];
 static int g_discovery_started;
 #ifdef DM_NET_TEST
 static _Atomic(dm_net_test_discovery_sender) g_discovery_sender;
+static int g_discovery_paused;
+void dm_net_test_pause_discovery_worker(int paused) {
+    pthread_mutex_lock(&g_discovery_lock); g_discovery_paused = paused;
+    pthread_cond_signal(&g_discovery_changed); pthread_mutex_unlock(&g_discovery_lock);
+}
 void dm_net_test_set_discovery_sender(dm_net_test_discovery_sender sender) { atomic_store(&g_discovery_sender,sender); }
 #endif
 static long net_discovery_packet(int fd,const void *bytes,size_t size,int flags,const struct sockaddr_in *destination) {
@@ -41,6 +46,9 @@ static void *net_discovery_worker(void *unused) {
     (void)unused; unsigned cursor = 0; uint64_t next = 0;
     pthread_mutex_lock(&g_discovery_lock);
     for (;;) {
+#ifdef DM_NET_TEST
+        if (g_discovery_paused) { pthread_cond_wait(&g_discovery_changed, &g_discovery_lock); continue; }
+#endif
         unsigned i, n;
         for (n = 0; n < NET_DISCOVERY_JOBS; ++n) {
             i = (cursor + n) % NET_DISCOVERY_JOBS;
@@ -84,6 +92,12 @@ static long net_discovery_enqueue(const net_ref *socket, dm_net_discovery_plan p
     for (unsigned i = 0; i < NET_DISCOVERY_JOBS; ++i) {
         net_discovery_job *old = g_discovery_jobs[i];
         if (!old) { free_slot = i; continue; }
+        // The initial send (or a full final batch) can exhaust a sweep before
+        // the worker removes it. Completed work must not coalesce a new query.
+        dm_net_discovery_plan remaining = old->plan; uint32_t address;
+        if (!dm_net_discovery_next(&remaining, &address)) {
+            net_discovery_drop(i); free_slot = i; continue;
+        }
         if (old->socket.guest != socket->guest || old->socket.generation != socket->generation) continue;
         ++same;
         if (old->size == size && old->flags == flags && old->destination.sin_port == destination.sin_port &&
