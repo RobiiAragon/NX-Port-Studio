@@ -39,6 +39,7 @@ int dm_net_multicast_allowed(void);
 typedef struct { uint32_t address, mask; unsigned index, flags; int local_link; } dm_net_test_interface;
 void dm_net_test_set_interface(const dm_net_test_interface *interface);
 unsigned dm_net_test_discovery_pending(void);
+void dm_net_test_pause_discovery_worker(int paused);
 typedef long (*dm_net_test_discovery_sender)(int fd,const void *bytes,size_t size,int flags,
                                              uint32_t address,uint16_t port);
 void dm_net_test_set_discovery_sender(dm_net_test_discovery_sender sender);
