@@ -9,6 +9,7 @@
 #include "hle.h"
 #include "dm.h"
 #include "haptics_apple.h"
+#include "display_mode.h"
 
 UIView *dm_gamepad_view(CGRect frame);
 void dm_gamepad_reset(void);
@@ -29,7 +30,7 @@ static UILabel *front_ios_fps_label(void);
     if ((self = [super initWithFrame:f])) {
         CAMetalLayer *l = (CAMetalLayer *)self.layer;
         l.device = MTLCreateSystemDefaultDevice(); l.pixelFormat = MTLPixelFormatBGRA8Unorm;
-        l.contentsScale = UIScreen.mainScreen.nativeScale; l.framebufferOnly = NO; l.opaque = YES;
+        l.contentsScale = self.traitCollection.displayScale; l.framebufferOnly = NO; l.opaque = YES;
         self.backgroundColor = UIColor.blackColor;
     }
     return self;
@@ -37,6 +38,7 @@ static UILabel *front_ios_fps_label(void);
 - (void)layoutSubviews {
     [super layoutSubviews];
     CAMetalLayer *l = (CAMetalLayer *)self.layer;
+    l.contentsScale = self.window.windowScene.screen.nativeScale ?: self.traitCollection.displayScale;
     l.drawableSize = CGSizeMake(self.bounds.size.width * l.contentsScale, self.bounds.size.height * l.contentsScale);
 }
 @end
@@ -85,9 +87,12 @@ static void launcher_done(void) { [g_root startGame]; }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGRect b = self.view.bounds; if (!self.game) return;
-    CGFloat w = b.size.width, h = b.size.height;   // Fit 16:9 into the whole screen
-    if (w / h > 16.0 / 9.0) w = h * 16.0 / 9.0; else h = w * 9.0 / 16.0;
-    self.game.frame = CGRectMake(floor((b.size.width - w) / 2), floor((b.size.height - h) / 2), w, h);
+    BOOL full = getenv("DM_DISPLAY_FULL") && !strcmp(getenv("DM_DISPLAY_FULL"), "1");
+    BOOL wide = getenv("DM_DISPLAY_WIDE") && !strcmp(getenv("DM_DISPLAY_WIDE"), "1");
+    // A full drawable does not change the camera; presentation still aspect-fits.
+    dm_display_rect fit = dm_display_fit(16, 9, b.size.width, b.size.height);
+    self.game.frame = full || wide ? b : CGRectMake(fit.x, fit.y, fit.width, fit.height);
+    dm_display_configure(b.size.width, b.size.height);
     if (self.fps) {   // the top row's free stretch: right of DmGamepad.m's L3 key (102 + 17 of its units from the safe edge), level with − / + (22 units down); u is its unit
         CGRect s = UIEdgeInsetsInsetRect(b, self.view.safeAreaInsets); CGFloat u = MIN(b.size.height / 430.0, 1.3);
         self.fps.frame = CGRectMake(floor(CGRectGetMinX(s) + 130 * u), floor(CGRectGetMinY(s) + 22 * u - 11), 64, 22);

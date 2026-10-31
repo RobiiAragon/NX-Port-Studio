@@ -1,9 +1,10 @@
 # Settings
 
-The screen before the game starts shows the settings the game supports. Tap **Play** to start; the app remembers your choices for the next start. All settings are on one scrollable screen, under **Game**, **Controls** and **Performance**. Tap a menu or move a slider there; no settings page needs opening. **Upscaling** is in **Game**, beside **Console mode**.
+The screen before the game starts shows the settings the game supports. Tap **Play** to start; the app remembers your choices for the next start. All settings are on one scrollable screen, under **Game**, **Display**, **Controls** and **Performance**. Tap a menu or move a slider there; no settings page needs opening. **Upscaling** is in **Game**, beside **Console mode**.
 
 - [Tested defaults](#tested-defaults)
 - [Game](#game): [Frame rate](#frame-rate), [Render scale](#render-scale), [Console mode](#console-mode), [Upscaling](#upscaling), [Game language](#game-language), [Frame-rate counter](#frame-rate-counter)
+- [Display](#display): full display resolution, camera aspect mods and 120 FPS availability
 - [Controls](#controls): [Touch feedback](#touch-feedback), [Game rumble](#game-rumble), [Rumble strength](#rumble-strength)
 - [Performance](#performance): [Frame buffering](#frame-buffering), [Metal 4 pipelines](#metal-4-pipelines), [Pipeline prebuild](#pipeline-prebuild), [Encode thread](#encode-thread), [Hold frames when late](#hold-frames-when-late), [Performance HUD](#performance-hud), [Reset to tested defaults](#reset-to-tested-defaults)
 - [Settings in a file](#settings-in-a-file)
@@ -54,6 +55,14 @@ The game's own languages. The app was packed with one of them; pick another here
 ### Frame-rate counter
 
 Shows the frames per second at the top left.
+
+## Display
+
+**Use full display resolution** on iPhone lets the Metal drawable cover the whole display at its pixel density. Presentation preserves the game's picture proportions and adds borders where needed. It does not increase internal rendering resolution, widen the camera, crop the picture or remove borders from an unmodified 16:9 game. The switch is off by default to retain the existing centered 16:9 drawable. On Mac the drawable already follows the window at its backing pixel density; **Display…** in the game's app menu adds a per-game, per-build **Start full screen** preference. Saved changes apply on the next launch; Control-Command-F still changes fullscreen during play.
+
+**Expand game view** is a camera/projection and HUD modification for an exact executable build. It stays disabled until that build has been visually qualified on the target platform. A candidate for Mario Kart 8 Deluxe 3.0.5 is under isolated Mac testing; it does not establish support for other versions or for iPhone. See the game's [display mod status](../dm/games/0100152000022000/README.md#display-mod-candidate).
+
+**120 FPS** stays disabled: this fork has no qualified 120 FPS game-timing mod. A 120 Hz screen, a higher present rate, or a changed frame cap does not establish 120 distinct game frames at normal simulation and audio speed. The launcher explains the missing game mod and, where applicable, the display refresh limitation. Saved preferences and env files cannot enable these unavailable launcher capabilities.
 
 ## Controls
 

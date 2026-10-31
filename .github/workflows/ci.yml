@@ -50,10 +50,13 @@ jobs:
           dm.tools.tests.test_nso_syms
           dm.tools.tests.test_system_data
           dm.tools.tests.test_launcher_settings
+          dm.tools.tests.test_display_mods
           dm.ios.tests.test_launcher_storage
           dm.ios.tests.test_mobile_nextendo
           dm.ios.tests.test_nextendo_resources
           tools.maintainers.test_prepare_export
+      - name: Display geometry and build policy / synthetic modules
+        run: make -C dm/host/tests display display-sanitize
   networking:
     name: Local network fixtures / macOS
     runs-on: macos-latest

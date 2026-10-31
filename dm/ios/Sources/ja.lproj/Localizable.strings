@@ -126,3 +126,15 @@
 "Certificate resources included" = "証明書リソースを同梱済み";
 "Certificate resources not included" = "証明書リソースは未同梱";
 "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification." = "証明書リソースはアプリの配布元が組み込みます。同梱されていても、AppleのTLS検証を回避することはありません。";
+
+// Display modes and per-build qualification.
+"Display" = "画面";
+"Use full display resolution" = "ディスプレイ全体の解像度を使う";
+"Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged." = "画像の比率と余白を維持します。内部描画解像度は変わりません。";
+"Expand game view" = "ゲームの視野を広げる";
+"Needs a verified camera and HUD mod for this exact game version." = "このバージョンで検証済みのカメラ・HUD用MODが必要です。";
+"120 FPS" = "120 FPS";
+"Needs a verified game-timing mod and a display capable of at least 120 Hz." = "検証済みのゲーム時間制御MODと120Hz以上の画面が必要です。";
+"No camera and HUD mod has been verified for this game build on iPhone." = "このビルドのカメラ・HUD用MODはiPhoneでは未検証です。";
+"No 120 FPS game-timing mod has been verified for this game build." = "このビルドの120 FPS用時間制御MODは未検証です。";
+"The connected display does not report 120 Hz support." = "接続された画面は120Hz対応を報告していません。";
