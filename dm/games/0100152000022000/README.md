@@ -114,3 +114,11 @@ The final two-player check used independent private controller inputs to select 
 **Remaining coverage:** physical multi-monitor/backing-scale movement, a completed race, results/replays and broader track coverage remain untested. No real iPhone gameplay validation has been performed; its expansion control stays disabled. `DM_DISPLAY_WIDE=1` permits isolated developer testing only when the exact build, ABI 4 stubs and state page match.
 
 **120 FPS remains open.** No normal-speed 120 FPS timing mod has been identified or enabled for this build. The referenced public mod archive's frame-rate patch is labelled 60 FPS split-screen; it is not a 120 FPS simulation fix. Display refresh and a raised present cap do not establish twice as many correctly timed game frames. No FPS patch was applied during this QA.
+
+The audited 3.0.5 race-state update advances integer counters per calculation,
+rather than from elapsed wall time; timed state transitions consume those
+counters. No 120 FPS mode has been validated to preserve simulation, race-clock
+and animation speed, and no separation between simulation and rendering has
+been established. The next timing experiment must first measure calculation
+calls, the race clock and movement at the verified 60 FPS rate before changing
+the scheduling of either loop.
