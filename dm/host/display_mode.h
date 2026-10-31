@@ -14,6 +14,7 @@ static inline dm_display_rect dm_display_fit(double cw, double ch, double dw, do
 
 int dm_display_aspect_candidate(void);  // installed camera/UI stubs, matching main build and state page
 int dm_display_aspect_qualified(void);  // visual qualification on this platform, separate from byte verification
-void dm_display_configure(double width, double height);  // launch screen; aspect stays fixed for this session's UI matrices
+void dm_display_configure(double width, double height);  // latest effective drawable; adopted at the next game-frame boundary
+void dm_display_set_wide(int enabled);  // live request, adopted at a game-frame boundary
 void dm_display_apply(void);            // after loader initialization (iOS can supply the screen before it completes)
-double dm_display_output_aspect(void);  // zero = preserve the game's original output aspect
+double dm_display_output_aspect(void);  // game enqueue only: take this frame's camera/UI latch, publish the next request; zero = native

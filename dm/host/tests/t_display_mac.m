@@ -7,6 +7,7 @@
 static char build[33] = "test-build-a";
 static const char *dm_main_build(void) { return build; }
 int dm_display_aspect_qualified(void) { return 0; }
+void dm_display_set_wide(int enabled) { (void)enabled; }
 static NSWindow *g_win;
 static CAMetalLayer *g_layer;
 #include "../display_mac.inc"

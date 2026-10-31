@@ -1,4 +1,5 @@
 // Present crop regression: colored 8×8 texture, closed-form RGBA expectations; real Metal rendering, no dependence on the game or on cross-run determinism.
+static double g_test_aspect;
 // nvn_mtl.m's nvn_game_fps is a weak default and hle_nvn.c gives the strong definition; in one translation unit that is a redefinition, so the weak one is renamed (this test does not look at the frame-rate target)
 #define nvn_game_fps nvn_game_fps_mtl_default
 #include "../nvn/nvn_mtl.m"
@@ -6,6 +7,7 @@
 #define g_ft g_ft_hle   // both files have a static g_ft (nvn_mtl.m's fragment argument table, hle_nvn.c's textures a flush can mark CPU-written), so hle_nvn.c's is renamed too
 #include "../nvn/hle_nvn.c"
 #undef g_ft
+double dm_display_output_aspect(void) { return g_test_aspect; }
 uint64_t g_t0_ns;   // process start time from host main.c (used by hle_nvn's per-frame @t_s); unit test stub
 void *front_metal_layer(void) { return NULL; }
 module_t *module_of(const void *p) { (void)p; return NULL; }
@@ -106,6 +108,12 @@ int main(void) { @autoreleasepool {
             EXPECT("picture width",sizes[i].w,(int)vp.width);EXPECT("picture height",sizes[i].h,(int)vp.height);
         }
         EXPECT("empty content is not upscaled",0,fx_wanted((MTLViewport){0,0,2868,1320,0,1},0,720));
+        g_picture_aspect = 13.0 / 6.0;
+        MTLViewport wide = present_viewport(1920,1080,1040,480);
+        EXPECT("scene-gated race uses its compensated output width",1040,(int)wide.width);
+        g_picture_aspect = 0;
+        MTLViewport menu = present_viewport(1920,1080,1040,480);
+        EXPECT("native menu fallback has proportional borders",853,(int)menu.width);
     }
     if([MTLFXSpatialScalerDescriptor supportsMetal4FX:g_dev]) {   // the present pass through MetalFX into an offscreen canvas (present_offscreen_m4, as DM_NVN_SHOT_OUT uses it)
         g_fx_mode=1;
@@ -186,13 +194,17 @@ int main(void) { @autoreleasepool {
     NVNT_nvnQueuePresentTexture present=(NVNT_nvnQueuePresentTexture)get(NULL,"nvnQueuePresentTexture");
     tex_t tex={.magic=MAGIC('T', 'E', 'X', 0), .serial =10001};tex.d.width=tex.d.height=8;tex.d.depth=tex.d.levels=1;tex.d.format=NVN_FORMAT_RGBA8;tex.d.target=NVN_TEXTURE_TARGET_2D;serial_put(tex.serial,src);
     win_t win={.ntex=1};win.tex[0]=(NVNtexture *)&tex;set((NVNwindow *)&win,4,4,4,4);
+    g_test_aspect=13.0/6.0;
     mtl_present_test_stall(100000000);present(NULL,(NVNwindow *)&win,0);uint64_t tk=win.ticket[0];set((NVNwindow *)&win,0,0,8,8);
+    g_test_aspect=0; // the scene changed before the render worker processes the queued frame
 #ifdef CROP_LEGACY_HEADER
     EXPECT("old queue struct has no room for a four-value copy (struct check)",1,sizeof(pq_item)>=sizeof(tex_t)+sizeof(double)+sizeof(uint64_t)+sizeof br);
 #else
     pthread_mutex_lock(&g_pq_mu);if(!tk)tk=g_pq_in;   // a present snapshot (DM_PRESENT_SNAP; with the encode thread too) hands back no ticket: the frame is the last one queued
-    int saved=memcmp(g_pq[(tk-1)%PQ].crop,br,sizeof br)==0;pthread_mutex_unlock(&g_pq_mu);
+    int saved=memcmp(g_pq[(tk-1)%PQ].crop,br,sizeof br)==0;
+    int aspectSaved=fabs(g_pq[(tk-1)%PQ].aspect-13.0/6.0)<1e-6;pthread_mutex_unlock(&g_pq_mu);
     EXPECT("real QueuePresent: the frame's crop copy does not change with the window",1,saved);
+    EXPECT("real QueuePresent: later scene changes do not alter the frame's output aspect",1,aspectSaved);
 #endif
     mtl_present_wait(tk);mtl_present_test_stall(0);
     printf("== %d checks, %d failed ==\n",cases,failed);return failed!=0;

@@ -998,7 +998,7 @@ for off, oid, ow, why in obs:
 # runs the original instructions), +4 30 fps movie/cinematic flag, +8 double lead (TOTK), +0x10 float render scale (TOTK, BotW), +0x18 double game seconds (TOTK),
 # +0x20 u32 step in vsyncs (host; 0 = not decided yet), +0x24 u32 a step the game fixes itself (BotW's VFR override; 0 = none), +0x28 u32 AoC's vsyncs per update, marked by
 # its first stub (0 = off), +0x30 u64 vsyncs stepped (the stubs; logged by the host to check the game's speed), +0x38 float display aspect multiplier and
-# +0x3c float output aspect (DISPLAY_ASPECT stubs; 1 / 0 = unchanged). Display-only stubs never enable the frame step. Stub bodies assembled with clang
+# +0x3c float output aspect and +0x40 float frame latch (DISPLAY_ASPECT stubs; 1 / 0 = unchanged). Display-only stubs never enable the frame step. Stub bodies assembled with clang
 # A build's stubs are FRAME_STEP[build ID](ctx) in its patches.py: ctx.here() / ctx.emit(word) assemble into the patch area, ctx.site(offset, original bytes) asserts a site and that it is
 # no rewrite site, ctx.put(offset, words, reason) writes it (listed with the cuts), ctx.state is the state page's offset, and ctx.render_scale = 1 marks a render-scale stub
 FRAME_STEP = PATCHES['FRAME_STEP']
@@ -1012,7 +1012,7 @@ if (BUILD_ID in FRAME_STEP or HAS_DISPLAY_ASPECT) and NAME == 'main':
         # The loader supplies zero-filled BSS/key pages for a front patch area.
         # Reserve the frame state after the key page there too; stubs reach it by ADRP.
         IMAGE_SIZE = FS_STATE_OFF + 0x4000
-    assert FS_STATE_OFF % 0x1000 == 0 and (FAR or FS_STATE_OFF + 0x40 <= PATCH_OFF) and not any(IMG[FS_STATE_OFF:]), 'frame step state page'
+    assert FS_STATE_OFF % 0x1000 == 0 and (FAR or FS_STATE_OFF + 0x44 <= PATCH_OFF) and not any(IMG[FS_STATE_OFF:]), 'frame step state page'
     def fs_site(off, orig):
         ob = bytes.fromhex(orig)
         assert IMG[off:off + len(ob)] == ob, f'frame step original bytes mismatch {off:#x}: {bytes(IMG[off:off + len(ob)]).hex()}'
@@ -1023,7 +1023,7 @@ if (BUILD_ID in FRAME_STEP or HAS_DISPLAY_ASPECT) and NAME == 'main':
         for i, w in enumerate(words): struct.pack_into('<I', IMG, off + 4 * i, w)
         cuts.append((off, old.hex(), bytes(IMG[off:off + 4 * len(words)]).hex(), why)); stat(FS_STUB_KIND)
 if FS_STATE_OFF:   # the build's stubs (FRAME_STEP of its patches.py)
-    fs = types.SimpleNamespace(here=here, emit=emit, site=fs_site, put=fs_put, state=FS_STATE_OFF, render_scale=0)
+    fs = types.SimpleNamespace(here=here, emit=emit, site=fs_site, put=fs_put, state=FS_STATE_OFF, render_scale=0, display_aspect_version=1)
     FS_STUB_KIND = 'frame_step'
     if BUILD_ID in FRAME_STEP: FRAME_STEP[BUILD_ID](fs)
     if HAS_DISPLAY_ASPECT:
@@ -1337,7 +1337,7 @@ with open(P('fixups.tsv'), 'w') as f:
     if FAR: f.write(f'# IMAGE_SIZE\t{IMAGE_SIZE:#x}\n# FILE_IMAGE_LEN\t{FILE_IMAGE_LEN:#x}\n')   # patch area before the base (negative PATCH_OFF): whole image size, length of the image part of the file
     for k in KEY_INDEX: f.write(f'# KEY_{k}_IDX\t{KEY_INDEX[k]}\n')
     if FS_STATE_OFF: f.write(f'# FPS_STATE_OFF\t{FS_STATE_OFF:#x}\n')   # frame step state page (FRAME_STEP): the loader writes the target fps there
-    if HAS_DISPLAY_ASPECT: f.write('# DISPLAY_ASPECT\t1\n')   # exact-build camera/UI stubs, opt-in and qualified separately from their installation
+    if HAS_DISPLAY_ASPECT: f.write(f'# DISPLAY_ASPECT\t{fs.display_aspect_version}\n')   # 4 = camera/UI frame latch and temporary layout view; qualified separately
     if RENDER_SCALE: f.write('# RENDER_SCALE\t1\n')   # a render-scale stub reads state +0x10 (the loader ignores the key; dm/games/settings.py offers the setting by it)
     f.write(f'# BUILD_ID\t{BUILD_ID}\n')   # the host identifies the build by it: features with hard-coded addresses only run on the build they belong to
 with open(P('gates.tsv'), 'w') as f:

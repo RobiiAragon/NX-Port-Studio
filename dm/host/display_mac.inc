@@ -1,6 +1,6 @@
 #include "display_mode.h"
 
-// Preferences are scoped to the game and exact build. Edits affect next launch.
+// Preferences are scoped to the game and exact build; Apply also updates this session.
 static NSString *display_preference_key(NSString *name) {
     return [NSString stringWithFormat:@"Display.v1.%s.%s.%@", DM_GAME_ID, dm_main_build(), name];
 }
@@ -25,11 +25,12 @@ static void display_load(NSUserDefaults *preferences) {
     NSUserDefaults *preferences = display_preferences();
     NSAlert *alert = [NSAlert new];
     alert.messageText = @"Display — " DM_GAME_NAME;
-    alert.informativeText = @"Changes apply the next time this game starts. Fullscreen uses the display’s pixel resolution and preserves the picture’s proportions with borders. Internal rendering resolution is controlled separately by the game.\n\nExpand game view needs a verified camera/projection and HUD mod for this exact game build. It is currently unavailable.\n\n120 FPS needs a verified game-timing mod and a display capable of at least 120 Hz. No game build has been qualified for this option; a higher display refresh rate alone is insufficient.";
-    [alert addButtonWithTitle:@"Save"]; [alert addButtonWithTitle:@"Cancel"];
-    NSButton *full = [NSButton checkboxWithTitle:@"Start full screen" target:nil action:nil];
-    full.state = display_saved(preferences, @"fullscreen") ? NSControlStateValueOn : NSControlStateValueOff;
-    NSButton *wide = [NSButton checkboxWithTitle:@"Expand game view to display aspect" target:nil action:nil];
+    NSString *scope = dm_display_aspect_qualified() ? @"Expand game view follows the window and display in real time for Mario Kart 8 Deluxe 3.0.5, local one-player Grand Prix on Mac. Menus, demos, split-screen and other modes keep 16:9 with borders." : @"Expand game view needs a verified camera/projection and HUD mod for this exact build and mode. It is currently unavailable.";
+    alert.informativeText = [NSString stringWithFormat:@"Changes apply immediately when you choose Apply. Fullscreen preserves proportions with borders. Internal rendering resolution is controlled separately by the game.\n\n%@\n\n120 FPS needs a verified game-timing mod and a display capable of at least 120 Hz. No game build has been qualified; a higher refresh rate alone is insufficient.", scope];
+    [alert addButtonWithTitle:@"Apply"]; [alert addButtonWithTitle:@"Cancel"];
+    NSButton *full = [NSButton checkboxWithTitle:@"Full screen" target:nil action:nil];
+    full.state = g_win.styleMask & NSWindowStyleMaskFullScreen ? NSControlStateValueOn : NSControlStateValueOff;
+    NSButton *wide = [NSButton checkboxWithTitle:dm_display_aspect_qualified() ? @"Expand one-player Grand Prix view (3.0.5)" : @"Expand game view to display aspect" target:nil action:nil];
     wide.enabled = dm_display_aspect_qualified();
     wide.state = wide.enabled && display_saved(preferences, @"wide") ? NSControlStateValueOn : NSControlStateValueOff;
     NSButton *fps = [NSButton checkboxWithTitle:@"120 FPS — game timing mod unavailable" target:nil action:nil];
@@ -44,7 +45,11 @@ static void display_load(NSUserDefaults *preferences) {
     alert.window.initialFirstResponder = full;
     if ([alert runModal] != NSAlertFirstButtonReturn) return;
     [preferences setBool:full.state == NSControlStateValueOn forKey:display_preference_key(@"fullscreen")];
-    if (wide.enabled) [preferences setBool:wide.state == NSControlStateValueOn forKey:display_preference_key(@"wide")];
+    if (wide.enabled) {
+        [preferences setBool:wide.state == NSControlStateValueOn forKey:display_preference_key(@"wide")];
+        dm_display_set_wide(wide.state == NSControlStateValueOn);
+    }
+    if ((full.state == NSControlStateValueOn) != ((g_win.styleMask & NSWindowStyleMaskFullScreen) != 0)) [g_win toggleFullScreen:nil];
 }
 @end
 static DmDisplaySettings *g_display_settings;
