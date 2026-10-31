@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <TargetConditionals.h>
 
 module_t g_mod[MAX_MOD];
 int g_nmod;
@@ -19,7 +20,7 @@ static void policy(int which) {
     g_mod[0].base = memory; g_mod[0].fps_state_off = 0x4000;
     g_mod[0].display_aspect = 4; dm_fps_state = memory + 0x4000;
     assert(dm_display_aspect_candidate());
-    assert(!dm_display_aspect_qualified());
+    assert(dm_display_aspect_qualified() == !!TARGET_OS_OSX);
     if (which == 1) g_mod[0].build_id[0] = '0';
     if (which == 2) g_mod[0].display_aspect = 0;
     if (which == 3) dm_fps_state = memory;
@@ -35,7 +36,7 @@ static void policy(int which) {
     float multiplier, aspect;
     memcpy(&multiplier, memory + 0x4038, 4); memcpy(&aspect, memory + 0x403c, 4);
     if ((which >= 1 && which <= 3) || which >= 5) {
-        assert(!dm_display_aspect_candidate() && !dm_display_output_aspect());
+        assert(!dm_display_aspect_candidate() && !dm_display_aspect_qualified() && !dm_display_output_aspect());
         assert(multiplier == 0 && aspect == 0); // env cannot grant missing / wrong-build stubs
     } else if (which == 4) {
         assert(multiplier == 1 && aspect == 0 && !dm_display_output_aspect());

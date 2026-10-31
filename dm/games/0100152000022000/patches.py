@@ -132,6 +132,6 @@ def display_aspect(ctx):
         ctx.put(entry, [B(entry, start)], 'UI layout: derive image/text pane matrices from a temporary original DrawInfo view')
 
 
-# Opt-in candidate. The launcher keeps it disabled until visual qualification;
-# DM_DISPLAY_WIDE=1 permits isolated developer tests of this exact rewritten build.
+# Exact-build rewrite; runtime UI qualification is platform-specific.
+# Mac admits active local one-player GP; other modes keep native output.
 DISPLAY_ASPECT = {ASPECT_BUILD: display_aspect}

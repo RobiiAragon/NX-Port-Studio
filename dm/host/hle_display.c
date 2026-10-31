@@ -1,6 +1,7 @@
 #include "dm.h"
 #include "display_mode.h"
 #include <stdatomic.h>
+#include <TargetConditionals.h>
 
 extern uint8_t *dm_fps_state;
 static double g_display_width, g_display_height;
@@ -21,10 +22,14 @@ int dm_display_aspect_candidate(void) {
 }
 
 int dm_display_aspect_qualified(void) {
-    // Mac resize/toggle and original HUD passed in a local one-player GP.
-    // Actual two-player exclusion still needs corroboration; no iPhone gameplay
-    // validation has been performed. Keep normal controls off until that gate passes.
+    // Exact-build hooks admit only active local one-player GP. Mac live resize,
+    // original HUD and real two-player proportional fallback passed private QA.
+#if TARGET_OS_OSX
+    return dm_display_aspect_candidate();
+#else
+    // No iPhone gameplay qualification has been performed.
     return 0;
+#endif
 }
 
 static void display_request(void) {  // caller holds g_display_lock

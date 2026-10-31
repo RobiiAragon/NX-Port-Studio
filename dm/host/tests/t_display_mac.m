@@ -6,7 +6,8 @@
 #define DM_GAME_NAME "Display Test"
 static char build[33] = "test-build-a";
 static const char *dm_main_build(void) { return build; }
-int dm_display_aspect_qualified(void) { return 0; }
+static int qualified;
+int dm_display_aspect_qualified(void) { return qualified; }
 void dm_display_set_wide(int enabled) { (void)enabled; }
 static NSWindow *g_win;
 static CAMetalLayer *g_layer;
@@ -30,6 +31,10 @@ int main(void) { @autoreleasepool {
     display_load(preferences);
     assert(display_explicit_on("DM_FULLSCREEN"));
     assert(!getenv("DM_DISPLAY_WIDE")); // unqualified mod cannot be enabled by saved prefs
+    qualified = 1; display_load(preferences);
+    assert(display_explicit_on("DM_DISPLAY_WIDE")); // qualified per-build preference activates the live-capable mode
+    setenv("DM_DISPLAY_WIDE", "0", 1); display_load(preferences);
+    assert(!display_explicit_on("DM_DISPLAY_WIDE")); // explicit developer override still wins
     setenv("DM_FULLSCREEN", "0", 1); display_load(preferences);
     assert(!display_explicit_on("DM_FULLSCREEN")); // explicit off is not fullscreen
     [preferences removePersistentDomainForName:suite];
