@@ -3709,8 +3709,7 @@ static void shmap_load(void) {
 // positive (GeometryToCompute.GenerateEmitVertex). Its absence, alongside the
 // fixed-input index/info helpers, proves that this kernel emits no vertices.
 // A zero/unknown stride, lean kernel or incomplete metadata proves nothing.
-static int geo_no_vertex_output(NSDictionary *j, const nvn_refl *rf) {
-    NSDictionary *geo = j[@"geometry"];
+static int geo_no_vertex_output(NSDictionary *j, NSDictionary *geo, const nvn_refl *rf) {
     if (![geo isKindOfClass:NSDictionary.class] || !rf->route_b ||
         ![j[@"chain"] isEqual:@DMSH_CHAIN] || ![j[@"stage"] isEqual:@"gs"] ||
         ![j[@"msl_entry_kind"] isEqual:@"kernel"] || [geo[@"lean"] boolValue]) return 0;
@@ -3955,7 +3954,7 @@ static NvShader *shader_load(NSString *pc, int stage, int layer) {
             for (NSUInteger i = 0; i < reads.count; i++) { int k = [reads[i] intValue]; if (k >= 0 && k < GEO_CAPTURE_WORDS) o->geo_slot[k] = (int16_t)i; }
             o->geo_words = (uint32_t)reads.count;
         } }
-    if (stage == 2) o->geo_no_output = (uint8_t)geo_no_vertex_output(j, &o->rf);
+    if (stage == 2) o->geo_no_output = (uint8_t)geo_no_vertex_output(j, geo, &o->rf);
     o->fn = fn4_note([lib newFunctionWithName:entry], lib, entry, nil); o->stage = stage; strlcpy(o->key, pc.UTF8String, sizeof o->key); o->ventry = entry;
     // writes the layer (render_target_array_index, named in the library's metadata): its passes are layered and its pipelines get an input class (pso_desc). A library with layer entry points
     // names it for those alone: its main0 / main0_z write no layer

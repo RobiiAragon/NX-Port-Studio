@@ -14,26 +14,26 @@ static NSDictionary *no_output_metadata(void) {
 static void metadata_guards(void) {
     NSDictionary *j=no_output_metadata();nvn_refl rf;char error[160]={0};
     EXPECT("complete reflection parses",0,nvn_refl_from_json(j,&rf,error,sizeof error));
-    EXPECT("positive stride without output binding proves no emission",1,geo_no_vertex_output(j,&rf));
+    EXPECT("positive stride without output binding proves no emission",1,geo_no_vertex_output(j,j[@"geometry"],&rf));
     for(NSString *field in @[@"stride",@"vertices",@"invocations",@"index_stride"]) {
         for(id value in @[@0,@(-1),@0.5,@4294967296,@"5",NSNull.null,@YES,@NO]) {
             NSMutableDictionary *candidate=[j mutableCopy],*geo=[j[@"geometry"] mutableCopy];geo[field]=value;candidate[@"geometry"]=geo;
-            EXPECT("invalid geometry bound retains raster policy",0,geo_no_vertex_output(candidate,&rf));
+            EXPECT("invalid geometry bound retains raster policy",0,geo_no_vertex_output(candidate,candidate[@"geometry"],&rf));
         }
         NSMutableDictionary *candidate=[j mutableCopy],*geo=[j[@"geometry"] mutableCopy];[geo removeObjectForKey:field];candidate[@"geometry"]=geo;
-        EXPECT("missing geometry bound retains raster policy",0,geo_no_vertex_output(candidate,&rf));
+        EXPECT("missing geometry bound retains raster policy",0,geo_no_vertex_output(candidate,candidate[@"geometry"],&rf));
     }
     for(NSString *field in @[@"chain",@"stage",@"msl_entry_kind",@"geometry"]) {
         NSMutableDictionary *candidate=[j mutableCopy];[candidate removeObjectForKey:field];
-        EXPECT("incomplete metadata retains raster policy",0,geo_no_vertex_output(candidate,&rf));
+        EXPECT("incomplete metadata retains raster policy",0,geo_no_vertex_output(candidate,candidate[@"geometry"],&rf));
     }
     NSMutableDictionary *candidate=[j mutableCopy],*geo=[j[@"geometry"] mutableCopy];geo[@"lean"]=@YES;candidate[@"geometry"]=geo;
-    EXPECT("lean passthrough is not classified from absence",0,geo_no_vertex_output(candidate,&rf));
+    EXPECT("lean passthrough is not classified from absence",0,geo_no_vertex_output(candidate,candidate[@"geometry"],&rf));
     rf.b[rf.nb++]=(nvn_rbind){.kind=NVN_RB_GEOMETRY,.reg=1};
-    EXPECT("default-position EmitVertex output retains raster policy",0,geo_no_vertex_output(j,&rf));rf.nb--;
-    rf.b[0].reg=0;EXPECT("missing index helper is ambiguous",0,geo_no_vertex_output(j,&rf));rf.b[0].reg=2;
-    rf.b[1].reg=4;EXPECT("missing info helper is ambiguous",0,geo_no_vertex_output(j,&rf));rf.b[1].reg=3;
-    rf.route_b=0;EXPECT("unvalidated reflection is ambiguous",0,geo_no_vertex_output(j,&rf));
+    EXPECT("default-position EmitVertex output retains raster policy",0,geo_no_vertex_output(j,j[@"geometry"],&rf));rf.nb--;
+    rf.b[0].reg=0;EXPECT("missing index helper is ambiguous",0,geo_no_vertex_output(j,j[@"geometry"],&rf));rf.b[0].reg=2;
+    rf.b[1].reg=4;EXPECT("missing info helper is ambiguous",0,geo_no_vertex_output(j,j[@"geometry"],&rf));rf.b[1].reg=3;
+    rf.route_b=0;EXPECT("unvalidated reflection is ambiguous",0,geo_no_vertex_output(j,j[@"geometry"],&rf));
 }
 static void replay_no_emission(void) {
     id<MTLLibrary> l=library(@"#include <metal_stdlib>\nusing namespace metal;\n"
@@ -48,7 +48,7 @@ static void replay_no_emission(void) {
     NSDictionary *j=no_output_metadata();char error[160]={0};EXPECT("replay reflection parses",0,nvn_refl_from_json(j,&gs->rf,error,sizeof error));
     gs->ae=[gs->fn newArgumentEncoderWithBufferIndex:0];gs->arg_len=gs->ae.encodedLength;
     gs->geo_vertices=gs->geo_invocations=1;gs->geo_stride=5;gs->geo_output=7;gs->geo_index_stride=2;
-    gs->geo_no_output=(uint8_t)geo_no_vertex_output(j,&gs->rf);strcpy(gs->key,"123456789abcde00_b");
+    gs->geo_no_output=(uint8_t)geo_no_vertex_output(j,j[@"geometry"],&gs->rf);strcpy(gs->key,"123456789abcde00_b");
     g_shcache=[NSMutableDictionary dictionary];g_shcache[@"123456789abcde00_bg0"]=gs;g_shcache[@"123456789abcde00_bgv"]=shader(l,@"reader",0,NULL,0);
     static prog_t cp={.serial=19400};serial_put(cp.serial,pr);
     tex_t target={.magic=MAGIC('T','E','X',0),.serial=19401};target.d.width=target.d.height=32;target.d.depth=target.d.samples=target.d.levels=1;target.d.target=NVN_TEXTURE_TARGET_2D;target.d.format=NVN_FORMAT_RGBA8;
