@@ -537,3 +537,17 @@ coverage:
 	rm -rf $(B)/cov/prof
 	LLVM_PROFILE_FILE="$(call cov_profile,$(B)/cov)" $(MAKE) -i B=$(B)/cov SAN="$(COV_FLAGS)" run
 	@$(call cov_export,$(B)/cov)
+
+# Provider-independent BCAT fixtures: original Ed25519 key/data and real files.
+$(B)/t_bcat_store: t_bcat_store.m ../hle_bcat_apple.m ../nextendo_bcat.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -Wno-deprecated-declarations -fobjc-arc $(PRIVATE_PKI_FLAGS) -o $@ t_bcat_store.m $(PRIVATE_PKI_LIB) -lz -framework Foundation
+$(B)/t_bcat_sdk: t_bcat_sdk.c t_bcat_guest.S ../hle_bcat.c ../nextendo_bcat.h ../hle_bigstack.c $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -Wno-deprecated-declarations $(GINC) -o $@ t_bcat_sdk.c t_bcat_guest.S ../hle_bigstack.c
+.PHONY: bcat
+bcat: $(B)/t_bcat_store $(B)/t_bcat_sdk $(B)/t_bcat_fs
+	$(B)/t_bcat_store
+	$(PYTHON) test_bcat_zip.py $(abspath $(B))/t_bcat_store
+	$(B)/t_bcat_sdk
+	$(B)/t_bcat_fs
+$(B)/t_bcat_fs: t_bcat_fs.c t_bcat_fs_provider.c t_fs_stub.c ../hle_fs.c ../nextendo_bcat.h ../hle_bigstack.c ../save_sync.c $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -o $@ t_bcat_fs.c t_bcat_fs_provider.c t_fs_stub.c ../hle_bigstack.c ../save_sync.c

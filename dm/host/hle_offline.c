@@ -142,11 +142,9 @@ HLE_FORCE_WAIT("nnsocketGetAddrInfo", "C resolver layout follows the matching SD
 HLE_FORCE("nnsocketFreeAddrInfo", "release only resolver allocations owned by the host", void, h_c_sk_FreeAi, void *ai) { dm_net_freeaddrinfo(ai); }
 HLE_FORCE("nnsocketGAIStrError", "resolver error text", const char *, h_c_sk_GaiStr, int e) { (void)e; return "network unavailable"; }
 
-// ---------- bcat: news / data delivered from the server (Super Mario Odyssey). Initialize talks to the bcat service (an SDK abort without it); mounting the delivery cache fails,
-// which the game treats as "nothing delivered" (main+0x6c9258: a failure skips the read unless the caller asked for an error dialog, which only logs here). Syncing needs the network, which nifm reports unavailable ----------
-HLE_FORCE("_ZN2nn4bcat10InitializeEv", "data delivery init (connects to the bcat service); the host has none, no-op", void, h_bcat_Init, void) {}
-HLE_FORCE("_ZN2nn4bcat25MountDeliveryCacheStorageEv", "mount delivery cache: no delivery data, fails", Result, h_bcat_Mount, void) { return RES_FAIL; }
-HLE_FORCE("_ZN2nn4bcat27UnmountDeliveryCacheStorageEv", "unmount delivery cache", void, h_bcat_Unmount, void) {}
+// BCAT initialization owns no guest-visible state. The real, nonempty delivery
+// mount and its failure path live alongside the filesystem mounts in hle_fs.c.
+HLE_FORCE("_ZN2nn4bcat10InitializeEv", "initialize data delivery; immutable cache is prepared before nnMain", void, h_bcat_Init, void) {}
 
 // ---------- album: the capture album (Monster Hunter Rise saves its own photo-mode pictures there). Initialize connects to the capture service (capsrv, an abort in sm::Initialize at the start of
 // nnMain, main+0x6bc5478); the host has no album, so saving fails and showing it does nothing. GetImageWidth / GetImageHeight only compute and keep running in the SDK ----------

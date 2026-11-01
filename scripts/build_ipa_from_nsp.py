@@ -89,24 +89,12 @@ class BuildError(Exception):
 
 
 def configure_dotnet_environment(env):
-    """The Homebrew CLI wrapper finds .NET itself; native apphosts do not.
-    Discover the installed runtime root without rebuilding a correct translator
-    or changing its shader-chain fingerprint. Explicit caller choices win.
+    """Use the same apphost runtime discovery before metadata and extraction.
+
+    The common helper also exports a discovered root for extraction functions
+    whose subprocesses inherit the environment rather than receive env=.
     """
-    if env.get('DOTNET_ROOT_ARM64') or env.get('DOTNET_ROOT'): return
-    dotnet = shutil.which('dotnet', path=env.get('PATH'))
-    if not dotnet: return
-    try:
-        result = subprocess.run([dotnet, '--list-runtimes'], env=env, capture_output=True, text=True, timeout=10, check=True)
-    except (OSError, subprocess.SubprocessError): return
-    for line in result.stdout.splitlines():
-        match = re.fullmatch(r'Microsoft\.NETCore\.App\s+\S+\s+\[(.+)\]', line.strip())
-        if not match: continue
-        root = Path(match[1]).parent.parent
-        if (root / 'dotnet').is_file() and os.access(root / 'dotnet', os.X_OK):
-            env['DOTNET_ROOT'] = str(root)
-            env['DOTNET_ROOT_ARM64'] = str(root)
-            return
+    configure_dotnet(env)
 
 
 def clock():
@@ -428,7 +416,10 @@ def free_gb(p):
 
 def configure_dotnet(env):
     """Let standalone .NET apphosts find the runtime used by dotnet (Homebrew installs it outside the registered locations)."""
-    if env.get('DOTNET_ROOT'): return
+    if env.get('DOTNET_ROOT_ARM64') or env.get('DOTNET_ROOT'):
+        for name in ('DOTNET_ROOT', 'DOTNET_ROOT_ARM64'):
+            if env.get(name): os.environ[name] = env[name]
+        return
     dn = shutil.which('dotnet', path=env['PATH'])
     if not dn: return
     try:
@@ -439,7 +430,8 @@ def configure_dotnet(env):
         if m:
             # A Homebrew command can be a wrapper in bin, so its resolved directory is not a runtime root.
             # Extraction steps without env= inherit os.environ; shader steps receive env explicitly.
-            env['DOTNET_ROOT'] = os.environ['DOTNET_ROOT'] = m[1]
+            for name in ('DOTNET_ROOT', 'DOTNET_ROOT_ARM64'):
+                env[name] = os.environ[name] = m[1]
             return
 
 
@@ -2262,6 +2254,7 @@ def mac_run(work, game, patched, host, font, msl, aoc, gfx, lang, env, logs, g, 
     if env.get('DM_SYSTEM_DATA_DIR'): renv['DM_SYSTEM_DATA_DIR'] = env['DM_SYSTEM_DATA_DIR']
     if env.get('DM_MII_DATABASE_SOURCE'): renv['DM_MII_DATABASE'] = env['DM_MII_DATABASE_SOURCE']
     if env.get('DM_NEXTENDO_ROUTES'): renv['DM_NEXTENDO_ROUTES'] = env['DM_NEXTENDO_ROUTES']
+    if env.get('DM_NEXTENDO_BCAT_DIR'): renv['DM_NEXTENDO_BCAT_DIR'] = env['DM_NEXTENDO_BCAT_DIR']
     if gfx == 'nvn': renv['DM_NVN_SHMAP'] = g.table('shader_map.tsv')
     renv.update(DM_LANG=lang, DM_WINDOW=1, DM_AUDIO=1)
     if env_file: renv.update(env_file_pairs(env_file))
@@ -2345,6 +2338,7 @@ def mac_app(py, repo, out, app, work, game, patched, host, font, msl, aoc, gfx, 
                    ('--system-data-dir', env.get('DM_SYSTEM_DATA_DIR')),
                    ('--mii-database', env.get('DM_MII_DATABASE_SOURCE')),
                    ('--nextendo-services-dir', env.get('DM_NEXTENDO_SERVICES_DIR')),
+                   ('--nextendo-bcat-dir', env.get('DM_NEXTENDO_BCAT_DIR')),
                    ('--env-file', Path(os.path.expanduser(env_file)).resolve() if env_file else None), ('--settings', settings)):
         if v: cmd += [opt, v]
     unchanged = False
@@ -2662,6 +2656,25 @@ def main(args=None):
         except ValueError as e: raise BuildError(str(e)) from e
     # the app version is the packed game's display version: the update's control data when an update is packed (nx_extract saves it next to the RomFS), else the base game's
     app_version = nacp.version(game / 'control.nacp') or nacp.version(base / 'control.nacp')
+    # BCAT data is prepared only for a documented provider recipe and the exact
+    # signed catalog version. A network outage must not prevent a local port.
+    import nextendo_bcat
+    if f'{app:016x}' in nextendo_bcat.TITLES:
+        PROG.add(1); PROG.stage('Nextendo calendars', step='verify eligibility and private delivery snapshot')
+        recipe_ready = False
+        try:
+            if not app_version: raise ValueError('Calendar game version is unknown')
+            cache = Path.home() / 'Library/Application Support/NX Port Studio/Nextendo/BCAT' / f'{app:016x}' / app_version
+            nextendo_bcat.recipe(cache, f'{app:016x}', app_version)
+            recipe_ready = True
+            env['DM_NEXTENDO_BCAT_DIR'] = str(cache)
+            nextendo_bcat.prepare(repo, f'{app:016x}', app_version, work / 'nextendo-catalog/game-catalog.json', cache)
+            PROG.end('validated calendar snapshot; startup checks for updates')
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            if not recipe_ready: env.pop('DM_NEXTENDO_BCAT_DIR', None)
+            PROG.end('calendar unavailable; local build continues' + (' and startup can retry' if recipe_ready else ''))
+            say(f'Nextendo calendar preparation failed: {error}; online calendar data was not bundled')
+
     if mac_pack and not (args.out or OUT_IPA): out_ipa = work.parent / f'{mac_app_name(app_name)}{"-provisional" if shadowed else ""}.app'
     if not mac or mac_pack: say(f'app name: {app_name}; version: {app_version or "1.0"}; bundle ID: {bundle_id}' + (f'; app: {out_ipa}' if mac_pack else ''))
     # the game language: Horizon gives the game one of the languages its control data lists (the packed version's, which an update may extend), so the one packed must be among them

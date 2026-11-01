@@ -87,6 +87,15 @@ import nextendo_services
 nextendo_services.stage(sys.argv[2], Path('Gen/dm/nextendo'), sys.argv[3])
 PY
 fi
+if [ -n "${DM_NEXTENDO_BCAT_DIR:-}" ]; then
+  python3 - "$DM" "$DM_NEXTENDO_BCAT_DIR" "$GAME" "$DM_APP_VERSION" <<'PY_BCAT' || die "stage the validated private calendar snapshot"
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / 'tools'))
+import nextendo_bcat
+nextendo_bcat.stage(Path(sys.argv[1]).parent, sys.argv[2], Path('Gen/dm/bcat'), sys.argv[3], sys.argv[4], allow_missing=True)
+PY_BCAT
+fi
 rm -f Gen/dm/mii_database.dmii
 if [ -n "${DM_MII_DATABASE_SOURCE:-}" ]; then
   python3 "$DM/tools/mii_resources.py" "$DM_MII_DATABASE_SOURCE" --stage Gen/dm/mii_database.dmii || die "stage private personal Mii snapshot"

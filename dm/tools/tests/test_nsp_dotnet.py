@@ -45,6 +45,31 @@ class Dotnet(unittest.TestCase):
         self.assertEqual(env['DOTNET_ROOT'], '/caller/runtime')
         self.assertEqual(env['DOTNET_ROOT_ARM64'], '/caller/arm64')
 
+    def test_early_initializer_then_late_initializer_preserves_inherited_runtime(self):
+        # The early metadata path used to fill only env=. The later discovery
+        # then returned early, leaving standalone extraction apphosts orphaned.
+        root = '/external/Homebrew With Spaces/dotnet/libexec'
+        env = dict(os.environ)
+        out = f'Microsoft.NETCore.App 10.0.13 [{root}/shared/Microsoft.NETCore.App]\n'
+        with mock.patch.object(nsp.shutil, 'which', return_value='/tools/bin/dotnet'), \
+             mock.patch.object(nsp.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, out)) as run:
+            nsp.configure_dotnet_environment(env)
+            nsp.configure_dotnet(env)
+            self.assertEqual(run.call_count, 1)
+        child = subprocess.run([sys.executable, '-c', 'import os;print(os.environ["DOTNET_ROOT_ARM64"])'],
+                               capture_output=True, text=True, check=True)
+        self.assertEqual(child.stdout.strip(), root)
+        self.assertEqual(env['DOTNET_ROOT'], root)
+
+    def test_explicit_architecture_root_is_not_replaced_by_discovery(self):
+        os.environ['DOTNET_ROOT_ARM64'] = '/caller/arm64'
+        env = dict(os.environ)
+        with mock.patch.object(nsp.subprocess, 'run') as run:
+            nsp.configure_dotnet_environment(env)
+            nsp.configure_dotnet(env)
+            run.assert_not_called()
+        self.assertNotIn('DOTNET_ROOT', env)
+
     def test_missing_dotnet_leaves_environment_untouched(self):
         env = dict(os.environ)
         with mock.patch.object(nsp.shutil, 'which', return_value=None), mock.patch.object(nsp.subprocess, 'run') as run:
