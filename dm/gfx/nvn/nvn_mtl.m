@@ -3687,6 +3687,7 @@ static void shmap_load(void) {
 @interface NvShader : NSObject { @public id<MTLFunction> fn, tf_fn, discard_fn, fn_u, fn_m, fn_d, geo_fn; uint8_t mask_m;   // fn_u: the integer-output entry point (dmsh_build.py fs_uint), for pipelines whose colour attachments are all unsigned integer (pso_desc); fn_m: the mixed one, its outputs in mask_m unsigned integer; fn_d: the dual-source one (dmsh_build.py fs_dual)
     uint16_t tf_stride[4]; uint32_t cb_ext[16], sb_ro; nvn_refl rf; id<MTLArgumentEncoder> ae; NSUInteger arg_len; int stage, range_ro, layer_out; const char *builtin; uint64_t logged; char key[24]; id<MTLBuffer> c1buf; uint64_t c1_gpu; size_t c1off;
     uint32_t geo_vertices, geo_invocations, geo_output, geo_stride, geo_index_stride;
+    uint8_t geo_no_output;   // validated geometry reflection proves no vertex emission; compute and index compaction still run
     id<MTLComputePipelineState> geo_pso; int geo_pso_failed;
     int16_t *geo_slot; uint32_t geo_words;   // a lean passthrough kernel (dmsh_geometry.lean): capture word -> record slot (-1: not read), record words
     NvShader *geo_lean_v[5]; uint8_t geo_lean_tried;   // a geometry shader's lean kernels by input topology (looked up once)
@@ -3703,6 +3704,27 @@ static void shmap_load(void) {
 @implementation NvShader
 - (void)dealloc { free(rf.c1); free(geo_slot); }
 @end
+// Called only after the complete B reflection converted successfully. Every
+// lowered EmitVertex writes geometry helper 1 when its record stride is
+// positive (GeometryToCompute.GenerateEmitVertex). Its absence, alongside the
+// fixed-input index/info helpers, proves that this kernel emits no vertices.
+// A zero/unknown stride, lean kernel or incomplete metadata proves nothing.
+static int geo_no_vertex_output(NSDictionary *j, NSDictionary *geo, const nvn_refl *rf) {
+    if (![geo isKindOfClass:NSDictionary.class] || !rf->route_b ||
+        ![j[@"chain"] isEqual:@DMSH_CHAIN] || ![j[@"stage"] isEqual:@"gs"] ||
+        ![j[@"msl_entry_kind"] isEqual:@"kernel"] || [geo[@"lean"] boolValue]) return 0;
+    for (NSString *field in @[@"stride", @"vertices", @"invocations", @"index_stride"]) {
+        id n = geo[field];
+        if (![n isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)n) == CFBooleanGetTypeID() || [n longLongValue] <= 0 ||
+            [n unsignedLongLongValue] > UINT32_MAX || [n doubleValue] != (double)[n unsignedLongLongValue]) return 0;
+    }
+    int index = 0, info = 0;
+    for (int i = 0; i < rf->nb; i++) if (rf->b[i].kind == NVN_RB_GEOMETRY) {
+        if (rf->b[i].reg == 1) return 0;
+        index |= rf->b[i].reg == 2; info |= rf->b[i].reg == 3;
+    }
+    return index && info;
+}
 #include "nvn_pso_skey.h"
 #include "nvn_geometry.h"
 #include "nvn_feedback.h"
@@ -3932,6 +3954,7 @@ static NvShader *shader_load(NSString *pc, int stage, int layer) {
             for (NSUInteger i = 0; i < reads.count; i++) { int k = [reads[i] intValue]; if (k >= 0 && k < GEO_CAPTURE_WORDS) o->geo_slot[k] = (int16_t)i; }
             o->geo_words = (uint32_t)reads.count;
         } }
+    if (stage == 2) o->geo_no_output = (uint8_t)geo_no_vertex_output(j, geo, &o->rf);
     o->fn = fn4_note([lib newFunctionWithName:entry], lib, entry, nil); o->stage = stage; strlcpy(o->key, pc.UTF8String, sizeof o->key); o->ventry = entry;
     // writes the layer (render_target_array_index, named in the library's metadata): its passes are layered and its pipelines get an input class (pso_desc). A library with layer entry points
     // names it for those alone: its main0 / main0_z write no layer
@@ -8958,7 +8981,10 @@ static void fb_prepare(NvProg *pr) {
             if (t.mipmapLevelCount != 1 || tn != 1) {   // mip-chain and layer passes (render level or layer n while the view covers the chain, sampling another): not snapshotted
                 static int once; if (!once++) MLOG("same-pass feedback sampling: shader %s renders level %d layer %d while its view covers levels %lu+%lu, layers %lu+%lu; left as is (mip-chain or layer pass)", fs->key, lv, sl, (unsigned long)tl, (unsigned long)t.mipmapLevelCount, (unsigned long)ts, (unsigned long)tn);
                 continue; }
-            if (t.textureType != MTLTextureType2D || t.sampleCount != 1 || ts != (NSUInteger)sl || b->dtt != MTLTextureType2D || base.parentTexture) {
+            // encode_args adapts the snapshot through tex_fit, just as it adapts
+            // the original 2D attachment for a shader declaring a one-slice array.
+            if (t.textureType != MTLTextureType2D || t.sampleCount != 1 || ts != (NSUInteger)sl ||
+                (b->dtt != MTLTextureType2D && b->dtt != MTLTextureType2DArray) || base.parentTexture) {
                 RED_ONCE(80, "same-pass feedback sampling: the sampled view is not a single-level 2D view of the attachment's level and layer (type %lu levels %lu+%lu layer %lu, attachment level %d layer %d, shader %s); left as is", (unsigned long)t.textureType, (unsigned long)tl, (unsigned long)t.mipmapLevelCount, (unsigned long)ts, lv, sl, fs->key);
                 continue; }
             NSUInteger w = MAX(base.width >> lv, 1ul), h = MAX(base.height >> lv, 1ul); int fresh;

@@ -314,6 +314,15 @@ Games read this count as a position in their own command memory and size their h
 - **Found on:** [Metroid Dread](../../dm/games/010093801237C000/README.md).
 - **Check:** `t_nvn` checks 15 regions in RGBA8, BC1 and a two-layer RGBA16F array, from 1×1 to the whole level, byte for byte against the old whole-level path.
 
+### `WriteTexels` into linear storage
+
+- **Symptom:** `WriteTexels` leaves linear texture storage unchanged; resolving the texture then reports GPU and CPU deswizzle failures for a supported format.
+- **Cause:** the writer tried block-linear addressing for both linear flags. A whole-level write ignored the failed swizzle and marked the texture for packaged upload; this also displaced its correct pool-buffer alias with another block-linear decode.
+- **Fix:** the linear writer copies only the requested row-major region at the texture's explicit or inferred storage stride, honoring the source row stride and checking region/storage bounds. It keeps the existing pool-buffer alias instead of marking the texture for block-linear upload. The block-linear writer and deswizzle guards are unchanged.
+- **Check:** `t_linear_readback` compares an entire synthetic pool after full and strided subregion writes, including offset canaries and row padding. R8 `LINEAR` and R32F `LINEAR_RENDER_TARGET` are covered; the latter's GPU readback checks writes made both before and after its first texture resolution. Invalid regions and short source strides leave storage intact.
+- **Limits:** I restrict this writer to the existing alias path's single-level, single-sample, non-layered 2D, uncompressed domain. Compressed linear writes are explicitly rejected and leave canaries unchanged. Existing Metal pixel-format and buffer offset/row-alignment restrictions still apply; this change does not add aliases for unsupported formats or pitches.
+- **Found on:** Splatoon 2 EUR 5.5.2, during the first tutorial: 256×4 R32F, `LINEAR_RENDER_TARGET`, stride 1024. I reproduced the missing writes and wrong GPU content with synthetic data; complete gameplay and iOS validation remain separate.
+
 ### Packaged texture data copied at `TextureInitialize`
 
 - **Cause:** a texture created with `TextureBuilderSetPackagedTextureData` gets that data copied into its storage by NVN at `TextureInitialize` (a compressible pool cannot be written by the CPU).

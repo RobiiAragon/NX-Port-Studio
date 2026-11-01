@@ -665,7 +665,10 @@ static void geo_gs_one(id<MTL4ComputeCommandEncoder> ce, const geo_job *j) {
 static void geo_raster(const geo_job *j, int last_in_run) {
     g_geo_bind[1] = j->output;
     if (S.tf_on) tf_geometry(j->reader, j->packed, j->args, j->gs->geo_output == 1 ? 1 : j->gs->geo_output == 6 ? 2 : 3, j->first_instance);
-    if (S.rast_discard || !j->emits) { if (last_in_run && g_enc_geo_nocolor) rp_end(); return; }
+    // A maximum vertex count in the SPH is a bound, not an emission. A
+    // no-emission kernel still writes per-invocation index sentinels and may
+    // write guest storage, so retain all preparation, allocation and compute.
+    if (S.rast_discard || !j->emits || j->gs->geo_no_output) { if (last_in_run && g_enc_geo_nocolor) rp_end(); return; }
     NvProg *pr = j->pr, *raster = pr->geo_raster;
     if (!raster || raster->sh[0] != j->reader || raster->sh[1] != pr->sh[1]) {
         raster = [NvProg new]; raster->sh[0] = j->reader; raster->sh[1] = pr->sh[1]; pr->geo_raster = raster;

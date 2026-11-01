@@ -2513,8 +2513,21 @@ NVN(nvnCommandBufferDownsampleTextureView, void, NVNcommandBuffer *c, const NVNt
     rec_downsample(c, s, sv, d, dv, (uint64_t)__builtin_return_address(0));
 }
 
-// CPU texture write (NVN WriteTexels): texture storage lives in pool memory in Tegra block-linear layout; decode the whole level → patch the region → re-encode.
-// Write protection is lifted and the range marked dirty first, so the replay layer re-uploads it the next time it is used
+// CPU texture write (NVN WriteTexels): linear storage uses its row stride; block-linear storage uses Tegra's layout.
+// Write protection is lifted first; block-linear textures are marked for replay upload, while linear textures alias their pool buffer.
+static int write_region_linear(const tex_t *t, unsigned level, unsigned layer, const NVNcopyRegion *r, const uint8_t *src, size_t row, int bpb) {
+    if (t->d.target != NVN_TEXTURE_TARGET_2D || t->d.levels > 1 || t->d.samples > 1 || level || layer || r->zoffset || r->depth < 0 || r->depth > 1 ||
+        r->xoffset < 0 || r->yoffset < 0 || r->width <= 0 || r->height <= 0 || !src || !t->d.height ||
+        (uint64_t)r->xoffset + (unsigned)r->width > t->d.width || (uint64_t)r->yoffset + (unsigned)r->height > t->d.height) return -1;
+    size_t pitch = t->L.layer_size / t->d.height, x = (size_t)r->xoffset * bpb, y = (size_t)r->yoffset;
+    size_t wb = (size_t)r->width * bpb, hb = (size_t)r->height;
+    if (!row) row = wb;
+    if (!pitch || x > pitch || wb > pitch - x || row < wb || (hb > 1 && row > (SIZE_MAX - wb) / (hb - 1)) ||
+        x + wb > t->L.size || y + hb - 1 > (t->L.size - x - wb) / pitch) return -1;
+    dm_guest_write_prepare(t->mem, t->L.size);
+    for (size_t i = 0; i < hb; i++) memcpy(t->mem + (y + i) * pitch + x, src + i * row, wb);
+    return 0;
+}
 // Non-3D textures: only the bytes inside the region are written, by block-linear address, without decoding the whole level. Metroid Dread's minimap (main+0x160e80) calls WriteTexels once per texel (a 1×1 region);
 // previously every call decoded, patched and re-encoded the whole level, and after a few minutes the main thread spent whole frames there (frames stopped from 175 s). Returns −1 when the region is out of range or the format unsupported, falling back to the whole-level path
 static int write_region_bl(const tex_t *t, unsigned level, unsigned layer, const NVNcopyRegion *r, const uint8_t *src, size_t row, int bw, int bh, int bpb) {
@@ -2536,6 +2549,13 @@ static void write_texels(const tex_t *t, const view_t *v, const NVNcopyRegion *r
     int bw, bh, bpb = nvn_fmt_bpb(t->d.format, &bw, &bh);
     if (!bpb) { ONCE_LOG("[RED] WriteTexels: unknown format %#x", t->d.format); return; }
     unsigned level = v && v->set_levels ? (unsigned)v->base_level : 0, layer0 = v && v->set_layers ? (unsigned)v->min_layer : 0;
+    if (t->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) {
+        if (bw != 1 || bh != 1) { ONCE_LOG("[RED] WriteTexels: compressed linear storage is not implemented"); return; }
+        if (write_region_linear(t, level, layer0, r, src, row, bpb)) ONCE_LOG("[RED] WriteTexels: unsupported linear layout, region or stride");
+        // tex_linear aliases the pool buffer. Marking it CPU-written would instead
+        // send these row-major bytes through the packaged block-linear upload path.
+        return;
+    }
     int is3d = t->d.target == NVN_TEXTURE_TARGET_3D, nz = r->depth ? r->depth : 1;
     if (!is3d) {
         size_t wb0 = (size_t)((r->width + bw - 1) / bw) * bpb, row0 = row ? row : wb0, img0 = img ? img : row0 * (size_t)((r->height + bh - 1) / bh);
