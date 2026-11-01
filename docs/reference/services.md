@@ -625,6 +625,14 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Found on:** [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md), whose verified PiaLan framing supplied the protocol contract. No title ID or guest patch selects this behavior.
 - **Found on:** the imported service surface of [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md) 3.0.5 (`main` build `fe941ed5ba14be5d505698da1bbf4fe7`, PiaLan 5.9.0).
 
+### Local discovery follows a VPN instead of the LAN
+
+- **Symptom:** automatic discovery cannot construct a local sweep while a Wi-Fi or Ethernet LAN is available and the Mac's default route belongs to a VPN.
+- **Cause:** the interface query constrained every operation to the default Internet interface. The point-to-point VPN is ineligible for bounded LAN discovery, so the discovery path rejected it without considering the physical adapter. A cached directed-broadcast address could also come from that Internet interface.
+- **Fix:** discovery selects an up, broadcast-capable Wi-Fi or Ethernet adapter by its functional type, preferring the routed physical adapter and otherwise considering the remaining local adapters. Explicit interface overrides remain authoritative and ineligible overrides fail. Discovery caches the selected LAN's broadcast separately from the IP address returned for generic automatic/Nextendo queries. The VPN's gateway is never attached to a different LAN. Explicit LAN/LDN queries use the physical adapter; automatic/Nextendo reporting keeps its prior route semantics. This does not establish every game's behavior with a VPN, nor does it bypass VPN routing or local-network permission.
+- **Checks:** `make -C dm/host/tests net-discovery net-discovery-sanitize` includes the production selector under synthetic OS metadata: primary VPN, routed Ethernet, Wi-Fi, no default route, down interfaces, explicit overrides and no eligible local adapter. The original selector fails this fixture; the corrected selector passes normally and under ASan/UBSan. The host source also compiles for iPhoneOS arm64. Interface names are synthetic; no LAN is scanned. The selector follows [Apple TN3179's functional-type guidance](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+- **Found on:** synthetic native-LAN interface fixtures. The physical [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md#local-network-validation) session baseline is separate; no new physical VPN/game session is claimed.
+
 ### Native client TLS with scoped trust
 
 - **Symptom:** an online title can open a native TCP connection but `nn::ssl` always fails its context or handshake.

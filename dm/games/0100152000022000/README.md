@@ -79,6 +79,8 @@ The game builds Mii heads from the console's MiiModel system data, starting at b
 
 ## Found on this game
 
+- **Local-interface selection fixture:** [LAN discovery with a VPN default route](../../../docs/reference/services.md#local-discovery-follows-a-vpn-instead-of-the-lan) now selects a physical broadcast-capable adapter independently of automatic/Nextendo IP reporting. Synthetic OS/transport tests and sanitizers cover this mechanism; no new physical game/VPN session has been recorded.
+
 - [Game menus choose network services automatically](../../../docs/reference/services.md#game-menus-choose-network-services-automatically): Apple launchers enable independent online, LDN and LAN capabilities together; runtime fixtures and the signed iPhone Wi-Fi update/launch pass. The owner confirmed successful LAN and LDN play across native macOS and iOS ports and a physical Switch on 2026-10-31 (3.0.5). These user-reported hardware results are separate from automated fixtures; other games remain unqualified.
 
 - **Real provider social data and SDK layout verification:** [Nextendo friends and SDK application presence](../../../docs/reference/services.md#nextendo-friends-and-sdk-application-presence). Native service, ABI and synthetic transport checks are separate from gameplay qualification.
