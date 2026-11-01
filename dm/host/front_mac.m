@@ -1179,7 +1179,8 @@ void front_run(void (*guest)(void)) {
     front_prepare_network();
     @autoreleasepool { display_load(display_preferences()); }
     // A capability can be restricted for diagnostics, never granted by an env var.
-    if (getenv("DM_NET_DISABLE_MULTICAST") && !strcmp(getenv("DM_NET_DISABLE_MULTICAST"), "1"))
+    const char *multicast_disabled = getenv("DM_NET_DISABLE_MULTICAST");
+    if (multicast_disabled && !strcmp(multicast_disabled, "1"))
         dm_net_set_multicast_allowed(0);
     if (dm_net_nextendo_enabled()) {
         int routes = dm_nextendo_routes_initialize();

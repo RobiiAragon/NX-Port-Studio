@@ -8,6 +8,7 @@
 #include "../network_mac.inc"
 static int checks, failures;
 #define CHECK(c, message) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL: %s (line %d)\n", message, __LINE__); } } while (0)
+static int environment_equals(const char *name, const char *value) { const char *actual = getenv(name); return actual && !strcmp(actual, value); }
 int main(void) { @autoreleasepool {
     const char *inherited = getenv("DM_NETWORK");
     char *original = inherited ? strdup(inherited) : NULL;
@@ -25,21 +26,21 @@ int main(void) { @autoreleasepool {
     NSUserDefaults *reopened = [[NSUserDefaults alloc] initWithSuiteName:suite];
     CHECK([network_saved_mode(reopened) isEqualToString:@"lan"], "saved choice survives reopening preferences");
     unsetenv("DM_NETWORK"); network_load(preferences);
-    CHECK(!strcmp(getenv("DM_NETWORK"), "lan"), "saved LAN applies before guest startup");
+    CHECK(environment_equals("DM_NETWORK", "lan"), "saved LAN applies before guest startup");
     CHECK(!g_network_environment_override && [g_network_session_mode isEqualToString:@"lan"], "session records preference source");
     network_save_mode(preferences, @"offline");
-    CHECK(!strcmp(getenv("DM_NETWORK"), "lan") && [g_network_session_mode isEqualToString:@"lan"], "saving does not change running session");
+    CHECK(environment_equals("DM_NETWORK", "lan") && [g_network_session_mode isEqualToString:@"lan"], "saving does not change running session");
     unsetenv("DM_NETWORK"); network_load(preferences);
-    CHECK(!strcmp(getenv("DM_NETWORK"), "offline"), "saved offline applies on next launch");
+    CHECK(environment_equals("DM_NETWORK", "offline"), "saved offline applies on next launch");
     network_save_mode(preferences, @"lan");
     for (const char **value = (const char *[]){"offline", "custom", "", NULL}; *value; value++) {
         setenv("DM_NETWORK", *value, 1); network_load(preferences);
-        CHECK(!strcmp(getenv("DM_NETWORK"), *value), "explicit environment is preserved byte for byte");
+        CHECK(environment_equals("DM_NETWORK", *value), "explicit environment is preserved byte for byte");
         CHECK(g_network_environment_override && [g_network_session_mode isEqualToString:@"offline"], "unsupported environment remains offline and reports override");
     }
     network_save_mode(preferences, @"offline");
     setenv("DM_NETWORK", "lan", 1); network_load(preferences);
-    CHECK(!strcmp(getenv("DM_NETWORK"), "lan") && g_network_environment_override, "explicit LAN wins over saved offline");
+    CHECK(environment_equals("DM_NETWORK", "lan") && g_network_environment_override, "explicit LAN wins over saved offline");
     CHECK([g_network_session_mode isEqualToString:@"lan"], "explicit LAN is reflected in current-session label");
     for (NSString *mode in @[@"ldn", @"nextendo"]) {
         network_save_mode(preferences, mode); unsetenv("DM_NETWORK"); network_load(preferences);

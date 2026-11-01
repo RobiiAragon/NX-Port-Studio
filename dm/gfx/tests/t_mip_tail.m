@@ -23,7 +23,7 @@ static void shapes(void) {
         CHECK(mt!=nil,"Metal accepts the production texture descriptor");
         CHECK(mt.mipmapLevelCount==cases[i].want,"mip count uses spatial dimensions, excludes array layers and preserves smaller requests");
         CHECK(mt.arrayLength==cases[i].layers,"target layer count is preserved");
-        CHECK(!memcmp(&t.d,&before,sizeof before)&&!memcmp(&t.L,&layout,sizeof layout),"guest count and storage are unchanged");
+        CHECK(!memcmp(&t.d,&before,sizeof before)&&!memcmp(&t.L,&layout,sizeof layout),"guest count and storage are unchanged"); // NOLINT(bugprone-suspicious-memory-comparison): this regression checks exact unchanged bytes, including float and padding bits.
     }
 }
 static void upload(int gpu) {

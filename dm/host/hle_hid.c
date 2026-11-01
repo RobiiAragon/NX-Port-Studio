@@ -663,6 +663,7 @@ static int six_states(SixAxisState *out, int n, uint32_t h) {
     if (!six_connected(h)) { memset(out, 0, sizeof *out * (size_t)n); return 0; }
     int64_t samp = (int64_t)(guest_ns() / SIX_PERIOD_NS);
     int player = player_of(h >> 8 & 0xff), shakes = player == 0;
+    if (player < 0 || player >= DM_PLAYERS) { memset(out, 0, sizeof *out * (size_t)n); return 0; }
     uint32_t sources = player ? 1u << player : 1u | merged_players();
     motion_state live; int has_live = motion_live(player, &live);
     pthread_mutex_lock(&g_motion_lock);

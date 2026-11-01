@@ -528,7 +528,8 @@ uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size)
     if (!object || !out || (!buffer && size)) return DM_SSL_BAD_POINTER; *out = 0; if (size > INT_MAX) return DM_SSL_FAIL;
     DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL; [c.lock lock];
     uint32_t result = !c.established ? DM_SSL_FAIL : 0; uint64_t deadline = clock_ms() + c.timeout;
-    if (!result && c.pendingWrite && (size < c.pendingWrite.length || memcmp(buffer, c.pendingWrite.bytes, c.pendingWrite.length))) result = DM_SSL_FAIL;
+    NSData *pending = c.pendingWrite; NSUInteger pendingSize = pending.length;
+    if (!result && pendingSize && (size < pendingSize || !buffer || memcmp(buffer, pending.bytes, pendingSize))) result = DM_SSL_FAIL;
     while (!result && size) {
         if (atomic_load(&c->closed)) { result = DM_SSL_BAD_SOCKET; break; }
         // SSLWrite's processed count can describe its encrypted cache rather than the
@@ -585,7 +586,8 @@ uint32_t dm_ssl_get_alpn(void *object, unsigned *state, uint8_t *buffer, unsigne
     CFArrayRef protocols = NULL; OSStatus status = c->tls ? SSLCopyALPNProtocols(c->tls, &protocols) : noErr;
     if (!status && protocols && CFArrayGetCount(protocols)) {
         NSString *selected = (__bridge NSString *)CFArrayGetValueAtIndex(protocols, 0); NSData *data = [selected dataUsingEncoding:NSASCIIStringEncoding]; *size = (unsigned)data.length; *state = 1;
-        if (capacity < data.length) status = errSecParam; else if (data.length) memcpy(buffer, data.bytes, data.length);
+        NSUInteger length = data.length;
+        if (capacity < length || (length && !buffer)) status = errSecParam; else if (length) memcpy(buffer, data.bytes, length);
     }
     if (protocols) CFRelease(protocols); [c.lock unlock]; return status_result(c, status);
 } }

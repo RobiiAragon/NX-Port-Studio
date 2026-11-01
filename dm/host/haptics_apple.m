@@ -351,7 +351,7 @@ static void configure(int p, GCController *controller) {
         fprintf(stderr, "haptics: player %d uses the platform raw vibration adapter\n", p + 1);
         return;
     }
-    if (rightControllers[p]) {
+    if (controller && rightControllers[p]) {
         NSArray *pair = @[controller, rightControllers[p]];
         for (int side = 0; side < 2; side++) {
             GCController *part = pair[side]; GCDeviceHaptics *h = part.haptics;

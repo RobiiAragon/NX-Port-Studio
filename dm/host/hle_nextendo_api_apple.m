@@ -27,7 +27,8 @@ bool dm_nextendo_api_baas_namespace(const char *kind) { @autoreleasepool {
     close(fd);
     id object = [NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil];
     if (![object isKindOfClass:NSDictionary.class] || ![object[@"identity"] isKindOfClass:NSDictionary.class]) return false;
-    return [object[@"identity"][[NSString stringWithUTF8String:kind]] isEqual:@"baas"];
+    NSString *namespace = [NSString stringWithUTF8String:kind];
+    return namespace && [object[@"identity"][namespace] isEqual:@"baas"];
 } }
 
 uint32_t dm_nextendo_api_baas_id(uint64_t *output) { @autoreleasepool {
@@ -103,7 +104,8 @@ uint32_t dm_nextendo_api_request(const char *resource, const uint8_t *body, size
     if ((!presence && body_size) || (presence && !body_size)) return DM_ACCOUNT_FAIL;
     NSString *proof = dm_nextendo_api_bearer(); if (!proof.length) return DM_ACCOUNT_FAIL;
     NSString *authorization = [@"Bearer " stringByAppendingString:proof];
-    NSString *url = [@"https://nextendo.network/api/" stringByAppendingString:[NSString stringWithUTF8String:resource]];
+    NSString *resourceName = [NSString stringWithUTF8String:resource]; if (!resourceName) return DM_ACCOUNT_FAIL;
+    NSString *url = [@"https://nextendo.network/api/" stringByAppendingString:resourceName];
     NSString *method = presence ? @"POST" : @"GET";
 #ifdef DM_NEXTENDO_API_TEST
     if (test_transport) {
