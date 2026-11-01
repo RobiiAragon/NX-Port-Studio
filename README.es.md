@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC4:** corregí la selección del adaptador LAN, las consultas repetidas de descubrimiento y la configuración LDN sobre la base nxnative `d2a86b05ccce`. Revisé los resultados automáticos de host, gráficos e iOS; me falta repetir la validación de juegos. [Notas de versión](docs/releases/1.6.0-rc.4.md).
+> **1.6.0 RC5:** pasé el renderizado de Mac al proceso principal y medí 59,8–60 FPS en una muestra de Mario Kart 4.0.1 a pantalla completa. Agregué calendarios para Splatoon 2 y una biblioteca privada para importar Miis; me falta validar partidas online de Splatoon 2 y terminar el editor del firmware original. [Notas de versión](docs/releases/1.6.0-rc.5.md).
 
 ## Capturas de Studio
 

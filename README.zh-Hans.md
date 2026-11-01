@@ -6,7 +6,7 @@
 
 我的独立项目基于 [seedds/nxnative](https://github.com/seedds/nxnative)，我保留了原引擎作者署名、MIT 许可和版权声明。请参阅[致谢](CREDITS.md)与[许可证](LICENSE)。
 
-> **1.6.0 RC4：**我基于 nxnative `d2a86b05ccce`，修正了 LAN 网卡选择、重复发现请求和 LDN 初始化。我核对了主机、图形与 iOS 自动测试的通过结果；仍需逐款游戏重新验证。[版本说明](docs/releases/1.6.0-rc.4.md)。
+> **1.6.0 RC5：**我将 Mac 渲染移至应用主进程，并在 Mario Kart 4.0.1 的一次全屏采样中测得 59.8–60 FPS。我添加了 Splatoon 2 日历分发和私有 Mii 导入库；在线游戏验证和原版固件 Mii 编辑器仍未完成。[版本说明](docs/releases/1.6.0-rc.5.md)。
 
 ## 应用截图
 

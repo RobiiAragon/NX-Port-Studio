@@ -6,7 +6,7 @@
 
 Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour ce projet indépendant. Je préserve les crédits des auteurs du moteur et leurs avis de copyright : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **1.6.0 RC4 :** j’ai corrigé le choix de l’interface LAN, les requêtes de découverte répétées et l’initialisation LDN sur la base nxnative `d2a86b05ccce`. J’ai vérifié les résultats automatisés du moteur, des graphismes et d’iOS ; je dois encore revalider les jeux. [Notes de version](docs/releases/1.6.0-rc.4.md).
+> **1.6.0 RC5 :** j’ai déplacé le rendu Mac dans le processus principal et mesuré 59,8–60 FPS sur un échantillon de Mario Kart 4.0.1 en plein écran. J’ai ajouté les calendriers de Splatoon 2 et une bibliothèque privée d’importation de Mii ; je dois encore valider le jeu en ligne et terminer l’éditeur du firmware d’origine. [Notes de version](docs/releases/1.6.0-rc.5.md).
 
 ## Dans l'application
 

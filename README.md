@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC4:** I corrected LAN adapter selection, repeated discovery queries and LDN setup on the nxnative `d2a86b05ccce` baseline. I checked the automated host, graphics and iOS results; game-by-game qualification remains open. See [release notes](docs/releases/1.6.0-rc.4.md).
+> **1.6.0 RC5:** I moved Mac rendering into the main app process and measured 59.8–60 FPS in a Mario Kart 4.0.1 fullscreen sample. I added Splatoon 2 calendar delivery and a private Mii import library; online qualification and the original firmware editor remain unfinished. See [release notes](docs/releases/1.6.0-rc.5.md).
 
 ## Inside Studio
 
