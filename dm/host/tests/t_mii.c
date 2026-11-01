@@ -145,10 +145,18 @@ static void services(const char *dir) {
     h_mii_Fin(&object); CHECK(!h_mii_Avail(&object)); CHECK(h_mii_Avail(&other)); h_mii_Fin(&other); CHECK(!mii_sessions && !waits);
     CHECK(object==0 && other==0); // SDK destructor never receives a fake service pointer.
 }
+static int remove_fixture(const char *directory) {
+    pid_t child=fork();
+    if (child<0) return 0;
+    if (!child) { execl("/bin/rm","rm","-rf","--",directory,(char *)NULL); _exit(127); }
+    int status; pid_t waited;
+    do { waited=waitpid(child,&status,0); } while (waited<0 && errno==EINTR);
+    return waited==child && WIFEXITED(status) && WEXITSTATUS(status)==0;
+}
 int main(void) {
     char dir[]="/private/tmp/dm-mii-XXXXXX"; CHECK(mkdtemp(dir));
     formats(); persistence(dir); seeding(dir); services(dir);
     // Fixture files are private and small; remove exactly this newly-created tree.
-    char command[PATH_MAX]; snprintf(command,sizeof command,"/bin/rm -rf '%s'",dir); CHECK(!system(command));
+    CHECK(remove_fixture(dir));
     printf("Mii: %u checks passed (validated formats/CRC/IDs, atomic persistence, concurrent writers, native service source/count/lifetime).\n",checks); return 0;
 }
