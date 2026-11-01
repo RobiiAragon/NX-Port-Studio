@@ -70,7 +70,7 @@ def prepare(repository, title_id, version, catalog, destination):
     if result.returncode:
         retained = subprocess.run([str(helper(repository)), 'validate', title_id, version, str(destination)], capture_output=True)
         if retained.returncode: raise ValueError(result.stderr.strip() or 'Calendar preparation failed')
-        warnings.warn('Calendar refresh failed; retaining the previous validated snapshot for this exact game/version', RuntimeWarning)
+        warnings.warn('Calendar refresh failed; retaining the previous validated snapshot for this exact game/version', RuntimeWarning, stacklevel=2)
     return destination
 
 
@@ -88,13 +88,16 @@ def stage(repository, source, destination, title_id, version=None, allow_missing
     if title_id.lower() not in TITLES or version != '5.5.2': raise ValueError('Unsupported calendar recipe')
     validated = subprocess.run([str(helper(repository)), 'validate', title_id.lower(), version, str(source)], capture_output=True).returncode == 0
     if not validated and not allow_missing: raise ValueError('No complete validated calendar snapshot')
-    pointer = json.loads((source / 'current.json').read_bytes())['snapshot'] if validated else None
-    if validated and (not isinstance(pointer, str) or not re.fullmatch('[a-f0-9]{64}', pointer)): raise ValueError('Invalid calendar pointer')
+    pointer: str | None = None
+    if validated:
+        candidate = json.loads((source / 'current.json').read_bytes())['snapshot']
+        if not isinstance(candidate, str) or not re.fullmatch('[a-f0-9]{64}', candidate): raise ValueError('Invalid calendar pointer')
+        pointer = candidate
     private_directory(destination.parent)
     with tempfile.TemporaryDirectory(prefix='.bcat-stage-', dir=destination.parent) as temporary:
         temporary = Path(temporary) / 'data'; temporary.mkdir()
         shutil.copyfile(source / 'setup.json', temporary / 'setup.json')
-        if validated:
+        if pointer is not None:
             (temporary / 'snapshots').mkdir()
             # The verifier rejects symlinks and unexpected files in this snapshot.
             shutil.copytree(source / 'snapshots' / pointer, temporary / 'snapshots' / pointer, symlinks=True)

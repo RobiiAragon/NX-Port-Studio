@@ -30,6 +30,7 @@ QUIET = $(if $(findstring -fsanitize,$(SAN)),,2>/dev/null)
 # tests that use the game profile need GAME=<base game title ID> (there is no default game); GINC only expands when used, so tests without the profile build as before
 GINC = $(if $(strip $(GAME)),-I../gen/$(GAME) -I../../games/$(GAME),$(error GAME is not set: make GAME=<base game title ID>: $(shell python3 ../../games/game.py list | awk -F'\t' '{printf "%s (%s)  ", $$1, $$3}')))
 $(B)/t_fs $(B)/t_fs_case $(B)/t_fs_commit_list $(B)/t_fs_commit_list_tsan: ../romfs_image.h
+$(B)/t_fs $(B)/t_fs_directory $(B)/t_fs_case $(B)/t_fs_commit_list $(B)/t_fs_commit_list_tsan $(B)/t_save_sync $(B)/t_bcat_fs: bcat_absent.h
 GAME_H = ../gen/$(GAME)/game_profile.h
 .PHONY: mii mii-sanitize
 $(B)/t_mii: t_mii.c ../hle_mii.c ../hle_mii_database.c ../mii_database.h $(GAME_H) | $(B)
