@@ -203,6 +203,9 @@ check_t_vbuf: t_vbuf
 t_geometry: t_geometry.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_geometry.m $(MTL_T_SRC) $(FW)
 check_t_geometry: RUN_ENV = MTL_DEBUG_LAYER=1
+t_geometry_no_emit: t_geometry_no_emit.m t_geometry.m $(MTL_T_DEP)
+	clang $(CFLAGS) -fobjc-arc -o $@ t_geometry_no_emit.m $(MTL_T_SRC) $(FW)
+check_t_geometry_no_emit: RUN_ENV = MTL_DEBUG_LAYER=1
 t_feedback: t_feedback.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_feedback.m $(MTL_T_SRC) $(FW)
 t_rast_discard: t_rast_discard.m $(MTL_T_DEP)

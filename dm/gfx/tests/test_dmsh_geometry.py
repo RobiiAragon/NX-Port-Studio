@@ -188,6 +188,43 @@ class GeometryOutputLayout(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get('DMSH_TEST_XLATE'), 'set DMSH_TEST_XLATE to the offline translator')
 class PassthroughCompiler(unittest.TestCase):
+    def test_no_emission_differs_from_emit_with_default_position(self):
+        # Original synthetic Maxwell instructions, not a game shader. Even
+        # with no declared outputs, EmitVertex writes the default position
+        # record; only EXIT-only geometry lacks the vertex-output binding.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_dmsh_reflect import REFLECT
+        root = Path(__file__).resolve().parents[3]
+        table = (root / 'dm/third_party/ryujinx/src/Ryujinx.Graphics.Shader/Decoders/InstTable.cs').read_text()
+        def opcode(name, emitter):
+            pattern = re.search(r'Add\("([01x]{64})", InstName\.' + name + r'\s*,\s*InstEmit\.' + emitter, table)
+            assert pattern is not None
+            return int(pattern[1].replace('x', '0'), 2) | (7 << 16)
+        exit_instruction = opcode('Exit', 'Exit') | 15
+        emit_instruction = opcode('Out', 'OutI') | (1 << 39) | (255 << 8) | 255
+        with tempfile.TemporaryDirectory(prefix='geometry_emission_') as directory:
+            work = Path(directory); jobs = []
+            for emits in (False, True):
+                header = bytearray(0x50)
+                struct.pack_into('<5I', header, 0, (4 << 10) | (3 << 5) | 1, 0, 1 << 24, 1 << 24, 1)
+                instructions = [0, emit_instruction, exit_instruction] if emits else [0, exit_instruction]
+                key = 'emits' if emits else 'empty'
+                code = work / (key + '.bin'); code.write_bytes(header + struct.pack(f'<{len(instructions)}Q', *instructions))
+                jobs.append(dict(key=key, stage='gs', code=str(code), geometry_topology=0,
+                                 tex={}, img={}, attr={}, fout={}, debug=True, reduced=True))
+            job_file = work / 'jobs.json'; job_file.write_text(json.dumps(jobs))
+            result = subprocess.run([os.environ['DMSH_TEST_XLATE'], str(job_file), directory], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for emits, job in zip((False, True), jobs):
+                key = job['key']; spv = work / (key + '.spv'); dmsh_geometry.flatten_sets(spv)
+                result = subprocess.run([str(root / 'dm/gfx/tools/spirv_cross_bin/spirv-cross'), '--msl', '--msl-version', '20300',
+                                         '--msl-argument-buffers', '--msl-texture-buffer-native', str(spv)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                res = json.loads((work / (key + '.res.json')).read_text())
+                bindings = REFLECT(key, 'gs', result.stdout, res)
+                self.assertGreater(res['geometry_stride'], 0)
+                self.assertEqual(any(b['kind'] == 'geometry' and b['reg'] == 1 for b in bindings), emits)
+
     def test_passthrough_emits_positions_and_generic_attributes(self):
         sys.path.insert(0, str(Path(__file__).resolve().parent))   # a sibling module: the CI runs each test file from the repository root
         from test_dmsh_reflect import REFLECT
