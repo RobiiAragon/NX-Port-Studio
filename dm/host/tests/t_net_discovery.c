@@ -75,10 +75,17 @@ static void traffic(void) {
     dm_net_pollfd ready={guest,1,0}; CHECK(dm_net_poll(&ready,1,1000)==1);
     address peer; n=sizeof peer; CHECK(dm_net_recv(guest,bytes,sizeof bytes,0,&peer,&n)==6 && !memcmp(bytes,"answer",6));
     CHECK(peer.ip==htonl(INADDR_LOOPBACK) && peer.port==htons(port));
-    // Directed subnet broadcast enters exactly the same unicast route.
-    destination.ip=htonl(0x7f000003);
+    // Repeating the exact completed one-peer query must send again even while
+    // the paused worker has not yet retired the first job.
     CHECK(dm_net_send(guest,query,sizeof query,0,&destination,sizeof destination)==sizeof query);
     CHECK(read_packet(native,bytes,sizeof bytes,&from)==sizeof query && !memcmp(bytes,query,sizeof query));
+    // Directed subnet broadcast enters exactly the same unicast route.
+    destination.ip=htonl(0x7f000003);
+    // A distinct nonce tests this route independently: an identical outstanding
+    // query may legitimately be coalesced with the first subnet sweep.
+    unsigned char directed[sizeof query]; memcpy(directed,query,sizeof directed); directed[sizeof directed-1]^=1;
+    CHECK(dm_net_send(guest,directed,sizeof directed,0,&destination,sizeof destination)==sizeof directed);
+    CHECK(read_packet(native,bytes,sizeof bytes,&from)==sizeof directed && !memcmp(bytes,directed,sizeof directed));
     // A broken optional override cannot interfere with ordinary peer traffic.
     setenv("DM_NET_DISCOVERY_PEER","invalid",1); destination.ip=htonl(INADDR_LOOPBACK);
     CHECK(dm_net_send(guest,"ordinary",8,0,&destination,sizeof destination)==8);
@@ -212,7 +219,7 @@ static void supplemental_queries(void) {
     CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(!atomic_load(&hybrid_native)&&atomic_load(&hybrid_unicast)==1&&!dm_net_test_discovery_pending());CHECK(!dm_net_close(guest));unsetenv("DM_NET_DISCOVERY_PEER");
     // No extra discovery is inferred in the online mode.
     guest=dm_net_socket(2,2,0);CHECK(guest>=0);setenv("DM_NETWORK","nextendo",1);hybrid_reset();
-    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast));CHECK(!dm_net_close(guest));setenv("DM_NETWORK","lan",1);
+    CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia);CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast));CHECK(!dm_net_close(guest));setenv("DM_NETWORK","auto",1);
     // A /16 cannot be swept, but its accepted native broadcast still succeeds.
     a=adapter(0xffff0000);dm_net_test_set_interface(&a);guest=dm_net_socket(2,2,0);CHECK(guest>=0);hybrid_reset();dm_net_set_errno(777);
     CHECK(dm_net_send(guest,pia,sizeof pia,0,&destination,sizeof destination)==sizeof pia&&dm_net_errno()==777);CHECK(atomic_load(&hybrid_native)==1&&!atomic_load(&hybrid_unicast));CHECK(!dm_net_close(guest));
@@ -230,7 +237,7 @@ static void supplemental_queries(void) {
     dm_net_test_set_discovery_sender(NULL);dm_net_set_multicast_allowed(0);close(native);close(phone);
 }
 int main(void) {
-    setenv("DM_NETWORK","lan",1); unsetenv("DM_NET_DISCOVERY_PEER"); dm_net_set_multicast_allowed(0);
+    setenv("DM_NETWORK","auto",1); unsetenv("DM_NET_DISCOVERY_PEER"); dm_net_set_multicast_allowed(0);
     ranges(); traffic(); unreachable_neighbor(); supplemental_queries(); bounds_and_lifetime(); dm_net_test_set_interface(NULL);
     printf("automatic discovery: %u checks passed (real UDP reply, ranges, bounded queue, close/reuse).\n",checks); return 0;
 }

@@ -5,6 +5,7 @@
 #include <TargetConditionals.h>
 #include <CommonCrypto/CommonDigest.h>
 #include "nextendo_account.h"
+#import "nextendo_api_apple.h"
 #include "net_socket.h"
 #include <stdatomic.h>
 #include <pthread.h>
@@ -27,7 +28,7 @@ static NSTimeInterval cachedExpiry;
 static SecKeyRef signingKey;
 static NSData *publicSigningKey;
 static pthread_once_t signingOnce = PTHREAD_ONCE_INIT;
-static BOOL enabled(void) { return dm_net_mode() == DM_NET_NEXTENDO; }
+static BOOL enabled(void) { return dm_net_nextendo_enabled(); }
 
 @interface DmNextendoCredential : NSObject
 @property(nonatomic) uint64_t pid;
@@ -104,8 +105,19 @@ void dm_nextendo_set_game_version(const char *version) {
     pthread_mutex_lock(&accountLock); explicitVersion = value; cachedToken = nil; cachedVersion = nil; pthread_mutex_unlock(&accountLock);
 }
 uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool { if (!out) return DM_ACCOUNT_FAIL; *out = credential() != nil; return 0; } }
-uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool { if (!out) return DM_ACCOUNT_FAIL; *out = 0; DmNextendoCredential *c = credential(); if (!c) return DM_ACCOUNT_FAIL; *out = c.pid; return 0; } }
+uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
+    if (!out) return DM_ACCOUNT_FAIL; *out = 0; DmNextendoCredential *c = credential(); if (!c) return DM_ACCOUNT_FAIL;
+    if (dm_nextendo_api_baas_namespace("account")) return dm_nextendo_api_baas_id(out);
+    *out = c.pid; return 0;
+} }
 uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return credential() ? 0 : DM_ACCOUNT_FAIL; } }
+// Host-only API authorization. Never serialized into a game bundle or HLE output.
+NSString *dm_nextendo_api_bearer(void) { return credential().token; }
+NSData *dm_nextendo_api_identity(void) {
+    DmNextendoCredential *c = credential(); if (!c) return nil;
+    NSData *bytes = [c.token dataUsingEncoding:NSUTF8StringEncoding]; uint8_t digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(bytes.bytes, (CC_LONG)bytes.length, digest); return [NSData dataWithBytes:digest length:sizeof digest];
+}
 
 // Token construction is deliberately separate from credential validation. The nx2
 // proof is never substituted with a local signature or an OAuth access token.
@@ -185,8 +197,8 @@ uint32_t dm_nextendo_async_attach(void *object, uint64_t lifetime, uint64_t bind
     if (state.lifetime != lifetime || state.destroyed || !state.started || state.events.count >= 64) { [state.lock unlock]; return DM_ACCOUNT_FAIL; }
     if (![state.events containsObject:@(binding)]) [state.events addObject:@(binding)]; BOOL done = state.done; [state.lock unlock]; if (done) hle_signal_system_event_binding(binding); return 0;
 } }
-uint32_t dm_nextendo_async_ensure(void *object) { @autoreleasepool {
-    if (!object || !enabled()) return DM_ACCOUNT_FAIL;
+uint32_t dm_nextendo_async_execute(void *object, dm_nextendo_async_operation operation, const void *context) { @autoreleasepool {
+    if (!object || !operation || !enabled()) return DM_ACCOUNT_FAIL;
     DmNextendoAsync *state = request(object); if (!state) { dm_nextendo_async_construct(object); state = request(object); } if (!state) return DM_ACCOUNT_FAIL;
     [state.lock lock]; BOOL replacing = state.started && state.done && !state.destroyed; [state.lock unlock];
     if (replacing) {
@@ -195,10 +207,14 @@ uint32_t dm_nextendo_async_ensure(void *object) { @autoreleasepool {
         fresh.lifetime = ++nextLifetime; requests[request_key(object)] = fresh; pthread_mutex_unlock(&requestsLock); destroy_request(state); state = fresh;
     }
     [state.lock lock]; if (state.started || state.destroyed) { [state.lock unlock]; return DM_ACCOUNT_FAIL; } state.started = YES; uint64_t generation = ++state.generation; [state.lock unlock];
-    DmNextendoCredential *c = credential(); uint32_t result = c && id_token(c) ? 0 : DM_ACCOUNT_FAIL;
+    uint32_t result = operation(context);
     [state.lock lock]; NSArray *events = nil; if (!state.destroyed && state.generation == generation) { state.result = result; state.done = YES; events = state.events.copy; } [state.lock unlock]; finish_events(events);
     return enabled() ? 0 : DM_ACCOUNT_FAIL;
 } }
+static uint32_t ensure_token_operation(const void *context) {
+    (void)context; DmNextendoCredential *c = credential(); return c && id_token(c) ? 0 : DM_ACCOUNT_FAIL;
+}
+uint32_t dm_nextendo_async_ensure(void *object) { return dm_nextendo_async_execute(object, ensure_token_operation, NULL); }
 uint32_t dm_nextendo_async_cancel(void *object) { @autoreleasepool {
     DmNextendoAsync *state = request(object); if (!state) return DM_ACCOUNT_FAIL; [state.lock lock]; if (!state.started || state.destroyed) { [state.lock unlock]; return DM_ACCOUNT_FAIL; }
     NSArray *events = nil; if (!state.done) { state.generation++; state.done = YES; state.result = DM_ACCOUNT_FAIL; events = state.events.copy; } [state.lock unlock]; finish_events(events); return 0;

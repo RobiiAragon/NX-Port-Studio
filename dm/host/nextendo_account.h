@@ -24,6 +24,10 @@ void dm_nextendo_async_destroy(void *object);
 void *dm_nextendo_async_move(void *object, void *source);
 void dm_nextendo_async_swap(void *object, void *other);
 uint32_t dm_nextendo_async_ensure(void *object);
+// Execute an actual service operation with the same cancellation, move and
+// completion-event lifetimes as account requests. The callback may block.
+typedef uint32_t (*dm_nextendo_async_operation)(const void *context);
+uint32_t dm_nextendo_async_execute(void *object, dm_nextendo_async_operation operation, const void *context);
 uint32_t dm_nextendo_async_cancel(void *object);
 uint32_t dm_nextendo_async_done(void *object, uint8_t *out);
 uint32_t dm_nextendo_async_result(void *object);

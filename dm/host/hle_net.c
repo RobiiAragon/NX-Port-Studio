@@ -1,5 +1,6 @@
 // Networking is offline by default. DM_NETWORK=lan on macOS explicitly enables the
-// IPv4 TCP/UDP transport in hle_net_backend.c; online identity, friends and TLS remain unavailable.
+// IPv4 TCP/UDP transport in hle_net_backend.c; explicit Nextendo services have
+// separate account, social and scoped-TLS adapters.
 #include "hle.h"
 #include "net_socket.h"
 #include <stdatomic.h>
@@ -7,23 +8,28 @@ void dm_guest_sleep_ns(int64_t ns);
 
 HLE_FORCE("_ZN2nn6socket10InitializeERKNS0_6ConfigE", "connects to the bsd socket service; offline, creates no session (cut)", Result, h_socket_Initialize, const void *cfg) { (void)cfg; return RES_OK; }
 HLE_FORCE("_ZN2nn4nifm10InitializeEv", "connects to the nifm network management service; offline (cut)", Result, h_nifm_Initialize, void) { return RES_OK; }
-// The request is asynchronous on Horizon: SubmitNetworkRequest only hands it to the nifm service, and IsNetworkRequestOnHold stays true until the service has evaluated it, so a request
-// never settles within microseconds of its submission. Pikmin 4 (Unreal Engine 4.26, main+0x203f3b0) relies on that: it starts its BCAT thread, whose Run (main+0x203f510) sets its status
+// The request is asynchronous on Horizon: SubmitNetworkRequest only hands it to the nifm service, and IsNetworkRequestOnHold stays true until the service has evaluated it, so a query
+// right after the submission finds it on hold. Pikmin 4 (Unreal Engine 4.26, main+0x203f3b0) relies on that: it starts its BCAT thread, whose Run (main+0x203f510) sets its status
 // to 2, submits, waits while on hold and sets 6 (done, offline), and only then stores status 1 itself; answered at once, a thread that ran first finished before that store, the 1 stayed,
-// and the boot state machine (main+0x1f2f764, state 7) waited for the status forever at the black loading screen (about 1 boot in 6, 3 in 4 with four at once). The request now stays
-// on hold for NIFM_HOLD_NS after it is submitted, then settles as unavailable
-enum { NIFM_HOLD_NS = 50000000 };
-static _Atomic uint64_t g_nifm_submit;   // when the pending request was submitted (now_ns), 0 = none
-HLE_FORCE("_ZN2nn4nifm20SubmitNetworkRequestEv", "offline: the request is on hold for 50 ms, then settles as unavailable", void, h_nifm_Submit, void) { atomic_store(&g_nifm_submit, now_ns() | 1); }
-HLE_FORCE("_ZN2nn4nifm20CancelNetworkRequestEv", "offline: drops the pending request", void, h_nifm_Cancel, void) { atomic_store(&g_nifm_submit, 0); }
-HLE_FORCE("_ZN2nn4nifm22IsNetworkRequestOnHoldEv", "offline: on hold until 50 ms after the submission", int, h_nifm_OnHold, void) {
-    uint64_t t = atomic_load(&g_nifm_submit), now = now_ns();
-    return t && (now < t || now - t < NIFM_HOLD_NS); // now_ns may return the same tick; the nonzero marker must not underflow.
+// and the boot state machine (main+0x1f2f764, state 7) waited for the status forever at the black loading screen (about 1 boot in 6, 3 in 4 with four at once). Pikmin 4 sleeps 10 ms
+// between its queries, so a request that is on hold at the first query is all it needs.
+// Each query is an IPC to the nifm service on Horizon, which evaluates the request as it serves them (offline, a rejection), so the request is on hold for the first query after
+// the submission and settled at the next. The hold used to be 50 ms of host time: Hades' NetworkPollThread (main+0x27aaa0) polls with SleepThread(0) and cancels after 2,000
+// queries, 2,000 IPCs on the Switch but 0.1 ms here, so it cancelled and submitted again forever (1.17 billion queries a minute, a host core). Its stamp, now_ns() | 1, also read
+// as settled at once whenever the next query came within the same 42 ns clock tick (30% of Hades' submissions)
+static _Atomic int g_nifm_pending;
+static _Atomic int g_nifm_hold;   // queries the pending request still answers "on hold" (0 = none, or settled)
+HLE_FORCE("_ZN2nn4nifm20SubmitNetworkRequestEv", "offline: the request is on hold for the first query, then settles as unavailable", void, h_nifm_Submit, void) { atomic_store(&g_nifm_pending, 1); atomic_store(&g_nifm_hold, 1); }
+HLE_FORCE("_ZN2nn4nifm20CancelNetworkRequestEv", "offline: drops the pending request", void, h_nifm_Cancel, void) { atomic_store(&g_nifm_pending, 0); atomic_store(&g_nifm_hold, 0); }
+HLE_FORCE("_ZN2nn4nifm22IsNetworkRequestOnHoldEv", "offline: on hold for the first query after the submission", int, h_nifm_OnHold, void) {
+    int h = atomic_load(&g_nifm_hold);
+    while (h > 0 && !atomic_compare_exchange_weak(&g_nifm_hold, &h, h - 1)) {}
+    return h > 0;
 }
-int dm_nifm_available(void) { return dm_net_enabled() && atomic_load(&g_nifm_submit) && !h_nifm_OnHold() && !dm_net_ipconfig(NULL, NULL, NULL, NULL, NULL); }
-void dm_nifm_submit_wait(void) { if (dm_net_enabled()) { h_nifm_Submit(); dm_guest_sleep_ns(NIFM_HOLD_NS); while (h_nifm_OnHold()) dm_guest_sleep_ns(1000000); } }
+int dm_nifm_available(void) { return dm_net_enabled() && atomic_load(&g_nifm_pending) && !atomic_load(&g_nifm_hold) && !dm_net_ipconfig(NULL, NULL, NULL, NULL, NULL); }
+void dm_nifm_submit_wait(void) { if (dm_net_enabled()) { h_nifm_Submit(); while (h_nifm_OnHold()) dm_guest_sleep_ns(0); } }
 HLE_FORCE("_ZN2nn4nifm18IsNetworkAvailableEv", "offline by default; explicit LAN reports the actual IPv4 request state", int, h_nifm_Available, void) { return dm_nifm_available(); }
-HLE_FORCE("_ZN2nn4nifm31HandleNetworkRequestErrorResultEv", "network request result without a system UI", Result, h_nifm_HandleErr, void) { return dm_nifm_available() ? RES_OK : RES_FAIL; }
+HLE_FORCE("_ZN2nn4nifm31HandleNetworkRequestErrorResultEv", "whether the network request was resolved without a system UI", unsigned, h_nifm_HandleErr, void) { return dm_nifm_available() != 0; }
 HLE_FORCE("_ZN2nn4nifm26HandleNetworkRequestResultEv", "SDK 4 network request result without a system UI", Result, h_nifm_HandleResult, void) { return dm_nifm_available() ? RES_OK : RES_FAIL; }
 HLE_FORCE("_ZN2nn4nifm26GetCurrentPrimaryIpAddressEPNS_6socket6InAddrE", "offline by default; explicit LAN returns the actual interface IPv4 address", Result, h_nifm_GetIp, uint32_t *a) { if (!a) return RES_FAIL; *a = 0; return dm_net_ipconfig(a, NULL, NULL, NULL, NULL) ? RES_FAIL : RES_OK; }
 HLE_FORCE("_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE", "offline: no proxy setting", Result, h_nifm_GetProxy, void *p) { (void)p; return RES_FAIL; }

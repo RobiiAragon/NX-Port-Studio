@@ -13,7 +13,34 @@
 #include <time.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <assert.h>
 
+pthread_key_t g_keygate;
+extern uint64_t dm_gate_top[1024];
+extern const unsigned char dm_gate_stubs[];
+void dm_gate_nested(uint64_t sp) { (void)sp; abort(); }
+static _Atomic unsigned test_gate_next;
+static void *test_gate_stack(void) {
+    unsigned slot = atomic_fetch_add(&test_gate_next, 1); assert(slot < 1024);
+    void *stack = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    assert(stack != MAP_FAILED);
+    dm_gate_top[slot] = (uintptr_t)stack + (1 << 20);
+    pthread_setspecific(g_keygate, dm_gate_stubs + 16 * slot);
+    return stack;
+}
+__attribute__((constructor)) static void test_gate_key(void) { pthread_key_create(&g_keygate, NULL); (void)test_gate_stack(); }
+struct test_start { void *(*fn)(void *); void *arg; };
+static void *test_thread_start(void *p) {
+    struct test_start start = *(struct test_start *)p; free(p);
+    void *stack = test_gate_stack(), *value = start.fn(start.arg);
+    munmap(stack, 1 << 20); return value;
+}
+static int test_pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*fn)(void *), void *arg) {
+    struct test_start *start = malloc(sizeof *start); assert(start); *start = (struct test_start){fn,arg};
+    int status = pthread_create(thread, attr, test_thread_start, start); if (status) free(start); return status;
+}
+#define pthread_create test_pthread_create
 static int checks, failures;
 static _Atomic int waits, wait_balance;
 static _Atomic int contexts_entered, contexts_left, invalid_contexts;
@@ -21,13 +48,15 @@ static __thread int context_depth;
 static volatile sig_atomic_t sigpipe_count;
 static int resolver_abi;
 static void sigpipe(int signal) { (void)signal; sigpipe_count++; }
-#define CHECK(c, message) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL line %d: %s (guest errno=%d host errno=%d)\n", __LINE__, message, dm_net_errno(), errno); } } while (0)
+#define CHECK(c, message) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL line %d: %s (guest errno=%d host errno=%d)\n", __LINE__, message, dm_net_errno(), errno); abort(); } } while (0)
 void dm_guest_host_wait_begin(void) { atomic_fetch_add(&waits, 1); atomic_fetch_add(&wait_balance, 1); }
 void dm_guest_host_wait_end(void) { atomic_fetch_sub(&wait_balance, 1); }
 uint64_t now_ns(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000 + t.tv_nsec; }
 void dm_guest_sleep_ns(int64_t ns) { struct timespec t = {ns / 1000000000, ns % 1000000000}; dm_guest_host_wait_begin(); nanosleep(&t, NULL); dm_guest_host_wait_end(); }
 void hle_bind_system_event(void *p, int clear) { (void)p; (void)clear; }
 void hle_signal_system_event(void *p) { (void)p; }
+void dm_applet_enter(const char *name) { (void)name; }
+void dm_applet_leave(void) {}
 void thr_svc_enter(uint64_t *registers, uint64_t pc) { if (!registers || !pc || context_depth) atomic_fetch_add(&invalid_contexts, 1); context_depth++; atomic_fetch_add(&contexts_entered, 1); }
 void thr_svc_leave(void) { if (context_depth != 1) atomic_fetch_add(&invalid_contexts, 1); context_depth--; atomic_fetch_add(&contexts_left, 1); }
 int dm_guest_as_contains(uintptr_t address) { (void)address; return 0; }
@@ -95,9 +124,9 @@ static void offline(void) {
     if (child > 0) { dm_guest_sleep_ns(150000000); int status = 0; CHECK(waitpid(child, &status, WNOHANG) == 0, "infinite offline poll never returns a fabricated100ms timeout"); kill(child, SIGTERM); CHECK(waitpid(child, &status, 0) == child && WIFSIGNALED(status), "external process shutdown ends the infinite wait"); }
 }
 static void nifm(void) {
-    setenv("DM_NETWORK", "lan", 1); setenv("DM_NETWORK_INTERFACE", "lo0", 1);
+    setenv("DM_NETWORK", "auto", 1); setenv("DM_NETWORK_INTERFACE", "lo0", 1);
     GET(fn_vvoid, "_ZN2nn4nifm27SubmitNetworkRequestAndWaitEv")();
-    CHECK(dm_nifm_available(), "NIFM LAN request completes with real up interface");
+    CHECK(dm_nifm_available(), "NIFM automatic request completes with real up interface");
     uint32_t ip = 0, mask = 0, router = 1, dns1 = 0, dns2 = 0;
     CHECK(dm_net_ipconfig(&ip, &mask, &router, &dns1, &dns2) == 0 && ip == htonl(0x7f000001) && mask == htonl(0xff000000) && router == 0, "actual loopback IP/mask and no invented router");
     setenv("DM_NETWORK_INTERFACE", "no-such-interface", 1);
@@ -120,8 +149,9 @@ static void udp(void) {
     address from = {0}; n = sizeof from; CHECK(RECV(guest, bytes, sizeof bytes, 2, &from, &n) == 4 && from.port == peer.port, "peek returns source without consuming");
     CHECK(RECV(guest, bytes, sizeof bytes, 0, NULL, NULL) == 4 && !memcmp(bytes, "host", 4), "guest consumes native datagram");
     CHECK(FCNTL(guest, 4, 0x800) == 0 && FCNTL(guest, 3, 0) == 0x800, "nonblock flag translated from Horizon0x800");
+    CHECK(FCNTL(guest, 4, 0x802) == 0 && FCNTL(guest, 3, 0) == 0x800, "NEX read/write access bits do not invalidate F_SETFL");
     CHECK(RECV(guest, bytes, sizeof bytes, 0, NULL, NULL) < 0 && dm_net_errno() == 11, "nonblock recv reports Horizon EAGAIN11");
-    CHECK(FCNTL(guest, 4, 0) == 0 && FCNTL(guest, 3, 0) == 0, "blocking mode restored without changing native ownership");
+    CHECK(FCNTL(guest, 4, 2) == 0 && FCNTL(guest, 3, 0) == 0, "read/write bits alone restore blocking mode without changing native ownership");
     CHECK(RECV(guest, bytes, sizeof bytes, 0x80, NULL, NULL) < 0 && dm_net_errno() == 11, "per-call DONTWAIT0x80 translated");
     uint32_t timeout = 25; CHECK(SETOPT(guest, 0xffff, 0x1006, &timeout, 4) == 0, "receive timeout milliseconds accepted");
     uint64_t start = now_ns(); CHECK(RECV(guest, bytes, sizeof bytes, 0, NULL, NULL) < 0 && dm_net_errno() == 11 && now_ns() - start >= 20000000, "blocking recv timeout waits and reports EAGAIN");
@@ -130,7 +160,8 @@ static void udp(void) {
     int one = 1, value = 0; n = 4; CHECK(SETOPT(guest, 0xffff, 0x20, &one, 4) == 0 && GETOPT(guest, 0xffff, 0x20, &value, &n) == 0 && value, "broadcast option is real");
     uint64_t read[16] = {0}, write[16] = {0}; read[guest >> 6] |= 1ull << (guest & 63); write[guest >> 6] |= 1ull << (guest & 63); int64_t tv[2] = {0, 0};
     CHECK(SELECT(guest + 1, read, write, NULL, tv) == 1 && !read[guest >> 6] && write[guest >> 6], "select fd_set layout and output bits translated");
-    CHECK(CLOSE(guest) == 0 && CLOSE(guest) < 0 && dm_net_errno() == 9, "close owns guest socket only, second close EBADF");
+    int first_close = CLOSE(guest), repeated_close = CLOSE(guest);
+    CHECK(first_close == 0 && repeated_close < 0 && dm_net_errno() == 9, "close owns guest socket only, second close EBADF");
     close(native);
 }
 typedef struct { int socket; int result; int error; } blocked_call;
@@ -158,7 +189,7 @@ static void tcp(void) {
     close(native); CHECK(RECV(guest, bytes, 4, 0, NULL, NULL) == 0, "TCP orderly EOF");
     CHECK(GET(int (*)(int,int), "_ZN2nn6socket8ShutdownEii")(guest, 1) == 0, "guest shutdown translates write direction");
     CHECK(SEND(guest, "closed", 6, 0, NULL, 0) < 0 && dm_net_errno() == 32 && !sigpipe_count, "send after shutdown reports EPIPE without raising host SIGPIPE"); CLOSE(guest);
-    guest = SOCKET(2, 1, 6); CHECK(FCNTL(guest, 4, 0x800) == 0, "TCP set nonblock");
+    guest = SOCKET(2, 1, 6); CHECK(FCNTL(guest, 4, 0x802) == 0, "TCP set nonblock with actual NEX F_SETFL flags");
     int connected = GET(fn_bind, "_ZN2nn6socket7ConnectEiPK8sockaddrj")(guest, &destination, 16);
     CHECK(connected == 0 || (connected < 0 && dm_net_errno() == 115), "nonblocking connect reports Horizon EINPROGRESS115");
     dm_net_pollfd pending = {guest, 4, 0}; CHECK(POLL(&pending, 1, 1000) == 1 && (pending.revents & 4), "nonblocking connect becomes writable");
@@ -166,7 +197,7 @@ static void tcp(void) {
     native = accept(server, NULL, NULL); CHECK(native >= 0, "native accepts nonblocking client"); close(native); CLOSE(guest); close(server);
     int listener = SOCKET(2, 1, 6); address local = addr(htonl(0x7f000001), 0); n = 16;
     CHECK(BIND(listener, &local, 16) == 0 && NAME(listener, &local, &n) == 0 && GET(int (*)(int,int), "_ZN2nn6socket6ListenEii")(listener, 1) == 0, "guest TCP listener");
-    int client = socket(AF_INET, SOCK_STREAM, 0); a.sin_port = local.port; CHECK(connect(client, (struct sockaddr *)&a, sizeof a) == 0, "native connects guest listener");
+    int client = socket(AF_INET, SOCK_STREAM, 0); CHECK(client >= 0, "native client socket"); a.sin_port = local.port; CHECK(connect(client, (struct sockaddr *)&a, sizeof a) == 0, "native connects guest listener");
     n = 16; int accepted = GET(fn_name, "_ZN2nn6socket6AcceptEiP8sockaddrPj")(listener, &remote, &n); CHECK(accepted >= 0 && accepted != listener && remote.ip == htonl(0x7f000001), "guest accept allocates a separate owned descriptor");
     close(client); CLOSE(accepted); CLOSE(listener);
 }
@@ -198,7 +229,8 @@ static void errors_and_resolver(void) {
     resolver_abi = 2;
     CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("127.0.0.1", "1", &hints, &out) == 4 && !out, "C resolver refuses ambiguous exported ABIs"); resolver_abi = 0;
     CHECK(dm_net_getaddrinfo("127.0.0.1", "1", &(dm_net_addrinfo){.family = 28}, &out) == 5 && !out, "unsupported resolver family returns EAI_FAMILY");
-    CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") != NULL, "legacy hostent resolved without SDK service access");
+    CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("127.0.0.1") != NULL, "automatic mode resolves a real numeric LAN peer through legacy hostent");
+    CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") == NULL, "automatic mode never falls back to unconfigured service DNS");
 }
 static void broadcast(void) {
     unsetenv("DM_NETWORK_INTERFACE"); uint32_t ip, mask;

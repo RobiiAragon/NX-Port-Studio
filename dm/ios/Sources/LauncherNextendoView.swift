@@ -28,7 +28,7 @@ struct MobileNextendoSetupView: View {
                         TextField("Registered application ID", text: $model.clientID)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                             .disabled(model.accountBusy)
-                        Text("Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here.")
+                        Text("Use the public application ID registered in Nextendo. Sign-in returns to this device automatically.")
                             .font(.footnote).foregroundStyle(.secondary)
                         Link("Open developer portal", destination: URL(string: "https://nextendo.network/developers.html#/espace")!)
                     }
@@ -108,21 +108,18 @@ struct MobileNextendoSetupView: View {
     private var serviceSection: some View {
         Section {
             Label(text(model.routesState == 0 ? "Connection profile present" : model.routesState == -1 ? "Service check pending" : "Game-service integration pending"), systemImage: "network")
-            Text("The game’s native service connection remains under integration. Current checks have certificate and authentication blockers; TLS verification stays enabled.")
+            Text("Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay.")
                 .font(.footnote).foregroundStyle(.secondary)
-            if model.routesState != 0 && model.routesState != -1 {
-                Text("Account setup works on this iPhone. Compatible game services must be supplied by the app publisher and Nextendo; no IP address or file changes are required from you.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
+            if model.isPreparingServices { HStack { ProgressView(); Text("Preparing game services…") } }
+            if model.servicePreparationFailed { notice(text("Service preparation failed. Check your connection and try again.")) }
+            Button("Prepare game services") { Task { await model.prepareServices(); checkServices() } }
+                .disabled(model.isPreparingServices)
             Label(text(model.hasCertificateStore ? "Certificate resources included" : "Certificate resources not included"), systemImage: "doc.text.magnifyingglass")
             Text("Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification.")
                 .font(.footnote).foregroundStyle(.secondary)
             Button("Check game requirements") { checkServices(); Task { await model.load() } }
             Link("Nextendo service information", destination: URL(string: "https://nextendo.network")!)
-            Button("Choose Offline mode") { launcher.networkMode = .offline; model.cancel(); dismiss() }
-                .disabled(launcher.fromFile.contains("DM_NETWORK"))
-            Button("Choose LAN mode") { launcher.networkMode = .lan; model.cancel(); dismiss() }
-                .disabled(launcher.fromFile.contains("DM_NETWORK"))
+            Button("Back to game settings") { model.cancel(); dismiss() }
         } header: { Text("Game service") } footer: {
             Text("A saved credential, an accepted version and a connection profile are requirements. A successful native online match is a separate result.")
         }

@@ -3,7 +3,7 @@
 #include "../nvn/nvn_mtl.m"
 void *front_metal_layer(void) { return NULL; }
 module_t *module_of(const void *p) { (void)p; return NULL; }
-module_t g_mod[MAX_MOD]; int g_nmod;
+module_t *g_mod; int g_nmod;
 void svc_thread_dump(void) {}
 uint64_t now_ns(void) { return bp_now(); }
 static int checks, failed;
@@ -23,7 +23,7 @@ static void shapes(void) {
         CHECK(mt!=nil,"Metal accepts the production texture descriptor");
         CHECK(mt.mipmapLevelCount==cases[i].want,"mip count uses spatial dimensions, excludes array layers and preserves smaller requests");
         CHECK(mt.arrayLength==cases[i].layers,"target layer count is preserved");
-        CHECK(!memcmp(&t.d,&before,sizeof before)&&!memcmp(&t.L,&layout,sizeof layout),"guest count and storage are unchanged");
+        CHECK(!memcmp(&t.d,&before,sizeof before)&&!memcmp(&t.L,&layout,sizeof layout),"guest count and storage are unchanged"); // NOLINT(bugprone-suspicious-memory-comparison): this regression checks exact unchanged bytes, including float and padding bits.
     }
 }
 static void upload(int gpu) {
@@ -40,7 +40,7 @@ static void upload(int gpu) {
         CHECK(!nvn_swizzle(&t.d,level,layer,pixels,w*4,mem),"seed each guest level independently");
     }
     g_nvn_deswz_gpu=gpu;
-    id<MTLTexture> mt=pkg_upload(&t,NULL,nil); CHECK(mt.mipmapLevelCount==4,"upload materializes four physical levels");
+    id<MTLTexture> mt=pkg_upload(&t,NULL,nil,0); CHECK(mt.mipmapLevelCount==4,"upload materializes four physical levels");
     id<MTLBuffer> out=[g_dev newBufferWithLength:4096 options:MTLResourceStorageModeShared];
     id<MTLCommandBuffer> cb=q_cb(); id<MTLBlitCommandEncoder> enc=[cb blitCommandEncoder];
     for(unsigned layer=0;layer<2;layer++)for(unsigned level=0;level<4;level++) {

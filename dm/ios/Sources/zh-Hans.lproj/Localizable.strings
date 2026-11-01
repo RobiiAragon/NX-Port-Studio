@@ -79,7 +79,7 @@
 "Refresh signed catalog" = "刷新已签名的目录";
 "Refresh the signed catalog to check this game." = "刷新已签名的目录以检查此游戏。";
 "Refreshing signed catalog…" = "正在刷新已签名的目录…";
-"Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here." = "为使用 PKCE 的公开客户端应用注册回调 nxnative-nextendo://callback。切勿在此输入客户端密钥或账户令牌。";
+"Use the public application ID registered in Nextendo. Sign-in returns to this device automatically." = "使用在 Nextendo 注册的应用公开 ID。登录后会自动返回此设备。";
 "Registered application ID" = "已注册的应用 ID";
 "Render scale" = "渲染比例";
 "Reset to tested defaults" = "恢复经过测试的默认设置";
@@ -126,3 +126,25 @@
 "Certificate resources included" = "已包含证书资源";
 "Certificate resources not included" = "未包含证书资源";
 "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification." = "证书资源由应用发布者打包提供。包含这些资源不会绕过 Apple 的 TLS 验证。";
+
+// Display modes and per-build qualification.
+"Display" = "显示";
+"Use full display resolution" = "使用完整显示分辨率";
+"Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged." = "保留画面比例和黑边。内部渲染分辨率不变。";
+"Expand game view" = "扩展游戏视野";
+"Needs a verified camera and HUD mod for this exact game version." = "需要针对该游戏版本验证过的镜头和HUD模组。";
+"120 FPS" = "120 FPS";
+"Needs a verified game-timing mod and a display capable of at least 120 Hz." = "需要验证过的游戏时序模组和至少120Hz的显示器。";
+"No camera and HUD mod has been verified for this game build on iPhone." = "此游戏版本的镜头和HUD模组尚未在iPhone上验证。";
+"No 120 FPS game-timing mod has been verified for this game build." = "此游戏版本的120FPS时序模组尚未验证。";
+"The connected display does not report 120 Hz support." = "连接的显示器未报告120Hz支持。";
+
+// Automatic public Nextendo service preparation.
+"Prepare game services" = "准备游戏服务";
+"Preparing game services…" = "正在准备游戏服务…";
+"Service preparation failed. Check your connection and try again." = "无法准备服务。请检查网络连接后重试。";
+"Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay." = "系统会自动准备此游戏的服务配置。证书验证保持启用；连接配置并不代表在线游戏已经通过验证。";
+"Automatic connection" = "自动连接";
+"Disable network services" = "停用网络服务";
+"Back to game settings" = "返回游戏设置";
+"Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them." = "在游戏内选择在线、本地无线或 LAN。Nextendo、LDN 和 LAN 可同时使用，切换时无需重启。";

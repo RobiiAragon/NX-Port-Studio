@@ -1,0 +1,38 @@
+# Suika Game 2.3.6: startup profile; see README.md for verified scope.
+# ---- Identity ----
+title_id	0100800015926000
+program_id	0100800015926000
+
+# ---- App ----
+name	Suika Game
+ipa	SuikaGame.ipa
+app_category	public.app-category.games
+
+# ---- Versions ----
+build	v1	2.3.6	main=81c331284d06b71f0000000000000000	subsdk0=220d36873cbb6d5dc39a9a37127ea80d	sdk=a5cb2175cad2ca2afdd4c13577dbd079
+package	v1
+shader_versions	v1
+
+# ---- Files ----
+# every module main imports from
+modules	main subsdk0 sdk
+romfs_marker	Data/resources.assets.resS
+zip_store	.assets:.bundle:.dat:.ress:.metallib
+
+# ---- Memory ----
+# 5 GiB guest address reservation; SDK node-area cut and calibrated 1 GiB application pool (see README.md).
+mem_reserve	0x140000000
+mem_alias	0x118000000
+mem_stack	0x10000000
+# the NPDM declares 16 MB of system resource
+sys_resource	0x1000000
+
+# ---- Shader split ----
+shader_groups	/Data/=data
+shader_note	Suika Game shaders (provisional profile)
+
+
+# ---- Heap check on the Mac ----
+# no heap set and the alias region used up to +4.26 GB of 4.38 GB in the heap check: a 1 GB pool, so StandardAllocator's region leaves the game room for its own
+app_pool	0x40000000
+

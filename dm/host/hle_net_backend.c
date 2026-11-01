@@ -4,6 +4,7 @@
 // Modern nn::socket::AddrInfo has addr before canonname; SDK 4's plain addrinfo has
 // the opposite order (verified in MK8 3.0.5's DNSSerializer at sdk+0xafa94). Never cast guest structs to Darwin structs.
 #include "net_socket.h"
+#include "nsd.h"
 #include "discovery_protocol.h"
 #include <TargetConditionals.h>
 #include <arpa/inet.h>
@@ -50,7 +51,7 @@ void dm_net_set_dns_provider(dm_net_dns_provider provider) { atomic_store(&g_dns
 static _Atomic uint32_t g_net_broadcast;
 static _Atomic int g_net_broadcast_known;
 typedef struct { uint32_t address, mask, gateway; unsigned index, flags; int local_link; } net_interface;
-static int net_interface_get(net_interface *out);
+static int net_interface_get(net_interface *out, int local_only);
 #ifdef DM_NET_TEST
 static net_interface g_test_interface;
 static int g_test_interface_set;
@@ -68,6 +69,7 @@ dm_net_mode_t dm_net_mode(void) {
     if (s && !strcmp(s, "lan")) return DM_NET_LAN;
     if (s && !strcmp(s, "ldn")) return DM_NET_LDN;
     if (s && !strcmp(s, "nextendo")) return DM_NET_NEXTENDO;
+    if (s && !strcmp(s, "auto")) return DM_NET_AUTO;
     return DM_NET_OFFLINE;
 #else
     return DM_NET_OFFLINE;
@@ -78,7 +80,7 @@ void dm_net_set_multicast_allowed(int allowed) { atomic_store(&g_net_multicast_a
 int dm_net_multicast_allowed(void) { return atomic_load(&g_net_multicast_allowed); }
 static int net_discovery_unicast_plan(dm_net_discovery_plan *p) {
     net_interface adapter;
-    if (net_interface_get(&adapter) || !adapter.index || !(adapter.flags & IFF_UP) ||
+    if (net_interface_get(&adapter, 1) || !adapter.index || !(adapter.flags & IFF_UP) ||
         !(adapter.flags & IFF_BROADCAST) || (adapter.flags & (IFF_LOOPBACK | IFF_POINTOPOINT))) {
         dm_net_set_errno(99); return -1;
     }
@@ -130,7 +132,7 @@ static int net_is_discovery(uint32_t address, int type) {
 int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan) {
     if(!plan)return 0;memset(plan,0,sizeof *plan);
     const char *peer=getenv("DM_NET_DISCOVERY_PEER");dm_net_mode_t mode=dm_net_mode();
-    if(!dm_net_multicast_allowed()||(peer&&*peer)||(mode!=DM_NET_LAN&&mode!=DM_NET_LDN)||!net_is_discovery(destination,2))return 0;
+    if(!dm_net_multicast_allowed()||(peer&&*peer)||(mode!=DM_NET_LAN&&mode!=DM_NET_LDN&&mode!=DM_NET_AUTO)||!net_is_discovery(destination,2))return 0;
     int saved=t_net_errno,result=!net_discovery_unicast_plan(plan);t_net_errno=saved;return result;
 }
 int dm_net_errno(void) { return t_net_errno; }
@@ -312,10 +314,13 @@ static int net_fcntl_impl(int guest, int cmd, int flags) {
     close(r.fd);
     if (cmd == 3) return r.nonblock ? NX_NONBLOCK : 0;
     if (cmd != 4) return net_error(95);
-    if ((unsigned)flags & ~NX_NONBLOCK) return net_error(22);
+    // F_SETFL does not change the descriptor's access mode. NEX supplies
+    // O_RDWR | O_NONBLOCK (0x802); reject unsupported status flags, not the
+    // read/write bits carried from a caller's file-status flags.
+    if ((unsigned)flags & ~(NX_NONBLOCK | 3u)) return net_error(22);
     pthread_mutex_lock(&g_net_lock);
     int live = g_sockets[guest].used && g_sockets[guest].generation == r.generation;
-    if (live) g_sockets[guest].nonblock = !!flags;
+    if (live) g_sockets[guest].nonblock = !!(flags & NX_NONBLOCK);
     pthread_mutex_unlock(&g_net_lock); return live ? 0 : net_error(9);
 }
 static int net_message_flags(int flags, int sending) {
@@ -569,11 +574,18 @@ static int net_getaddrinfo(const char *host, const char *service, const void *hi
     if (input.flags & 1) h.ai_flags |= AI_PASSIVE; if (input.flags & 2) h.ai_flags |= AI_CANONNAME;
     if (input.flags & 4) h.ai_flags |= AI_NUMERICHOST; if (input.flags & 8) h.ai_flags |= AI_NUMERICSERV;
     if (input.flags & 1024) h.ai_flags |= AI_ADDRCONFIG;
-    char redirected[INET_ADDRSTRLEN] = {0}; const char *lookup = host;
-    if (dm_net_mode() == DM_NET_NEXTENDO && host) {
+    char redirected[INET_ADDRSTRLEN] = {0}, expanded[DM_NSD_FQDN_CAPACITY]; const char *lookup = host;
+    if (dm_net_nextendo_enabled() && host) {
         struct in_addr literal; int numeric = inet_pton(AF_INET, host, &literal) == 1;
         if (!numeric && (input.flags & 4)) return 8;
-        dm_net_dns_provider provider = atomic_load(&g_dns_provider); int policy = provider ? provider(host, redirected, sizeof redirected) : numeric ? 0 : -1;
+        // Horizon's default socket resolver performs NSD expansion too. NEX
+        // passes NNCS templates directly, without an explicit nsd::Resolve.
+        // Expand before route admission; this grants no additional DNS scope.
+        if (!numeric && strchr(host, '%')) {
+            if (dm_nsd_resolve(expanded, host)) return 8;
+            lookup = expanded;
+        }
+        dm_net_dns_provider provider = atomic_load(&g_dns_provider); int policy = provider ? provider(lookup, redirected, sizeof redirected) : numeric ? 0 : -1;
         if (policy < 0 || policy > 1 || (policy > 0 && (!memchr(redirected, 0, sizeof redirected) || inet_pton(AF_INET, redirected, &literal) != 1))) return 8;
         if (policy > 0) lookup = redirected;
     }
@@ -657,7 +669,7 @@ static unsigned net_route(unsigned wanted, uint32_t *gateway) {
     (void)wanted; (void)gateway; return 0;
 #endif
 }
-static int net_interface_get(net_interface *out) {
+static int net_interface_get(net_interface *out, int local_only) {
     memset(out, 0, sizeof *out);
 #ifdef DM_NET_TEST
     if (g_test_interface_set) { *out = g_test_interface; return out->address ? 0 : -1; }
@@ -667,23 +679,42 @@ static int net_interface_get(net_interface *out) {
     unsigned primary = net_route(wanted, &out->gateway); if (wanted) primary = wanted;
     struct ifaddrs *list = NULL; if (getifaddrs(&list)) return -1;
     int control = socket(AF_INET, SOCK_DGRAM, 0);
+    // A default Internet route can belong to a VPN. Discovery still needs a
+    // broadcast-capable physical LAN adapter, preferably the primary one when
+    // it is eligible. Keep the generic/online interface query independent.
+    for (int local_pass = 0; local_pass < (local_only && primary && !wanted ? 2 : 1) && !out->address; ++local_pass) {
+#if TARGET_OS_IOS
+    // getifaddrs ordering is not the preferred route on iOS. Automatic mode
+    // must not select a cellular/VPN entry before an available LAN adapter,
+    // then reject that same entry when preparing local discovery. Preserve a
+    // non-local fallback for online use when no eligible LAN is available.
+    dm_net_mode_t mode = dm_net_mode();
+    for (int pass = 0; pass < (mode == DM_NET_AUTO ? 2 : 1) && !out->address; pass++) {
+#endif
     for (struct ifaddrs *p = list; p; p = p->ifa_next) {
         if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET || !(p->ifa_flags & IFF_UP) || (!wanted && (p->ifa_flags & IFF_LOOPBACK))) continue;
         unsigned index = if_nametoindex(p->ifa_name);
-        if (!index || (primary && index != primary)) continue;
+        if (!index || (primary && index != primary && (!local_only || local_pass == 0))) continue;
         struct ifreq request = {0}; strlcpy(request.ifr_name, p->ifa_name, sizeof request.ifr_name);
         unsigned type = control >= 0 && !ioctl(control, SIOCGIFFUNCTIONALTYPE, &request) ?
                         request.ifr_ifru.ifru_functional_type : IFRTYPE_FUNCTIONAL_UNKNOWN;
         int local_link = type == IFRTYPE_FUNCTIONAL_WIFI_INFRA || type == IFRTYPE_FUNCTIONAL_WIRED;
+        if (local_only && (!local_link || !(p->ifa_flags & IFF_BROADCAST) || (p->ifa_flags & IFF_POINTOPOINT))) continue;
 #if TARGET_OS_IOS
         // TN3179: BSD names such as en0 are not API. Ask the functional type.
-        if ((dm_net_mode() == DM_NET_LAN || dm_net_mode() == DM_NET_LDN) &&
+        if ((mode == DM_NET_LAN || mode == DM_NET_LDN || (mode == DM_NET_AUTO && pass == 0)) &&
             (!local_link || !(p->ifa_flags & IFF_BROADCAST) || (p->ifa_flags & IFF_POINTOPOINT))) continue;
 #endif
         out->address = ((struct sockaddr_in *)p->ifa_addr)->sin_addr.s_addr;
         if (p->ifa_netmask && p->ifa_netmask->sa_family == AF_INET)
             out->mask = ((struct sockaddr_in *)p->ifa_netmask)->sin_addr.s_addr;
-        out->index = index; out->flags = p->ifa_flags; out->local_link = local_link; break;
+        out->index = index; out->flags = p->ifa_flags; out->local_link = local_link;
+        if (primary && index != primary) out->gateway = 0; // The VPN's gateway does not belong to this LAN.
+        break;
+    }
+#if TARGET_OS_IOS
+    }
+#endif
     }
     if (control >= 0) close(control);
     freeifaddrs(list);
@@ -694,9 +725,14 @@ int dm_net_ipconfig(uint32_t *address, uint32_t *mask, uint32_t *gateway, uint32
     for (int i = 0; i < 5; i++) if (outputs[i]) *outputs[i] = 0;
     if (!dm_net_enabled()) return -1;
     net_interface adapter;
-    if (net_interface_get(&adapter)) return -1;
+    dm_net_mode_t mode = dm_net_mode();
+    if (net_interface_get(&adapter, mode == DM_NET_LAN || mode == DM_NET_LDN)) return -1;
     values[0] = adapter.address; values[1] = adapter.mask; values[2] = adapter.gateway;
-    atomic_store(&g_net_broadcast, adapter.mask && (adapter.flags & IFF_BROADCAST) ? adapter.address | ~adapter.mask : 0);
+    net_interface local = adapter;
+    if (!adapter.local_link || !(adapter.flags & IFF_BROADCAST) || (adapter.flags & IFF_POINTOPOINT)) {
+        if (net_interface_get(&local, 1)) memset(&local, 0, sizeof local);
+    }
+    atomic_store(&g_net_broadcast, local.mask && (local.flags & IFF_BROADCAST) ? local.address | ~local.mask : 0);
     atomic_store(&g_net_broadcast_known, 1);
     if (!values[0]) return -1;
     // DNS is advisory for LAN and never invented. macOS publishes the default resolver here;

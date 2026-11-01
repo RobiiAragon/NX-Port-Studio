@@ -520,6 +520,27 @@ final class DeviceServiceTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0, result.output)
     }
 
+    func testSigningReportsMissingXcodeAccountBeforeTheConsequentMissingProfile() {
+        let output = """
+        /tmp/Game.xcodeproj: error: No Accounts: Add a new account in Accounts settings.
+        /tmp/Game.xcodeproj: error: No profiles for 'org.example.game' were found.
+        ** BUILD FAILED **
+        """
+        guard case .missingXcodeAccount = DeviceService.signingError(output: output) else {
+            return XCTFail("Xcode's missing-account diagnostic must explain how to restore provisioning.")
+        }
+        for unrelated in [
+            "error: No profiles for 'org.example.game' were found.",
+            "error: The signing certificate has expired.",
+            "warning: No Accounts: Add a new account in Accounts settings."
+        ] {
+            guard case .commandFailed(let detail) = DeviceService.signingError(output: unrelated) else {
+                return XCTFail("A different signing failure must retain its diagnostic.")
+            }
+            XCTAssertEqual(detail, unrelated)
+        }
+    }
+
     func testInstallationReportsFreeAccountAppLimitInsteadOfGenericIntegrityFailure() {
         let output = """
         ERROR: The application could not be installed because its integrity could not be verified.

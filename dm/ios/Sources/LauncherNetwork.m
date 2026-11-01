@@ -6,7 +6,7 @@
 #include "nextendo_routes.h"
 
 uint32_t dm_launcher_nextendo_preflight(void) {
-    if (dm_net_mode() != DM_NET_NEXTENDO) return DM_NEXTENDO_ROUTES_MISSING;
+    if (!dm_net_nextendo_enabled()) return DM_NEXTENDO_ROUTES_MISSING;
     int routes = dm_nextendo_routes_initialize();
     if (routes == DM_NEXTENDO_ROUTES_READY && !dm_nextendo_routes_count()) routes = DM_NEXTENDO_ROUTES_MISSING;
     uint8_t credential = 0;

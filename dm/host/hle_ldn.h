@@ -59,4 +59,7 @@ uint32_t dm_ldn_advertise(dm_ldn_context *context, const void *data, size_t size
 uint32_t dm_ldn_policy(dm_ldn_context *context, int policy);
 uint32_t dm_ldn_filter_add(dm_ldn_context *context, const uint8_t mac[6]);
 uint32_t dm_ldn_filter_clear(dm_ldn_context *context);
+// Retain the requested console-radio controller policy. Apple IP transport has
+// no equivalent Switch LDN/Bluetooth radio budget to enforce on native devices.
+uint32_t dm_ldn_controller_restriction(dm_ldn_context *context, int restriction);
 uint32_t dm_ldn_reject(dm_ldn_context *context, uint32_t ip);

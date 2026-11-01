@@ -1,8 +1,10 @@
-// Public SecureTransport supplies the stream engine; SecTrust always validates the hostname
-// and chain. Custom anchors are confined to an explicit guest context or an approved host policy.
+// Public SecureTransport supplies the stream engine. SecTrust validates public PKI;
+// an explicit private service CA additionally supports strict, SAN-only OpenSSL
+// verification, with Apple's basic chain checks retained. No permissive callback.
 // SecureTransport supports TLS through 1.2. TLS-1.3-only requests fail rather than silently downgrade.
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
+#include "nextendo_x509.h"
 #import <Security/SecureTransport.h>
 #include "ssl_backend.h"
 #include "net_socket.h"
@@ -49,6 +51,7 @@ void dm_guest_host_wait_end(void);
 @property(nonatomic) NSString *hostname;
 @property(nonatomic) NSString *peerName;
 @property(nonatomic) NSData *policyAnchor;
+@property(nonatomic) BOOL policyPinned;
 @property(nonatomic) unsigned ioMode, verifyOptions, sessionCache, timeout;
 @property(nonatomic) BOOL certificateChain, enableAlpn, handshaking, established, verified, rejected;
 @property(atomic) BOOL doNotClose;
@@ -74,10 +77,11 @@ static pthread_mutex_t registry = PTHREAD_MUTEX_INITIALIZER;
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 static uint64_t nextIdentifier;
 static _Atomic(dm_ssl_peer_policy_provider) peerProvider;
+static _Atomic(dm_ssl_peer_policy_provider) pinProvider;
 static _Atomic(bool (*)(const char *)) peerGuard;
 static void initialize_registry(void) { contexts = [NSMutableDictionary new]; connections = [NSMutableDictionary new]; }
 static NSValue *key(void *object) { return [NSValue valueWithPointer:object]; }
-static BOOL enabled(void) { return dm_net_mode() == DM_NET_NEXTENDO; }
+static BOOL enabled(void) { return dm_net_nextendo_enabled(); }
 static uint64_t clock_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000; }
 static DmTlsContext *get_context(void *object) {
     pthread_once(&once, initialize_registry); pthread_mutex_lock(&registry);
@@ -124,6 +128,7 @@ static OSStatus transport_read(SSLConnectionRef c, void *p, size_t *n) { return 
 static OSStatus transport_write(SSLConnectionRef c, const void *p, size_t *n) { return transport_io(c, (void *)p, n, false); }
 
 void dm_ssl_set_peer_policy(dm_ssl_peer_policy_provider provider) { atomic_store(&peerProvider, provider); }
+void dm_ssl_set_peer_pin_policy(dm_ssl_peer_policy_provider provider) { atomic_store(&pinProvider, provider); }
 void dm_ssl_set_peer_guard(bool (*guard)(const char *)) { atomic_store(&peerGuard, guard); }
 uint32_t dm_ssl_initialize(unsigned concurrency) { return concurrency >= 1 && concurrency <= 4 ? 0 : DM_SSL_FAIL; }
 uint32_t dm_ssl_finalize(void) { @autoreleasepool {
@@ -147,7 +152,12 @@ uint32_t dm_ssl_context_destroy(void *object) { @autoreleasepool {
     for (DmTlsConnection *connection in connections.allValues) if (connection.context == c) { pthread_mutex_unlock(&registry); return DM_SSL_FAIL; }
     [contexts removeObjectForKey:key(object)]; pthread_mutex_unlock(&registry); return 0;
 } }
-uint32_t dm_ssl_context_id(void *object, uint64_t *out) { @autoreleasepool { if (!out || !object) return DM_SSL_BAD_POINTER; DmTlsContext *c = get_context(object); if (!c) return DM_SSL_FAIL; *out = c.identifier; return 0; } }
+uint32_t dm_ssl_context_id(void *object, uint64_t *out) { @autoreleasepool {
+    if (!out || !object) return DM_SSL_BAD_POINTER;
+    // The SDK getter also succeeds before Create and after Destroy, with ID 0.
+    // This query must not allocate a context or imply a usable TLS session.
+    DmTlsContext *c = get_context(object); *out = c ? c.identifier : 0; return 0;
+} }
 static NSArray *parse_certificates(const void *bytes, unsigned size, int format) {
     if (!bytes || !size || size > 4 * 1024 * 1024 || (format != 1 && format != 2)) return nil;
     NSMutableArray *certificates = [NSMutableArray new];
@@ -264,7 +274,11 @@ uint32_t dm_ssl_connection_destroy(void *object) { @autoreleasepool {
     if (atomic_load(&c->descriptor) >= 0 && !c.doNotClose && c.guestDescriptor >= 0) dm_net_close_generation(c.guestDescriptor, c.socketGeneration);
     return 0; // A running operation retains c and its owned dup until it observes closed at its next readiness boundary.
 } }
-uint32_t dm_ssl_connection_id(void *object, uint64_t *out, bool context) { @autoreleasepool { if (!object || !out) return DM_SSL_BAD_POINTER; DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL; *out = context ? c.context.identifier : c.identifier; return 0; } }
+uint32_t dm_ssl_connection_id(void *object, uint64_t *out, bool context) { @autoreleasepool {
+    if (!object || !out) return DM_SSL_BAD_POINTER;
+    DmTlsConnection *c = get_connection(object);
+    *out = c ? (context ? c.context.identifier : c.identifier) : 0; return 0;
+} }
 uint32_t dm_ssl_set_socket(void *object, int guest) { @autoreleasepool {
     if (!object) return DM_SSL_BAD_POINTER; DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL;
     [c.lock lock]; if (atomic_load(&c->closed) || atomic_load(&c->descriptor) >= 0) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
@@ -283,16 +297,19 @@ uint32_t dm_ssl_set_hostname(void *object, const char *name, unsigned size) { @a
     bool (*guard)(const char *) = atomic_load(&peerGuard); if (guard && !guard(host.UTF8String)) return DM_SSL_FAIL;
     DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL;
     [c.lock lock]; if (c.handshaking) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
-    NSString *peer = host; NSData *anchor = nil; dm_ssl_peer_policy_provider provider = atomic_load(&peerProvider);
-    if (provider) {
+    NSString *peer = host; NSData *anchor = nil; BOOL pinned = NO;
+    dm_ssl_peer_policy_provider provider = atomic_load(&peerProvider), pin = atomic_load(&pinProvider);
+    if (provider || pin) {
         char mapped[256] = {0}; const uint8_t *der = NULL; size_t length = 0;
-        if (provider(host.UTF8String, mapped, sizeof mapped, &der, &length)) {
+        pinned = pin && pin(host.UTF8String, mapped, sizeof mapped, &der, &length);
+        if (pinned || (provider && provider(host.UTF8String, mapped, sizeof mapped, &der, &length))) {
             if (!memchr(mapped, 0, sizeof mapped) || !mapped[0] || (!der && length) || length > 4 * 1024 * 1024) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
+            if (pinned && (!length || !dm_nextendo_x509_available())) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
             peer = [NSString stringWithUTF8String:mapped]; if (!peer) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
             if (length) { anchor = [NSData dataWithBytes:der length:length]; if (!parse_certificates(anchor.bytes, (unsigned)anchor.length, 2)) { [c.lock unlock]; return error(c, DM_SSL_FAIL); } }
         }
     }
-    c.hostname = host; c.peerName = peer; c.policyAnchor = anchor; [c.lock unlock]; return 0;
+    c.hostname = host; c.peerName = peer; c.policyAnchor = anchor; c.policyPinned = pinned; [c.lock unlock]; return 0;
 } }
 uint32_t dm_ssl_get_hostname(void *object, char *out, unsigned *size, unsigned capacity) { @autoreleasepool {
     if (!object || !out || !size) return DM_SSL_BAD_POINTER; DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL;
@@ -356,6 +373,46 @@ static uint32_t prepare(DmTlsConnection *c) {
 }
 static BOOL verify_peer(DmTlsConnection *c) {
     SecTrustRef trust = NULL; if (SSLCopyPeerTrust(c->tls, &trust) || !trust) return NO;
+    if (c.policyPinned) {
+        SecCertificateRef leaf = SecTrustGetCertificateAtIndex(trust, 0);
+        NSData *der = leaf ? CFBridgingRelease(SecCertificateCopyData(leaf)) : nil;
+        BOOL valid = der.length && dm_nextendo_x509_verify_pin(c.peerName.UTF8String,
+            c.policyAnchor.bytes, c.policyAnchor.length, der.bytes, der.length);
+        CFRelease(trust); return valid;
+    }
+    if (c.policyAnchor && dm_nextendo_x509_available()) {
+        // The route's explicit private CA is the sole authority for this path.
+        // BasicX509 retains Apple's chain/time/trust checks; OpenSSL adds strict
+        // server purpose, SAN-only hostname, constraints and strength checks.
+        // This does not adopt a root sent by the server or alter system trust.
+        NSArray *scoped = parse_certificates(c.policyAnchor.bytes, (unsigned)c.policyAnchor.length, 2);
+        SecPolicyRef basic = SecPolicyCreateBasicX509();
+        OSStatus result = basic ? SecTrustSetPolicies(trust, basic) : errSecParam;
+        if (basic) CFRelease(basic);
+        if (!result) result = SecTrustSetNetworkFetchAllowed(trust, false);
+        if (!result && scoped.count == 1) result = SecTrustSetAnchorCertificates(trust, (__bridge CFArrayRef)scoped);
+        else if (!result) result = errSecParam;
+        if (!result) result = SecTrustSetAnchorCertificatesOnly(trust, true);
+        CFErrorRef failure = NULL;
+        dm_guest_host_wait_begin();
+        BOOL valid = !result && SecTrustEvaluateWithError(trust, &failure);
+        if (valid) {
+            CFIndex count = SecTrustGetCertificateCount(trust);
+            NSMutableArray<NSData *> *data = [NSMutableArray new];
+            const uint8_t *chain[16]; size_t sizes[16];
+            if (count < 1 || count > 16) valid = NO;
+            for (CFIndex i = 0; valid && i < count; i++) {
+                SecCertificateRef certificate = SecTrustGetCertificateAtIndex(trust, i);
+                NSData *der = certificate ? CFBridgingRelease(SecCertificateCopyData(certificate)) : nil;
+                if (!der.length || der.length > 65536) { valid = NO; break; }
+                [data addObject:der]; chain[i] = der.bytes; sizes[i] = der.length;
+            }
+            if (valid) valid = dm_nextendo_x509_verify(c.peerName.UTF8String, c.policyAnchor.bytes,
+                c.policyAnchor.length, chain, sizes, (size_t)count);
+        }
+        dm_guest_host_wait_end();
+        if (failure) CFRelease(failure); CFRelease(trust); return valid;
+    }
     SecPolicyRef policy = SecPolicyCreateSSL(true, (__bridge CFStringRef)c.peerName);
     OSStatus status = policy ? SecTrustSetPolicies(trust, policy) : errSecParam; if (policy) CFRelease(policy);
     if (!status) status = SecTrustSetNetworkFetchAllowed(trust, false); // Nonblocking TLS must not start hidden AIA/OCSP network work.
@@ -415,10 +472,19 @@ static uint32_t copy_certificates(DmTlsConnection *c, unsigned *size, unsigned *
     return 0;
 }
 uint32_t dm_ssl_handshake_certs(void *object, unsigned *size, unsigned *count, void *buffer, unsigned capacity, bool registered_buffer) { @autoreleasepool {
-    if (!object || !size || !count) return DM_SSL_BAD_POINTER; *size = *count = 0;
+    if (!object) return DM_SSL_BAD_POINTER;
+    unsigned ignored_size = 0, ignored_count = 0;
+    if (!size) size = &ignored_size;
+    if (!count) count = &ignored_count;
+    *size = *count = 0;
     DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL;
     [c.lock lock]; uint32_t result = handshake_locked(c);
-    if (!result) result = copy_certificates(c, size, count, registered_buffer ? c.certificateBuffer : buffer, registered_buffer ? c.certificateCapacity : capacity);
+    void *output = registered_buffer ? c.certificateBuffer : buffer;
+    unsigned available = registered_buffer ? c.certificateCapacity : capacity;
+    // The SDK overload delegates to ordinary DoHandshake when either the
+    // certificate buffer or its capacity is zero. Export is optional; peer
+    // verification in handshake_locked remains mandatory in both branches.
+    if (!result && output && available) result = copy_certificates(c, size, count, output, available);
     [c.lock unlock]; return error(c, result);
 } }
 uint32_t dm_ssl_set_cert_buffer(void *object, void *buffer, unsigned capacity) { @autoreleasepool {
@@ -462,7 +528,8 @@ uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size)
     if (!object || !out || (!buffer && size)) return DM_SSL_BAD_POINTER; *out = 0; if (size > INT_MAX) return DM_SSL_FAIL;
     DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL; [c.lock lock];
     uint32_t result = !c.established ? DM_SSL_FAIL : 0; uint64_t deadline = clock_ms() + c.timeout;
-    if (!result && c.pendingWrite && (size < c.pendingWrite.length || memcmp(buffer, c.pendingWrite.bytes, c.pendingWrite.length))) result = DM_SSL_FAIL;
+    NSData *pending = c.pendingWrite; NSUInteger pendingSize = pending.length;
+    if (!result && pendingSize && (size < pendingSize || !buffer || memcmp(buffer, pending.bytes, pendingSize))) result = DM_SSL_FAIL;
     while (!result && size) {
         if (atomic_load(&c->closed)) { result = DM_SSL_BAD_SOCKET; break; }
         // SSLWrite's processed count can describe its encrypted cache rather than the
@@ -519,7 +586,8 @@ uint32_t dm_ssl_get_alpn(void *object, unsigned *state, uint8_t *buffer, unsigne
     CFArrayRef protocols = NULL; OSStatus status = c->tls ? SSLCopyALPNProtocols(c->tls, &protocols) : noErr;
     if (!status && protocols && CFArrayGetCount(protocols)) {
         NSString *selected = (__bridge NSString *)CFArrayGetValueAtIndex(protocols, 0); NSData *data = [selected dataUsingEncoding:NSASCIIStringEncoding]; *size = (unsigned)data.length; *state = 1;
-        if (capacity < data.length) status = errSecParam; else if (data.length) memcpy(buffer, data.bytes, data.length);
+        NSUInteger length = data.length;
+        if (capacity < length || (length && !buffer)) status = errSecParam; else if (length) memcpy(buffer, data.bytes, length);
     }
     if (protocols) CFRelease(protocols); [c.lock unlock]; return status_result(c, status);
 } }

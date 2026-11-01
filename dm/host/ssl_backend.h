@@ -12,6 +12,9 @@ typedef bool (*dm_ssl_peer_policy_provider)(const char *guest_host, char *tls_ho
 // Set before guest startup. A provider returns true only for its explicit host whitelist;
 // its DER bytes remain immutable for the duration of the callback (the adapter copies them).
 void dm_ssl_set_peer_policy(dm_ssl_peer_policy_provider provider);
+// Separate, explicit exact-service certificate enrollment. This must never be
+// installed as a catch-all or populated automatically from the current peer.
+void dm_ssl_set_peer_pin_policy(dm_ssl_peer_policy_provider provider);
 // Optional exact-host admission guard. Install before startup; NULL retains the
 // adapter's normal strict certificate/hostname validation without routing policy.
 void dm_ssl_set_peer_guard(bool (*guard)(const char *guest_host));

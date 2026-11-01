@@ -25,6 +25,12 @@ HLE_FORCE("_ZN2nn2ro12LookupSymbolEPmPKc", "look up a definition by name in the 
 
 // nn::ro::Module as the SDK fills it (LoadModuleInternal): +0 the module object (RoModule, inside the NRO on Horizon; the host's module_t here), +8 state (1 = loaded), +0x10 image, +0x18 buffer
 typedef struct { void *module; uint32_t state, pad; const void *image; void *buffer; } ro_module;
+static int online_module_disallowed(const uint8_t sha[32]) {
+    const char *mode=getenv("DM_NETWORK");
+    if(mode&&(!strcmp(mode,"nextendo")||!strcmp(mode,"auto")))return 0;
+    module_t *module=nro_find(sha);
+    return module&&module_sym(module,"EOS_Platform_Create");
+}
 static module_t *module_from(const ro_module *rm) {
     if (!rm || rm->state != 1) return NULL;
     for (int i = 0; i < g_nmod; i++) if (rm->module == (void *)&g_mod[i] && g_mod[i].nro && g_mod[i].loaded) return &g_mod[i];
@@ -56,15 +62,16 @@ HLE_FORCE("_ZN2nn2ro10LoadModuleEPNS0_6ModuleEPKvPvmi", "load an NRO rewritten o
     uint32_t n = *(const uint32_t *)(h + 0x18);
     uint8_t sha[32]; CC_SHA256(h, n, sha);
     char hx[17]; for (int k = 0; k < 8; k++) snprintf(hx + 2 * k, 3, "%02x", sha[k]);
-    // Online SDKs are never loaded, whatever the game (dm/tools/nro_collect.py ONLINE_SDKS: Epic Online Services, known by its export EOS_Platform_Create). Hades and Hades II load
-    // rom:/nro/EOSSDK-Switch-Shipping.nro for Epic-account cross-save (Auth, Connect, PlayerDataStorage), which the host cannot serve; the real SDK would at best fail its login and at
-    // worst wait on time-outs or contact Epic's servers. Refused, the game's EOS_Platform_Create stays a stub, it logs "[EOS] Failed to create platform" and plays offline with local
-    // saves, as before the host loaded NROs. The pack leaves such an NRO out (a "refused" row in nro.tsv); an older nro.tsv that has it is caught by the export below
+    // Legacy exports omitted online SDK code entirely. They need a new export;
+    // a missing rewritten/signed NRO cannot become runnable at runtime on iOS.
     if (nro_refused(sha)) { LOG("ro::LoadModule: refused %s… (%u bytes): an online SDK (Epic Online Services), not loaded; the game plays offline", hx, n); return RO_FAIL; }
     pthread_mutex_lock(&g_ro_mu);
     module_t *m = nro_find(sha);
     if (!m) { pthread_mutex_unlock(&g_ro_mu); LOG("[RED] ro::LoadModule: no rewritten NRO with SHA-256 %s… (%u bytes): it is not in the patched modules' nro.tsv", hx, n); return RO_FAIL; }
-    if (module_sym(m, "EOS_Platform_Create")) { pthread_mutex_unlock(&g_ro_mu); LOG("ro::LoadModule: refused %s (%s…): an online SDK (Epic Online Services), not loaded; the game plays offline", m->name, hx); return RO_FAIL; }
+    const char *network = getenv("DM_NETWORK");
+    if (module_sym(m, "EOS_Platform_Create") && (!network || (strcmp(network, "nextendo") && strcmp(network, "auto")))) {
+        pthread_mutex_unlock(&g_ro_mu); LOG("ro::LoadModule: online SDK %s is unavailable while online services are disabled", m->name); return RO_FAIL;
+    }
     if (m->loaded) { pthread_mutex_unlock(&g_ro_mu); LOG("[RED] ro::LoadModule: %s (%s…) is loaded already", m->name, hx); return RO_FAIL; }
     if (m->nro_size != n) LOG("[RED] ro::LoadModule: %s is %u bytes, nro.tsv says %u", m->name, n, m->nro_size);
     nro_load(m);
@@ -99,7 +106,7 @@ HLE_FORCE("_ZN2nn2ro18RegisterModuleInfoEPNS0_16RegistrationInfoEPKv", "register
     const uint8_t *r = nrr;
     if (!r || memcmp(r, "NRR0", 4)) return RO_FAIL;
     uint32_t off = *(const uint32_t *)(r + 0x340), cnt = *(const uint32_t *)(r + 0x344), refused = 0;
-    for (uint32_t i = 0; i < cnt; i++) refused += nro_refused(r + off + 32 * i);
+    for (uint32_t i = 0; i < cnt; i++) refused += nro_refused(r + off + 32 * i) || online_module_disallowed(r + off + 32 * i);
     // An NRR that registers only online SDKs the host refuses (Hades and Hades II: game.nrr with the one EOS SDK hash) fails as every registration did before the host loaded NROs,
     // so such a game takes the path it took then (it never asked for the module)
     if (cnt && refused == cnt) { LOG("ro::RegisterModuleInfo: refused an NRR that registers only online SDKs (%u hashes), as before NROs were loaded; the game plays offline", cnt); return RO_FAIL; }

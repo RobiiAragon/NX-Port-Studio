@@ -7,7 +7,7 @@ import subprocess
 
 DENIED_SUFFIXES = {'.keys', '.keyring', '.nsp', '.nsz', '.xci', '.xcz', '.nca',
                    '.nso', '.nro', '.tik', '.ipa', '.mobileprovision', '.p12', '.pfx', '.pdb'}
-DENIED_DIRECTORIES = {'.git', '.build', 'build', '__pycache__', 'system_data', 'exefs', 'romfs', 'saves'}
+DENIED_DIRECTORIES = {'.git', '.build', '.nx-archives', '.nx-identify', 'build', '__pycache__', 'system_data', 'exefs', 'romfs', 'saves'}
 
 
 def verify(bundle):

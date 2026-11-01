@@ -2,6 +2,7 @@ import Foundation
 import Combine
 
 @_silgen_name("dm_mobile_nextendo_routes_state") private func mobileNextendoRoutesState() -> Int32
+@_silgen_name("dm_mobile_nextendo_apply_service_profile") private func mobileNextendoApplyServiceProfile(_ path: UnsafePointer<CChar>) -> Int32
 
 /// Account authorization, catalog policy and game transport remain separate states.
 @MainActor final class MobileNextendoModel: ObservableObject {
@@ -16,6 +17,8 @@ import Combine
     @Published private(set) var isSigningOut = false
     @Published private(set) var authorizationExpiresAt: Date?
     @Published private(set) var routesState: Int32 = -1
+    @Published private(set) var isPreparingServices = false
+    @Published private(set) var servicePreparationFailed = false
     @Published var clientID: String
 
     let titleID: String
@@ -26,6 +29,8 @@ import Combine
     private let catalogService: NextendoCatalogService
     private let callbacks: MobileNextendoCallbackPool
     private let preferences: UserDefaults
+    private let serviceProfiles: NextendoServiceProfileService
+    private let bundle: Bundle
     private var requestTask: Task<Void, Never>?
     private var cancellationTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
@@ -34,12 +39,15 @@ import Combine
     init(bundle: Bundle = .main, preferences: UserDefaults = .standard,
          accountService: NextendoAccountService? = nil,
          catalogService: NextendoCatalogService = NextendoCatalogService(),
+         serviceProfiles: NextendoServiceProfileService = NextendoServiceProfileService(),
          callbacks: MobileNextendoCallbackPool = MobileNextendoCallbackPool(),
          browser: any MobileNextendoBrowsing) {
         self.preferences = preferences
+        self.serviceProfiles = serviceProfiles
+        self.bundle = bundle
         self.callbacks = callbacks
         self.browser = browser
-        self.accountService = accountService ?? NextendoAccountService(store: MobileNextendoCredentialStore(preferences: preferences), makeReceiver: { callbacks.make() })
+        self.accountService = accountService ?? NextendoAccountService(store: MobileNextendoCredentialStore(preferences: preferences), makeReceiver: { try callbacks.make() })
         self.catalogService = catalogService
         self.clientID = preferences.string(forKey: "launcher.nextendoClientID") ?? (bundle.object(forInfoDictionaryKey: "DMNextendoClientID") as? String ?? "")
         self.titleID = (bundle.object(forInfoDictionaryKey: "DMGameTitleID") as? String ?? "").lowercased()
@@ -78,6 +86,26 @@ import Combine
         catalog = await catalogService.snapshot()
         routesState = mobileNextendoRoutesState()
         if catalog?.freshness() != .fresh { await refreshCatalog() }
+        await prepareServices()
+    }
+    func prepareServices() async {
+        guard !isPreparingServices, routesState != 0 else { return }
+        isPreparingServices = true; servicePreparationFailed = false
+        defer { isPreparingServices = false }
+        do {
+            guard let resource = bundle.resourceURL?.appendingPathComponent("dm/nextendo-services.json"),
+                  let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            else { throw NextendoServiceProfileError.unavailable }
+            let contract = try NextendoServiceContract(data: Data(contentsOf: resource))
+            let policy = catalog?.catalog?.games.first { $0.titleIDs.contains(titleID) }
+            let ca = bundle.resourceURL.flatMap { try? Data(contentsOf: $0.appendingPathComponent("dm/nextendo/provider-ca.der")) }
+            let profile = try await serviceProfiles.prepare(contract: contract, titleID: titleID, protocolName: policy?.protocolName,
+                root: root.appendingPathComponent("Nextendo/Services", isDirectory: true), includedCertificate: ca)
+            try Task.checkCancellation()
+            routesState = profile.path.withCString { mobileNextendoApplyServiceProfile($0) }
+            servicePreparationFailed = routesState != 0
+        } catch is CancellationError { }
+        catch { servicePreparationFailed = true }
     }
     func refreshCatalog() async {
         guard !isRefreshing else { return }

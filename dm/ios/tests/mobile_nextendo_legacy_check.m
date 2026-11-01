@@ -8,6 +8,8 @@ void dm_guest_host_wait_end(void) {}
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) { (void)provider; }
 int dm_nextendo_routes_status(void) { return -1; }
 size_t dm_nextendo_routes_count(void) { return 0; }
+int dm_nextendo_routes_initialize(void) { return -1; }
+int dm_nextendo_routes_retry_unconfigured(void) { return -1; }
 static const char replacement[] = "a newer synthetic record";
 static void publish_replacement(int directory) {
     int fd = openat(directory, "nextendo-account.json", O_CREAT | O_EXCL | O_WRONLY, 0600);

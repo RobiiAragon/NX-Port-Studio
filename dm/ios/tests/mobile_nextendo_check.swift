@@ -5,6 +5,7 @@ import CryptoKit
 
 @_cdecl("dm_mobile_nextendo_use_keychain") func fixtureUseKeychain() {}
 @_cdecl("dm_mobile_nextendo_routes_state") func fixtureRoutesState() -> Int32 { -1 }
+@_cdecl("dm_mobile_nextendo_apply_service_profile") func fixtureApplyServiceProfile(_ path: UnsafePointer<CChar>) -> Int32 { 0 }
 @_cdecl("dm_mobile_nextendo_copy_legacy") func fixtureCopyLegacy(_ buffer: UnsafeMutablePointer<UInt8>, _ capacity: Int, _ size: UnsafeMutablePointer<Int>) -> Int32 { size.pointee = 0; return 0 }
 @_cdecl("dm_mobile_nextendo_remove_legacy") func fixtureRemoveLegacy(_ expected: UnsafePointer<UInt8>?, _ size: Int) -> Int32 { 1 }
 
@@ -42,7 +43,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
     func open(_ request: NextendoSignInRequest, receiver: MobileNextendoCallback) -> Bool {
         let query = URLComponents(url: request.authorizationURL, resolvingAgainstBaseURL: false)!.queryItems!
         scope = query.first { $0.name == "scope" }!.value!
-        var callback = URLComponents(string: "nxnative-nextendo://callback")!
+        var callback = URLComponents(string: query.first { $0.name == "redirect_uri" }!.value!)!
         callback.queryItems = [.init(name: "state", value: query.first { $0.name == "state" }!.value!), .init(name: "code", value: "synthetic-code")]
         self.receiver = receiver; self.callback = callback.url!
         if mode == .approve { Task { await receiver.deliver(.success(callback.url!)) } }
@@ -60,6 +61,17 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         }
     }
     @MainActor static func main() async throws {
+        // Exercise the real mobile loopback receiver over HTTP. The rest of the
+        // coordinator fixture still uses synthetic identity/token responses.
+        let local = try MobileNextendoCallback()
+        let redirect = try await local.start()
+        guard redirect.scheme == "http", redirect.host == "127.0.0.1", redirect.port != nil else { fatalError("mobile callback must use private IPv4 loopback") }
+        var returned = URLComponents(url: redirect, resolvingAgainstBaseURL: false)!
+        returned.queryItems = [.init(name:"code", value:"local-fixture"), .init(name:"state", value:"local-state")]
+        let (_, response) = try await URLSession.shared.data(from: returned.url!)
+        let delivered = try await local.callback()
+        guard (response as? HTTPURLResponse)?.statusCode == 200, delivered == returned.url! else { fatalError("actual mobile loopback response was not delivered") }
+        await local.cancel()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -84,7 +96,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         let identity = Data(#"{"pid":42,"username":"fixture"}"#.utf8)
         let nex = try JSONSerialization.data(withJSONObject: ["nex_token":proof,"pid":42,"username":"fixture"])
         let store = FixtureStore(), callbacks = MobileNextendoCallbackPool(), browser = FixtureBrowser()
-        let service = NextendoAccountService(store: store, http: FixtureHTTP([.init(data:token,statusCode:200), .init(data:identity,statusCode:200), .init(data:nex,statusCode:200)]), makeReceiver:{ callbacks.make() })
+        let service = NextendoAccountService(store: store, http: FixtureHTTP([.init(data:token,statusCode:200), .init(data:identity,statusCode:200), .init(data:nex,statusCode:200)]), makeReceiver:{ try callbacks.make() })
         let model = MobileNextendoModel(bundle: bundle, preferences: preferences, accountService: service, catalogService: catalogService, callbacks: callbacks, browser: browser)
         precondition(model.account == nil && !model.hasGameCredential && model.hasClientID)
         model.signIn()
@@ -124,7 +136,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
 
         let cancelledStore = FixtureStore(), cancelledCallbacks = MobileNextendoCallbackPool(), pendingBrowser = FixtureBrowser()
         pendingBrowser.mode = .pending
-        let cancelledService = NextendoAccountService(store: cancelledStore, http: FixtureHTTP([.init(data:token,statusCode:200)]), makeReceiver:{ cancelledCallbacks.make() })
+        let cancelledService = NextendoAccountService(store: cancelledStore, http: FixtureHTTP([.init(data:token,statusCode:200)]), makeReceiver:{ try cancelledCallbacks.make() })
         let cancelled = MobileNextendoModel(bundle: bundle, preferences: preferences, accountService: cancelledService, catalogService: catalogService, callbacks: cancelledCallbacks, browser: pendingBrowser)
         cancelled.signIn()
         try await eventually { pendingBrowser.receiver != nil }
@@ -144,7 +156,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         let mismatchStore = MobileNextendoCredentialStore(keychain: mismatchKeychain, legacy: mismatchLegacy, preferences: preferences)
         let wrongNEX = try JSONSerialization.data(withJSONObject: ["nex_token":proof,"pid":43,"username":"fixture"])
         let mismatchCallbacks = MobileNextendoCallbackPool()
-        let mismatchService = NextendoAccountService(store: mismatchStore, http: FixtureHTTP([.init(data:identity,statusCode:200),.init(data:wrongNEX,statusCode:200)]), makeReceiver:{ mismatchCallbacks.make() })
+        let mismatchService = NextendoAccountService(store: mismatchStore, http: FixtureHTTP([.init(data:identity,statusCode:200),.init(data:wrongNEX,statusCode:200)]), makeReceiver:{ try mismatchCallbacks.make() })
         let mismatch = MobileNextendoModel(bundle: bundle, preferences: preferences, accountService: mismatchService, catalogService: catalogService, callbacks: mismatchCallbacks, browser: FixtureBrowser())
         await mismatch.load()
         mismatch.requestGameCredential()

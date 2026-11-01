@@ -79,7 +79,7 @@
 "Refresh signed catalog" = "署名済みカタログを更新";
 "Refresh the signed catalog to check this game." = "このゲームを確認するには、署名済みカタログを更新してください。";
 "Refreshing signed catalog…" = "署名済みカタログを更新中…";
-"Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here." = "PKCEを使用する公開クライアントのコールバックとしてnxnative-nextendo://callbackを登録してください。ここにクライアントシークレットやアカウントトークンを入力しないでください。";
+"Use the public application ID registered in Nextendo. Sign-in returns to this device automatically." = "Nextendoに登録したアプリの公開IDを使用してください。ログイン後は自動的にこの端末へ戻ります。";
 "Registered application ID" = "登録済みアプリケーションID";
 "Render scale" = "レンダリング解像度の倍率";
 "Reset to tested defaults" = "動作確認済みの設定に戻す";
@@ -126,3 +126,25 @@
 "Certificate resources included" = "証明書リソースを同梱済み";
 "Certificate resources not included" = "証明書リソースは未同梱";
 "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification." = "証明書リソースはアプリの配布元が組み込みます。同梱されていても、AppleのTLS検証を回避することはありません。";
+
+// Display modes and per-build qualification.
+"Display" = "画面";
+"Use full display resolution" = "ディスプレイ全体の解像度を使う";
+"Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged." = "画像の比率と余白を維持します。内部描画解像度は変わりません。";
+"Expand game view" = "ゲームの視野を広げる";
+"Needs a verified camera and HUD mod for this exact game version." = "このバージョンで検証済みのカメラ・HUD用MODが必要です。";
+"120 FPS" = "120 FPS";
+"Needs a verified game-timing mod and a display capable of at least 120 Hz." = "検証済みのゲーム時間制御MODと120Hz以上の画面が必要です。";
+"No camera and HUD mod has been verified for this game build on iPhone." = "このビルドのカメラ・HUD用MODはiPhoneでは未検証です。";
+"No 120 FPS game-timing mod has been verified for this game build." = "このビルドの120 FPS用時間制御MODは未検証です。";
+"The connected display does not report 120 Hz support." = "接続された画面は120Hz対応を報告していません。";
+
+// Automatic public Nextendo service preparation.
+"Prepare game services" = "ゲームサービスを準備";
+"Preparing game services…" = "ゲームサービスを準備中…";
+"Service preparation failed. Check your connection and try again." = "サービスを準備できませんでした。接続を確認して再試行してください。";
+"Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay." = "このゲームのサービス設定は自動で準備されます。証明書の検証は有効のままです。接続設定があってもオンラインプレイの動作確認を意味するものではありません。";
+"Automatic connection" = "自動接続";
+"Disable network services" = "ネットワークサービスを無効にする";
+"Back to game settings" = "ゲーム設定に戻る";
+"Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them." = "ゲーム内でオンライン、ローカル通信、LANを選んでください。Nextendo、LDN、LANは同時に利用でき、切り替えるための再起動は不要です。";

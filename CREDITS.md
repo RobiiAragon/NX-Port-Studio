@@ -25,6 +25,7 @@ Preserve the exact license files and attribution in the source tree. This overvi
 | Atmosphère / libnx / Switchbrew / Nintendo Switch reverse-engineering contributors | Primary references for observable platform structures, synchronization, hardware protocols and service semantics. |
 | ldn_mitm contributors | Public wire-format and interoperability references for the original C bridge. The bridge implementation does not copy the GPL discovery implementation. This does not change the license of the external Switch module. |
 | Nextendo contributors | Account, service and signed-catalog infrastructure used by the integration. No endorsement or ownership of that service is implied. |
+| OpenSSL contributors | Static libcrypto for strict private-PKI service verification. The [Apache-2.0 license and provenance](dm/third_party/notices/OpenSSL/PROVENANCE.md) accompany Studio and exported games. |
 | Capstone / lz4 / fontTools / XcodeGen | Build and analysis tools, with their respective licenses. |
 
 The engine's vendored dependency inventory remains the authoritative map for included components and notices. When exporting this repository, retain that inventory and every applicable license alongside the code.

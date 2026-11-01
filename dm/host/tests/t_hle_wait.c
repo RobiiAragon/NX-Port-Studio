@@ -6,7 +6,12 @@
 struct dm_flags g_flag;
 uint64_t g_t0_ns;
 __thread _Atomic int dm_host_work;
-pthread_key_t g_key18;
+pthread_key_t g_key18, g_keygate;
+extern uint64_t dm_gate_top[1024];
+extern const unsigned char dm_gate_stubs[];
+void dm_gate_nested(uint64_t sp) { (void)sp; abort(); }
+void guest_thread_set_id(uint64_t id) { (void)id; }
+void guest_gate_stack(int own) { (void)own; }
 void crash_thread_init(void) {}
 void guest_thread_init(void) {}
 void *guest_sym(const char *name) { (void)name; return NULL; }
@@ -70,7 +75,11 @@ static void *run_worker(void *unused) {
     pthread_setspecific(g_keythr, &worker);
     pthread_setspecific(g_key18, (void *)(uintptr_t)UINT64_C(0x1818181818181818));
     __asm__ volatile("mov %0, x18" : "=r"(native_x18));
+    void *gate = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0); assert(gate != MAP_FAILED);
+    dm_gate_top[0] = (uintptr_t)gate + (1 << 20);
+    pthread_setspecific(g_keygate, dm_gate_stubs);
     wait_test_invoke(before, after, guest_top);
+    munmap(gate, 1 << 20);
     atomic_store(&guest_progress, 1);
     return NULL;
 }
@@ -88,10 +97,11 @@ static void check_context(const hz_ctx_t *c) {
 int main(void) {
     // A bounded test watchdog only; the implementation has no artificial timeout or forced resume.
     alarm(20);
-    pthread_key_create(&g_key18, NULL); svc_thread_main_init();
+    pthread_key_create(&g_key18, NULL); pthread_key_create(&g_keygate, NULL); svc_thread_main_init();
     size_t page = (size_t)sysconf(_SC_PAGESIZE);
     unsigned char *memory = mmap(NULL, page * 2, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0); assert(memory != MAP_FAILED);
     assert(!mprotect(memory + page, page, PROT_READ | PROT_WRITE));
+    memset(memory + page, 0xa5, page);
     guest_bottom = (uintptr_t)memory + page; guest_top = guest_bottom + 8192;   // exactly 8 KiB above the guard
     for (int i = 0; i < 31; i++) before[i] = UINT64_C(0x1111000000000000) + i;
     for (int i = 32; i < 96; i++) before[i] = UINT64_C(0x9999000000000000) + i;
@@ -102,6 +112,7 @@ int main(void) {
     assert(!pthread_create(&worker.pt, NULL, run_worker, NULL));
     await_flag(&entered);
     assert(atomic_load(&on_big_stack) && !memcmp(arguments, before, sizeof arguments));
+    for (uintptr_t p = guest_bottom; p < guest_top - 32; p++) assert(*(unsigned char *)p == 0xa5);
     activity(1); hz_ctx_t first = context(); check_context(&first);
     pthread_mutex_lock(&G); assert(worker.svc_depth == 2 && atomic_load(&worker.svc_regs)); pthread_mutex_unlock(&G);
     set_flag(&release_nested); usleep(20000);

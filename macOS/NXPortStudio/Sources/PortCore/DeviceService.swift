@@ -63,6 +63,7 @@ public enum DeviceServiceError: LocalizedError, Sendable {
     case invalidSignedApplication(String)
     case invalidIPAOutput
     case freeDeveloperAppLimit
+    case missingXcodeAccount
     case commandFailed(String)
 
     public var errorDescription: String? {
@@ -77,6 +78,7 @@ public enum DeviceServiceError: LocalizedError, Sendable {
         case .invalidSignedApplication(let reason): return "The iOS application is not ready for installation: \(reason)"
         case .invalidIPAOutput: return "Choose a new .ipa filename in a writable folder. Existing files are never replaced."
         case .freeDeveloperAppLimit: return "Apple's free developer account app limit has been reached. Remove another app installed with that account from this iPhone or iPad, then try again."
+        case .missingXcodeAccount: return "Xcode has no Apple account configured. Sign in under Xcode → Settings → Apple Accounts with the account for your selected team, then try signing again."
         case .commandFailed(let message): return message
         }
     }
@@ -269,10 +271,21 @@ public enum DeviceService {
                                               onLine: @Sendable @escaping (String) -> Void = { _ in }) async throws -> URL {
         try Task.checkCancellation()
         let build = try await runner.run(plan.buildCommand, onLine: onLine)
-        guard build.exitCode == 0 else { throw DeviceServiceError.commandFailed(String(build.output.suffix(6000))) }
+        guard build.exitCode == 0 else { throw signingError(output: build.output) }
         try await verifySignedApplication(plan.signedApplicationURL, deviceUDID: plan.deviceUDID,
                                           using: runner, onLine: onLine)
         return plan.signedApplicationURL
+    }
+
+    static func signingError(output: String) -> DeviceServiceError {
+        // A cached certificate can still sign an already provisioned app when
+        // Xcode has no account. Classify the actual failure instead of rejecting
+        // all builds based on an account/profile preflight heuristic.
+        let message = output.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+        if message.contains("error: no accounts: add a new account in accounts settings.") {
+            return .missingXcodeAccount
+        }
+        return .commandFailed(String(output.suffix(6000)))
     }
 
     public static func installSignedApplication(_ plan: DeploymentPlan, using runner: ProcessRunner,

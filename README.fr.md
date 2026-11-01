@@ -6,7 +6,11 @@
 
 Ce projet indépendant repose sur [nxnative de seedds](https://github.com/seedds/nxnative). Les auteurs du moteur et leurs avis de copyright restent crédités : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
+> **Version candidate 1.6.0 :** moteur synchronisé avec nxnative `d2a86b05ccce` (352 commits depuis la base commune). Les tests automatisés du moteur, des graphismes et d’iOS passent ; les jeux restent à revalider sur ce nouveau moteur. [Notes de version](docs/releases/1.6.0-rc.3.md).
+
 ## Dans l'application
+
+L’importation reconnaît ZIP/7z, les sous-dossiers et les extensions en majuscules, avec une extraction limitée et une vérification d’intégrité. Les erreurs connues proposent des étapes de résolution dans les cinq langues de l’interface.
 
 L'interface démarre en espagnol. Son sélecteur propose aussi l'anglais, le français, le japonais et le chinois simplifié. La langue de l'interface et celle du jeu se règlent séparément.
 
@@ -33,13 +37,15 @@ Le projet étend aussi le moteur : sockets Horizon, attentes HLE, vérification 
 | --- | --- |
 | LAN Mac ↔ Switch | Une version Mac antérieure a terminé une course complète de Mario Kart 8 Deluxe 3.0.5 avec une Switch physique. Le candidat actuel crée un salon et ouvre les règles de l'hôte. |
 | LAN iPhone ↔ Switch | L'utilisateur a confirmé la participation au salon dans les deux sens, avec chaque appareil comme hôte. Aucune course complète n'est encore déclarée pour ce test. |
-| LDN / mode sans fil | Mario Kart 3.0.5 sur Mac crée désormais un salon après la correction de l'identité d'historique local. Les tentatives physiques précédentes ont échoué ; un nouveau test avec la version corrigée et une Switch reste nécessaire. |
-| Nextendo | OAuth, obtention d'un identifiant NEX vérifié et catalogue signé validés. Aucune partie native en ligne n'est encore validée. |
+| LDN / mode sans fil | Le propriétaire confirme le jeu LAN et LDN de Mario Kart 3.0.5 entre ports natifs Mac/iOS et Switch physique (31 octobre). Cela concerne les ports précédents ; le nouveau moteur reste à revalider. Le pont LDN IP exige un module compatible. |
+| Nextendo | Compte et **une manche réelle en arène de Smash 13.0.5 sur Mac** vérifiés. Le certificat exact du service a été explicitement autorisé. Ce résultat ne valide pas les parties rapides, les autres jeux ou le jeu en ligne sur iOS. |
 | Android / Windows | Prévus après la stabilisation des plateformes Apple ; aucune version disponible. ARM et x86 nécessitent des travaux distincts. |
+
+Les ports activent les services de connexion automatiquement. Choisissez En ligne, Sans fil local ou LAN dans le jeu, sans sélectionner un autre mode ni redémarrer. La configuration Nextendo reste indépendante : l’absence d’identifiants en ligne ne bloque pas le jeu local. La désactivation du réseau et l’adresse de découverte facultative restent dans les réglages avancés.
 
 Pour le LAN, utilisez la même version du jeu et le même réseau local. Ce réseau peut fonctionner sans accès Internet. Le pont LDN sur IP exige un module compatible sur la console ; le mode LAN d'un jeu suit son propre protocole.
 
-Au 28 octobre 2026, les essais Nextendo restent bloqués par des certificats de services et par la version disponible de Mario Kart : 3.0.5, alors que le catalogue signé demande 4.0.1. La connexion au compte ne résout pas ces exigences. Consultez le [README principal](README.md#current-game-service-blockers) pour les détails.
+Au 31 octobre 2026, cinq services passent la négociation TLS native. Certains services NEX et d’authentification restent bloqués par leur chaîne de certificats. Le catalogue complet compte 58 entrées, 62 profils régionaux et 22 plans de correctifs vérifiés ; les parties natives en ligne restent à valider. Mario Kart 3.0.5 ne satisfait pas l’exigence 4.0.1 du service. Consultez le [suivi complet](docs/nextendo-coverage.md).
 
 ## Démarrage
 
@@ -54,5 +60,7 @@ Depuis le dépôt :
 Dans Studio, préparez l'environnement, choisissez le dossier du jeu et prod.keys, puis sélectionnez Mac ou iPhone/iPad. Pour iOS, configurez votre équipe Xcode et un appareil associé. Un IPA est réussi seulement après signature et vérification ; les règles d'Apple sur les comptes et l'expiration s'appliquent.
 
 Le dépôt contient les sources, les outils et les captures de Studio. Les jeux, clés, firmwares, données de compte, sauvegardes et illustrations Nintendo restent hors du dépôt public.
+
+Les ports Mac s’installent directement dans **Applications**. Le moteur temporaire, les fichiers extraits et les produits de compilation sont supprimés après la compilation, y compris en cas d’échec ou d’annulation. Les mises à jour vérifient la nouvelle app avant de remplacer le port du même jeu ; les sauvegardes et réglages sont conservés. Les projets iOS gardent leur flux de signature Xcode.
 
 [Documentation complète en anglais](README.md) · [Feuille de route](ROADMAP.md) · [Contribuer](CONTRIBUTING.md)

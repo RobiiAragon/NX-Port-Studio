@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #include "../hle.h"
+#include "t_gate_fixture.h"
 #include "../ssl_backend.h"
 #include "../net_socket.h"
 #include <arpa/inet.h>
@@ -29,6 +30,7 @@ uint64_t gate_dispatch(uint64_t ret, uint64_t *registers) { (void)ret; (void)reg
 uint64_t unimpl_c(unsigned index, uint64_t *registers) { (void)index; (void)registers; abort(); }
 void dm_thread_returned(void) { abort(); }
 static void *hook(const char *name) {
+    fixture_gate_prepare();
     unsigned long bytes; const hle_force_ent *p = (const hle_force_ent *)getsectiondata(&_mh_execute_header, "__DATA", "swforce", &bytes);
     for (unsigned long i = 0; p && i < bytes / sizeof *p; i++) if (!strcmp(p[i].name, name)) return p[i].fn;
     fprintf(stderr, "Missing TLS hook: %s\n", name); abort();
@@ -42,6 +44,40 @@ typedef uint32_t (*Read)(void *, void *, int *, unsigned);
 typedef uint32_t (*Write)(void *, const void *, int *, unsigned);
 typedef uint32_t (*Poll)(void *, unsigned *, const unsigned *, unsigned);
 typedef struct { uint8_t len, family; uint16_t port; uint32_t ip; uint8_t padding[8]; } Address;
+static void identifier_lifecycle(void) {
+    typedef uint32_t (*GetId)(void *, uint64_t *);
+    uint64_t id = UINT64_MAX, context_id = UINT64_MAX, connection_id = UINT64_MAX;
+    CHECK(H(GetId, "nnsslContextGetContextId")(context_key, &id) == 0 && id == 0,
+          "empty C context query succeeds with identifier zero before creation");
+    CHECK(H(GetId, "_ZN2nn3ssl7Context12GetContextIdEPm")(context_key, &id) == 0 && id == 0,
+          "empty C++ context query has the same SDK semantics");
+    CHECK(H(GetId, "nnsslConnectionGetConnectionId")(connection_key, &id) == 0 && id == 0,
+          "empty connection query succeeds with identifier zero");
+    CHECK(H(GetId, "_ZN2nn3ssl10Connection12GetContextIdEPm")(connection_key, &id) == 0 && id == 0,
+          "empty connection has no associated context identifier");
+    CHECK(H(ObjectCall, "nnsslConnectionDoHandshake")(connection_key) != 0 &&
+          H(ConnectionCreate, "nnsslConnectionCreate")(connection_key, context_key) != 0,
+          "identifier queries do not create a context or grant a TLS session");
+    CHECK(H(ContextCreate, "_ZN2nn3ssl7Context6CreateENS1_10SslVersionE")(context_key, 1) == 0 &&
+          H(GetId, "nnsslContextGetContextId")(context_key, &context_id) == 0 && context_id,
+          "C++ context creation after the empty C query produces a real identifier");
+    CHECK(H(ConnectionCreate, "nnsslConnectionCreate")(connection_key, context_key) == 0 &&
+          H(GetId, "nnsslConnectionGetConnectionId")(connection_key, &connection_id) == 0 && connection_id && connection_id != context_id,
+          "connection creation retains a distinct live identifier");
+    CHECK(H(GetId, "_ZN2nn3ssl10Connection12GetContextIdEPm")(connection_key, &id) == 0 && id == context_id,
+          "live connection reports its actual parent context identifier");
+    CHECK(H(ObjectCall, "nnsslConnectionDestroy")(connection_key) == 0 &&
+          H(GetId, "nnsslConnectionGetConnectionId")(connection_key, &id) == 0 && id == 0,
+          "destroyed connection returns to the empty identifier state");
+    CHECK(H(ObjectCall, "nnsslContextDestroy")(context_key) == 0 &&
+          H(GetId, "nnsslContextGetContextId")(context_key, &id) == 0 && id == 0,
+          "destroyed context returns to the empty identifier state");
+    CHECK(H(GetId, "nnsslContextGetContextId")(NULL, &id) == DM_SSL_BAD_POINTER &&
+          H(GetId, "nnsslContextGetContextId")(context_key, NULL) == DM_SSL_BAD_POINTER &&
+          H(GetId, "nnsslConnectionGetConnectionId")(NULL, &id) == DM_SSL_BAD_POINTER &&
+          H(GetId, "nnsslConnectionGetConnectionId")(connection_key, NULL) == DM_SSL_BAD_POINTER,
+          "identifier query null-pointer errors remain failures");
+}
 static int create(bool import) {
     memset(context_key, 0xa5, sizeof context_key); memset(connection_key, 0x5a, sizeof connection_key);
     CHECK(H(ContextCreate, "nnsslContextCreate")(context_key, 32) == 0, "C context create uses caller object pointer");
@@ -88,6 +124,16 @@ static void trusted(void) {
     uint8_t alpn[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
     CHECK(H(uint32_t (*)(void *, const uint8_t *, unsigned), "nnsslConnectionSetNextAlpnProto")(connection_key, alpn, sizeof alpn) == 0, "SDK19 C ALPN input buffer signature");
     CHECK(handshake(true) == 0, "trusted loopback TLS handshake validates chain and hostname");
+    unsigned omitted_size = 99, omitted_count = 99;
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *), "nnsslConnectionDoHandshakeWithCertBuffer")(connection_key, &omitted_size, &omitted_count) == 0 && !omitted_size && !omitted_count,
+          "an unregistered certificate buffer performs a verified handshake without exporting certificates");
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *), "_ZN2nn3ssl10Connection11DoHandshakeEPjS2_")(connection_key, NULL, NULL) == 0,
+          "the SDK permits omitted certificate output pointers");
+    uint8_t untouched = 0x7a; omitted_size = omitted_count = 99;
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *, void *, unsigned), "nnsslConnectionDoHandshakeWithBuffer")(connection_key, &omitted_size, &omitted_count, &untouched, 0) == 0 && !omitted_size && !omitted_count && untouched == 0x7a,
+          "a zero-capacity certificate buffer follows the SDK's handshake-only branch without writing it");
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *, void *, unsigned), "_ZN2nn3ssl10Connection11DoHandshakeEPjS2_Pcj")(connection_key, &omitted_size, &omitted_count, NULL, 8192) == 0 && !omitted_size && !omitted_count,
+          "a null explicit certificate buffer also selects handshake-only semantics");
     unsigned state = 0, size = 0; uint8_t selected[16] = {0};
     CHECK(H(uint32_t (*)(void *, unsigned *, uint8_t *, unsigned *, unsigned), "nnsslConnectionGetNextAlpnProto")(connection_key, &state, selected, &size, sizeof selected) == 0 && state == 1 && size == 8 && !memcmp(selected, "http/1.1", 8), "native ALPN reports the server selection rather than the client's first choice");
     char cipher[72]; CHECK(H(uint32_t (*)(void *, void *), "_ZN2nn3ssl10Connection13GetCipherInfoEPNS1_10CipherInfoE")(connection_key, cipher) == 0 && !strcmp(cipher + 64, "TLSv1.2"), "actual negotiated TLS version reported");
@@ -104,6 +150,11 @@ static void trusted(void) {
     CHECK(total == 4 && !memcmp(bytes, "ABCD", 4), "partial native TLS records preserve bytes");
     uint8_t certificates[8193]; memset(certificates, 0x7a, sizeof certificates); unsigned count = 0; size = 0;
     CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *, void *, unsigned), "nnsslConnectionDoHandshakeWithBuffer")(connection_key, &size, &count, certificates, 8192) == 0 && size > 128 && count == 1 && certificates[8192] == 0x7a, "verified explicit-buffer C handshake signature exports leaf DER");
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *, void *, unsigned), "nnsslConnectionDoHandshakeWithBuffer")(connection_key, NULL, NULL, certificates, 8192) == 0 && certificates[8192] == 0x7a,
+          "a real certificate buffer is exported even when its metadata output pointers are omitted");
+    certificates[0] = 0x7a;
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *, void *, unsigned), "nnsslConnectionDoHandshakeWithBuffer")(connection_key, &size, &count, certificates, 1) != 0 && certificates[0] == 0x7a,
+          "a nonempty undersized certificate buffer still fails without a partial certificate write");
     CHECK(H(uint32_t (*)(void *, void *, unsigned), "nnsslConnectionSetServerCertBuffer")(connection_key, certificates, 8192) == 0, "register server certificate buffer");
     CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *), "nnsslConnectionDoHandshakeWithCertBuffer")(connection_key, &size, &count) == 0 && size > 128 && count == 1, "verified three-argument WithCertBuffer uses the registered buffer");
     CHECK(H(uint32_t (*)(void *, int, unsigned), "nnsslConnectionSetOption")(connection_key, 1, 1) == 0, "request actual server certificate chain");
@@ -118,6 +169,9 @@ static void rejected(bool import, const char *name) {
     CHECK(handshake(false) != 0, import ? "wrong hostname rejected with trusted CA" : "untrusted test CA rejected");
     uint32_t verify = 0; CHECK(H(uint32_t (*)(void *, uint32_t *), "nnsslConnectionGetVerifyCertError")(connection_key, &verify) == 0 && verify != 0, "certificate verification failure retained");
     CHECK(H(ObjectCall, "nnsslConnectionDoHandshake")(connection_key) != 0, "failed trust cannot be bypassed by retrying after reading its error");
+    unsigned size = 99, count = 99;
+    CHECK(H(uint32_t (*)(void *, unsigned *, unsigned *), "nnsslConnectionDoHandshakeWithCertBuffer")(connection_key, &size, &count) != 0 && !size && !count,
+          "omitting certificate export never bypasses failed chain or hostname verification");
     destroy(fd, false);
 }
 static bool scoped_policy(const char *guest, char *host, size_t capacity, const uint8_t **der, size_t *size) {
@@ -278,6 +332,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     CHECK(H(uint32_t (*)(void), "nnsslInitialize")() == 0 && H(ContextCreate, "nnsslContextCreate")(context_key, 32) != 0, "offline SSL initialization compatibility without a fake TLS session");
     setenv("DM_NETWORK", "nextendo", 1);
     CHECK(H(ContextCreate, "nnsslContextCreate")(context_key, 64) != 0, "TLS1.3-only request is not silently downgraded");
+    identifier_lifecycle();
     trusted(); rejected(false, "localhost"); rejected(true, "wrong.invalid"); scoped(); ownership(); abrupt(); concurrent_destroy(); mutual_authentication(); backpressure(true); backpressure(false); read_timeout(); builtin_store();
     CHECK(H(uint32_t (*)(void), "nnsslFinalize")() == 0, "SSL finalization");
     CHECK(atomic_load(&entered) > 0 && atomic_load(&entered) == atomic_load(&left) && atomic_load(&waits) > 0, "TLS blocking operations publish balanced guest contexts and yield while waiting");

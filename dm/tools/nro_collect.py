@@ -2,14 +2,16 @@
 """Collect the NRO modules a game registers (nn::ro): every SHA-256 its NRR files list (RomFS .nrr/*.nrr), found as loose files or inside the RomFS's archives.
 Usage: nro_collect.py <RomFS> <out dir> [<nrr name>]
 Writes <out dir>/<name>.nro for each registered NRO found and <out dir>/nro.tsv (name, SHA-256, size, NRR, where it was found); exits 1 when a registered hash is not found.
-An online SDK (ONLINE_SDKS: Epic Online Services, by its export EOS_Platform_Create) is listed with the name 'refused' and not written: the host refuses to load it.
+Online SDKs are collected and rewritten too. The native loader admits them only
+in explicit Nextendo mode; Offline/LAN retain their existing offline behavior.
 <nrr name> picks one NRR (default: every NRR; Super Smash Bros. Ultimate 13.0.5 ships 14, one per release, cross2_130004.nrr the newest, with the 98 current hashes).
 The game passes nn::ro::LoadModule the NRO's bytes; the host finds the rewritten copy by that SHA-256 (hle_ro.c), so the names here are only labels: nro<index> in hash order.
 Where: a loose file whose bytes at +0x10 are NRO0 (Hades and Hades II ship their EOS SDK so); the .nro files among the current files of an archive with an index (Super Smash Bros. Ultimate's data.arc,
 read by dm/gfx/tools/smash_arc.py: 98 NROs, while the NRRs of every older release also register 666 superseded copies the archive still holds, which are left out); else a scan of the
 other RomFS files for stored NROs and zstd frames that inflate to one (on data.arc: all 764 registered hashes in 7 minutes)."""
-import hashlib, mmap, os, struct, sys
+import hashlib, struct, sys
 from multiprocessing import Pool
+from romfs import os, open, mmap
 
 ZMAGIC = b'\x28\xb5\x2f\xfd'
 
@@ -74,9 +76,8 @@ def scan(job):
     return out
 
 
-# Online SDKs the host never loads, by what the module exports, whatever the game: Epic Online Services (Hades and Hades II load rom:/nro/EOSSDK-Switch-Shipping.nro; Hades' main
-# imports only EOS Auth, Connect and PlayerDataStorage, Epic-account cross-save the host cannot serve). Running it would at best fail its login, at worst wait on time-outs or contact
-# Epic's servers with a console identity the host makes up; refused, the game plays offline with local saves, as before the host loaded NROs
+# Online SDK classification controls runtime admission, not collection. All
+# registered modules must be available as rewritten/signed code on iOS.
 ONLINE_SDKS = {'EOS_Platform_Create': 'Epic Online Services SDK'}
 
 
@@ -129,16 +130,15 @@ def main():
             for r in pool.imap_unordered(scan, jobs):
                 for h, path, off, how, body in r:
                     found.setdefault(h, (f'{os.path.relpath(path, romfs)}+{off:#x}', how, body))
-    rows, i, refused = [], 0, 0
+    rows, i, online = [], 0, 0
     for h in sorted(found):
         where, how, body = found[h]
         what = online_sdk(body)
-        if what:   # listed, not written: the host refuses to load it (hle_ro.c)
-            rows.append(f'refused\t{h.hex()}\t{len(body)}\t{want[h]}\t{how} {where} ({what})'); refused += 1; continue
+        if what: online += 1
         name = f'nro{i}'; i += 1
         open(os.path.join(out, name + '.nro'), 'wb').write(body)
-        rows.append(f'{name}\t{h.hex()}\t{len(body)}\t{want[h]}\t{how} {where}')
-    if refused: print(f'{refused} NRO(s) of an online SDK refused, not rewritten (listed as refused in nro.tsv)')
+        rows.append(f'{name}\t{h.hex()}\t{len(body)}\t{want[h]}\t{how} {where}' + (f' ({what}; Nextendo mode only)' if what else ''))
+    if online: print(f'{online} online SDK NRO(s) included for mode-gated native loading; service authentication is still required')
     open(os.path.join(out, 'nro.tsv'), 'w').write('# name\tsha256\tsize\tnrr\twhere\n' + '\n'.join(rows) + '\n')
     miss = [h.hex() for h in want if h not in found]
     print(f'{len(found)} of {len(want)} registered NROs found ({sum(len(found[h][2]) for h in found) / 2**20:.1f} MB) → {out}')

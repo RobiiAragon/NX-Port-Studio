@@ -79,7 +79,7 @@
 "Refresh signed catalog" = "Actualiser le catalogue signé";
 "Refresh the signed catalog to check this game." = "Actualisez le catalogue signé pour vérifier ce jeu.";
 "Refreshing signed catalog…" = "Actualisation du catalogue signé…";
-"Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here." = "Enregistrez le retour nxnative-nextendo://callback pour une application publique utilisant PKCE. Ne saisissez jamais de secret client ni de jeton de compte ici.";
+"Use the public application ID registered in Nextendo. Sign-in returns to this device automatically." = "Utilisez l’identifiant public de l’application enregistrée dans Nextendo. La connexion revient automatiquement sur cet appareil.";
 "Registered application ID" = "Identifiant d'application enregistré";
 "Render scale" = "Échelle de rendu";
 "Reset to tested defaults" = "Rétablir les réglages testés";
@@ -126,3 +126,25 @@
 "Certificate resources included" = "Ressources de certificats incluses";
 "Certificate resources not included" = "Ressources de certificats non incluses";
 "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification." = "Les ressources de certificats sont intégrées par l'éditeur de l'app. Leur présence ne contourne pas la vérification TLS d'Apple.";
+
+// Display modes and per-build qualification.
+"Display" = "Affichage";
+"Use full display resolution" = "Utiliser toute la résolution de l’écran";
+"Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged." = "Conserve les proportions et les bordures. La résolution interne reste identique.";
+"Expand game view" = "Élargir la vue du jeu";
+"Needs a verified camera and HUD mod for this exact game version." = "Nécessite un mod de caméra et d’interface vérifié pour cette version du jeu.";
+"120 FPS" = "120 FPS";
+"Needs a verified game-timing mod and a display capable of at least 120 Hz." = "Nécessite un mod de cadence vérifié et un écran d’au moins 120 Hz.";
+"No camera and HUD mod has been verified for this game build on iPhone." = "Aucun mod de caméra et d’interface n’est vérifié pour cette version sur iPhone.";
+"No 120 FPS game-timing mod has been verified for this game build." = "Aucun mod de cadence à 120 FPS n’est vérifié pour cette version.";
+"The connected display does not report 120 Hz support." = "L’écran connecté ne signale pas de prise en charge de 120 Hz.";
+
+// Automatic public Nextendo service preparation.
+"Prepare game services" = "Préparer les services du jeu";
+"Preparing game services…" = "Préparation des services du jeu…";
+"Service preparation failed. Check your connection and try again." = "Impossible de préparer les services. Vérifiez votre connexion et réessayez.";
+"Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay." = "Les services sont configurés automatiquement pour ce jeu. La vérification des certificats reste active ; un profil de connexion ne garantit pas le jeu en ligne.";
+"Automatic connection" = "Connexion automatique";
+"Disable network services" = "Désactiver les services réseau";
+"Back to game settings" = "Retour aux réglages du jeu";
+"Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them." = "Choisissez En ligne, Sans fil local ou LAN dans le jeu. Nextendo, LDN et LAN sont disponibles ensemble ; aucun redémarrage n’est nécessaire pour passer de l’un à l’autre.";

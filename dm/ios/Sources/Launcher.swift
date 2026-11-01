@@ -1,69 +1,95 @@
 // Launcher: the settings screen shown before the game starts (front_ios.m dm_show_launcher). Its settings come from the app's dm/launcher.json, which build_ipa.sh writes for this game
 // from dm/games/settings.tsv (dm/games/settings.py): each sets an environment variable the host reads when the game starts. A variable an env file set (Documents/env.txt, the bundle's
-// dm/env.txt; main.m lists them in DM_ENV_FILE_KEYS) is shown but kept. All settings share one screen, grouped by section. Choices that differ from the game's default are kept
-// in UserDefaults; Reset to tested defaults forgets them. DM_LAUNCHER=0 in Documents/env.txt starts the game at once, as an app without launcher.json does
+// dm/env.txt; main.m lists them in DM_ENV_FILE_KEYS) is shown but kept. All settings share one screen, grouped by section (rows: LauncherRow.swift). Choices that differ from the game's default are kept
+// in UserDefaults; Reset to tested defaults shows the defaults, and Play then forgets them. DM_LAUNCHER=0 in Documents/env.txt starts the game at once with the saved choices; DM_SAVED_CHOICES=0 ignores them (and keeps them)
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 import os
 
 private func info(_ key: String) -> Any? { Bundle.main.object(forInfoDictionaryKey: key) }
 @_silgen_name("dm_launcher_nextendo_preflight") private func nextendoPreflight() -> UInt32
 @_silgen_name("dm_mobile_nextendo_use_keychain") private func installMobileNextendoKeychain()
 
-private extension LauncherModel {
-    func binding(_ s: Setting) -> Binding<String> { Binding(get: { self.values[s.env] ?? s.def }, set: { self.values[s.env] = $0 }) }
-}
 
-private struct SettingRow: View {
-    let s: Setting
-    @ObservedObject var m: LauncherModel
-
-    private var locked: Bool { m.fromFile.contains(s.env) }
-    private var note: String {
-        let base = launcherText(s.note, language: m.uiLanguage)
-        return locked ? (base.isEmpty ? "" : base + " · ") + launcherText("Set by an env file", language: m.uiLanguage) : base
-    }
-    private var rangeValue: Binding<Double> {
-        Binding(get: { Double(m.values[s.env] ?? s.def) ?? s.max ?? 1 },
-                set: { m.values[s.env] = String(format: "%.2f", $0) })
-    }
-    private var percentage: String { "\(Int((rangeValue.wrappedValue * 100).rounded())) %" }
-
-    private var settingLabel: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(LocalizedStringKey(s.label))
-            if !note.isEmpty { Text(note).font(.footnote).foregroundStyle(.secondary) }
-        }
-    }
+/// Cloud saves: an iCloud Drive folder shared with the Mac app (chosen in its settings window's
+/// Cloud saves too). The host brings the save in from there when the game starts and
+/// sends it there after each save (dm/host/save_sync.h); the folder is a bookmark (CloudSaves.m).
+private struct CloudSavesSection: View {
+    @State private var folder: String = ""
+    @State private var note: String = ""
+    @State private var picking = false
 
     var body: some View {
-        Group {
-            switch s.kind {
-            case "choice":
-                Picker(selection: m.binding(s)) {
-                    ForEach(s.options ?? [], id: \.[0]) { Text(LocalizedStringKey($0[1])).tag($0[0]) }
-                } label: {
-                    settingLabel
-                }
-                .pickerStyle(.menu)
-            case "range":
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        settingLabel
-                        Spacer()
-                        Text(percentage).monospacedDigit().foregroundStyle(.secondary)
-                    }
-                    Slider(value: rangeValue, in: (s.min ?? 0)...(s.max ?? 1), step: s.step ?? 0.05)
-                        .accessibilityLabel(s.label)
-                        .accessibilityValue(percentage)
-                }
-            default:
-                Toggle(isOn: Binding(get: { (m.values[s.env] ?? s.def) == s.onValue }, set: { m.values[s.env] = $0 ? s.onValue : s.offValue })) {
-                    settingLabel
+        Section {
+            HStack {
+                Text("Cloud saves")
+                Spacer()
+                Text(folder.isEmpty ? "Off" : (folder as NSString).lastPathComponent)
+                    .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            Button(folder.isEmpty ? "Choose a folder in iCloud Drive…" : "Choose a different folder…") { picking = true }
+            if !folder.isEmpty {
+                Button("Turn off cloud saves", role: .destructive) {
+                    dm_clear_cloud_saves(); refresh(); note = ""
                 }
             }
+        } footer: {
+            Text(note.isEmpty
+                 ? "Choose a folder in iCloud Drive, and the same one in the Mac app's Cloud saves. The save comes in when the game starts and goes out after each save; a save that is replaced is kept in save-backups."
+                 : note)
         }
-        .disabled(locked)
+        .sheet(isPresented: $picking) {
+            DocumentPicker(types: [.folder]) { url in
+                picking = false
+                if dm_store_cloud_saves(url) {
+                    note = "Saved. The game uses this folder when you press Play."
+                    refresh()
+                } else {
+                    note = "That folder could not be remembered — try a different one."
+                }
+            } onCancel: { picking = false }
+        }
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        var stale: ObjCBool = false
+        folder = dm_cloud_saves_path(&stale) ?? ""
+        if stale.boolValue && folder.isEmpty {
+            note = "The folder you chose before is no longer readable (the app was signed differently). Please choose it again."
+        }
+    }
+}
+
+/// UIDocumentPickerViewController for a folder, in the two callbacks a SwiftUI sheet wants.
+private struct DocumentPicker: UIViewControllerRepresentable {
+    var types: [UTType] = [.folder]
+    let onPick: (URL) -> Void
+    let onCancel: () -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        // .open (not .import): the folder stays where it is and the bookmark keeps pointing at it.
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ vc: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick, onCancel: onCancel) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        let onCancel: () -> Void
+        init(onPick: @escaping (URL) -> Void, onCancel: @escaping () -> Void) {
+            self.onPick = onPick; self.onCancel = onCancel
+        }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            if let url = urls.first { onPick(url) } else { onCancel() }
+        }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { onCancel() }
     }
 }
 
@@ -75,17 +101,13 @@ private struct LauncherNetworkSection: View {
 
     var body: some View {
         Section {
-            Picker(selection: $model.networkMode) {
-                ForEach(LauncherNetworkMode.allCases) { mode in
-                    Text(LocalizedStringKey(mode.title)).tag(mode)
-                }
-            } label: { Text("Mode") }
-            .pickerStyle(.menu)
-            .disabled(model.fromFile.contains("DM_NETWORK"))
+            Label(LocalizedStringKey(model.networkMode.title), systemImage: model.networkMode == .offline ? "network.slash" : "network")
+            Text(LocalizedStringKey(explanation)).font(.footnote).foregroundStyle(.secondary)
             if model.fromFile.contains("DM_NETWORK") { Text("Mode is set by an env file.").font(.footnote).foregroundStyle(.secondary) }
-            if model.networkMode.usesLocalDiscovery {
-                Label(LocalizedStringKey(model.discoveryPeer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Automatic discovery" : "Manual discovery address"), systemImage: "network")
-                DisclosureGroup("Advanced connection settings", isExpanded: $showingAdvanced) {
+            DisclosureGroup("Advanced connection settings", isExpanded: $showingAdvanced) {
+                Toggle("Disable network services", isOn: Binding(get: { model.networkMode == .offline }, set: { model.networkMode = $0 ? .offline : .automatic }))
+                    .disabled(model.fromFile.contains("DM_NETWORK"))
+                if model.networkMode.usesLocalDiscovery {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Discovery IPv4 (optional)")
                         TextField("Automatic", text: $model.discoveryPeer)
@@ -103,18 +125,17 @@ private struct LauncherNetworkSection: View {
                         }
                     }
                     .padding(.vertical, 6)
-                }
-                if let error = model.networkValidationError {
-                    Label(LocalizedStringKey(error), systemImage: "exclamationmark.circle")
-                        .font(.footnote).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    if let error = model.networkValidationError {
+                        Label(LocalizedStringKey(error), systemImage: "exclamationmark.circle")
+                            .font(.footnote).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
-            Text(LocalizedStringKey(explanation)).font(.footnote).foregroundStyle(.secondary)
-            if model.networkMode == .nextendo {
+            if model.networkMode.supportsNextendo {
                 Button("Set up Nextendo") { openNextendo() }
                 Text("Link your account and check this game’s requirements on this iPhone.").font(.footnote).foregroundStyle(.secondary)
             }
-            if model.networkMode == .nextendo, let status = model.nextendoStatus {
+            if model.networkMode.supportsNextendo, let status = model.nextendoStatus {
                 Label(LocalizedStringKey(status.hasValidCredential ? "Game credential validated" : "Game credential needs attention"), systemImage: status.hasValidCredential ? "checkmark.shield" : "exclamationmark.shield")
                     .font(.footnote)
                 if let message = status.blockingMessage {
@@ -132,6 +153,7 @@ private struct LauncherNetworkSection: View {
 
     private var explanation: String {
         switch model.networkMode {
+        case .automatic: "Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them."
         case .offline: "Network services are disabled."
         case .lan: "Use the game's LAN mode to find other players on your local network."
         case .ldn: "Uses a LAN bridge for local wireless. The Switch needs a compatible ldn_mitm module and a matching game version."
@@ -144,6 +166,7 @@ private struct LauncherView: View {
     @ObservedObject var m: LauncherModel
     @ObservedObject var nextendo: MobileNextendoModel
     let play: () -> Void
+    @State private var isStartingGame = false
     @State private var showingNextendo = false
     @State private var memory = os_proc_available_memory()
 
@@ -174,7 +197,7 @@ private struct LauncherView: View {
                     LauncherNetworkSection(model: m, openNextendo: { showingNextendo = true })
                     ForEach(m.sections, id: \.self) { section in
                         Section(LocalizedStringKey(section)) {
-                            ForEach(m.settings.filter { $0.sectionTitle == section }) { SettingRow(s: $0, m: m) }
+                            ForEach(m.rows(in: section)) { SettingRow(s: $0, m: m) }
                         }
                     }
                     Section {
@@ -183,6 +206,7 @@ private struct LauncherView: View {
                     } footer: {
                         Text("Brings back all settings this game was tested with.")
                     }
+                    CloudSavesSection()
                     Section {
                         HStack {
                             Text("Memory available")
@@ -211,7 +235,8 @@ private struct LauncherView: View {
 
     @ViewBuilder var playButton: some View {
         let button = Button(action: attemptPlay) { Text("Play").font(.title3.weight(.semibold)).frame(maxWidth: 220) }
-            .controlSize(.large).disabled(m.networkValidationError != nil)
+            .controlSize(.large).disabled(m.networkValidationError != nil || isStartingGame ||
+                (m.networkMode == .nextendo && (nextendo.isPreparingServices || nextendo.isLoading)))
         if #available(iOS 26.0, *) { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.borderedProminent) }
     }
 
@@ -223,13 +248,21 @@ private struct LauncherView: View {
     }
 
     private func attemptPlay() {
-        guard m.apply() else { return }
+        guard !isStartingGame, m.apply() else { return }
+        isStartingGame = true
         if m.networkMode == .nextendo {
-            checkNextendoServices()
-            guard m.nextendoStatus?.canStart == true, nextendo.mayAttemptGame else {
-                showingNextendo = true
-                return
+            Task {
+                defer { isStartingGame = false }
+                await nextendo.load()
+                guard m.networkMode == .nextendo else { return }
+                checkNextendoServices()
+                guard m.nextendoStatus?.canStart == true, nextendo.mayAttemptGame else {
+                    showingNextendo = true
+                    return
+                }
+                play()
             }
+            return
         }
         play()
     }
@@ -247,11 +280,11 @@ private struct LauncherView: View {
 public func dmShowLauncher(_ viewController: UnsafeMutableRawPointer, _ done: @convention(c) () -> Void) -> Bool {
     // Keychain stays authoritative even when the user disables the launcher.
     installMobileNextendoKeychain()
-    if ProcessInfo.processInfo.environment["DM_LAUNCHER"] == "0" { fputs("launcher: off (DM_LAUNCHER=0)\n", stderr); return false }
     guard let url = Bundle.main.resourceURL?.appendingPathComponent("dm/launcher.json"), let data = try? Data(contentsOf: url) else { return false }
     guard let file = try? JSONDecoder().decode(SettingsFile.self, from: data), !file.settings.isEmpty else { fputs("[RED] launcher: dm/launcher.json cannot be read; starting the game\n", stderr); return false }
+    if ProcessInfo.processInfo.environment["DM_LAUNCHER"] == "0" { LauncherModel(file.settings).applySaved(); fputs("launcher: off (DM_LAUNCHER=0)\n", stderr); return false }
     let parent = Unmanaged<UIViewController>.fromOpaque(viewController).takeUnretainedValue()
-    let model = LauncherModel(file.settings)
+    let model = LauncherModel(file.settings, maximumFramesPerSecond: parent.view.window?.windowScene?.screen.maximumFramesPerSecond ?? 0)
     let nextendo = MobileNextendoModel(browser: MobileNextendoBrowser())
     var host: UIViewController?
     let view = LauncherView(m: model, nextendo: nextendo) {

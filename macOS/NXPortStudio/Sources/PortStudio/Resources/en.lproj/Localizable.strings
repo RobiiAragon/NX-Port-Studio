@@ -289,3 +289,41 @@
 "Homebrew" = "Homebrew";
 "Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation." = "Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation.";
 "Enter a valid registered Nextendo application client ID." = "Enter a valid registered Nextendo application client ID.";
+"Xcode has no Apple account configured. Sign in under Xcode → Settings → Apple Accounts with the account for your selected team, then try signing again." = "Xcode has no Apple account configured. Sign in under Xcode → Settings → Apple Accounts with the account for your selected team, then try signing again.";
+
+/* Game input discovery */
+"The game folder contains no supported game files or ZIP/7z archives." = "The game folder contains no supported game files or ZIP/7z archives.";
+"NSP, XCI, NSZ, XCZ or ZIP/7z · Base game, updates and DLC together" = "NSP, XCI, NSZ, XCZ or ZIP/7z · Base game, updates and DLC together";
+
+/* Build failure recovery */
+"The base game is missing." = "The base game is missing.";
+"Add the complete base game dump alongside its update or DLC. ZIP and 7z archives are unpacked automatically." = "Add the complete base game dump alongside its update or DLC. ZIP and 7z archives are unpacked automatically.";
+"The game files could not be identified." = "The game files could not be identified.";
+"Select a complete NSP, XCI, NSZ or XCZ dump, or a ZIP or 7z archive containing one. Check Activity for the exact file." = "Select a complete NSP, XCI, NSZ or XCZ dump, or a ZIP or 7z archive containing one. Check Activity for the exact file.";
+"The folder contains conflicting games." = "The folder contains conflicting games.";
+"Keep one base dump and only that game's updates and DLC in the selected folder. Move other games or duplicate bases to another folder." = "Keep one base dump and only that game's updates and DLC in the selected folder. Move other games or duplicate bases to another folder.";
+"The game archive could not be prepared." = "The game archive could not be prepared.";
+"Check that the archive finished copying. Extract encrypted, nested or unsupported archives beside the update, then select that folder again. The original archive is retained." = "Check that the archive finished copying. Extract encrypted, nested or unsupported archives beside the update, then select that folder again. The original archive is retained.";
+"The console keys file is unavailable." = "The console keys file is unavailable.";
+"Select a readable, nonempty prod.keys file dumped from your own console." = "Select a readable, nonempty prod.keys file dumped from your own console.";
+"Required console keys are missing." = "Required console keys are missing.";
+"Select updated prod.keys dumped from your own console that support this game and its update. Key values must stay private." = "Select updated prod.keys dumped from your own console that support this game and its update. Key values must stay private.";
+"The game dump is incomplete or damaged." = "The game dump is incomplete or damaged.";
+"Copy a complete dump from your own console again, then retry. Check Activity for the failed file or integrity check." = "Copy a complete dump from your own console again, then retry. Check Activity for the failed file or integrity check.";
+"There is not enough free disk space." = "There is not enough free disk space.";
+"Free space on the volume containing the game and build folder, then retry. Check Activity for the required amount." = "Free space on the volume containing the game and build folder, then retry. Check Activity for the required amount.";
+"This program cannot run on the selected platform." = "This program cannot run on the selected platform.";
+"Native ports require a 64-bit ARM game and an Apple silicon Mac. Check Activity for the unsupported program or host." = "Native ports require a 64-bit ARM game and an Apple silicon Mac. Check Activity for the unsupported program or host.";
+"A required build tool is unavailable." = "A required build tool is unavailable.";
+"Open Environment, check the selected destination's requirements and prepare the missing tools. Check Activity for the exact dependency." = "Open Environment, check the selected destination's requirements and prepare the missing tools. Check Activity for the exact dependency.";
+"Archive size is compressed. Expanded space is checked during import." = "Archive size is compressed. Expanded space is checked during import.";
+
+/* Direct macOS installation */
+"Install in" = "Install in";
+"The port is installed in Applications. Temporary build files are removed automatically." = "The port is installed in Applications. Temporary build files are removed automatically.";
+"Installing in Applications" = "Installing in Applications";
+"Installed in Applications" = "Installed in Applications";
+"Could not remove temporary build files." = "Could not remove temporary build files.";
+"Quit the installed game before updating it." = "Quit the installed game before updating it.";
+"Build failed. Review Activity or export its log before trying again." = "Build failed. Review Activity or export its log before trying again.";
+"A Mac app, installed in Applications." = "A Mac app, installed in Applications.";

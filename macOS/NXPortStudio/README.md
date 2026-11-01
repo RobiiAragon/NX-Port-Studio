@@ -24,7 +24,11 @@ The package includes the engine's `dm`, `scripts`, `docs`, `README.md` and `LICE
 
 ## Keys and game inputs
 
-Choose a folder containing one game's base NSP/XCI and any matching update/DLC. NSZ/XCZ inputs require the additional `nsz` Python module. You provide the game files and keys; none are included with the app.
+Choose a folder containing one game's base NSP/XCI and any matching update/DLC. Studio also finds inputs in subfolders, accepts upper-case extensions, and unpacks ZIP/7z archives locally. Hidden folders and generated build, survey and work directories are excluded from input discovery. Archive expansion checks entry paths, file types, size limits and available space before publishing an extraction cache; it never runs files from an archive. NSZ/XCZ inputs still require the additional `nsz` Python module. You provide the game files and keys; none are included with the app.
+
+Recognizing a container does not establish gameplay compatibility. Known profiles retain their exact build checks; unknown games can use the engine's survey and provisional-profile workflow, with its unverified status kept visible. Studio displays recovery steps for recognized build failures, while Activity keeps the original technical diagnostics.
+
+Inputs without a title identity, or updates/DLC without a version tag, use a local read-only CNMT probe through LibHac. It reads the real metadata and rejects ambiguous multi-content inputs. Metadata and build logs stay in a private `.nx-identify` folder next to the game. NSZ/XCZ inputs need their Meta NCA to remain readable; no compressed-metadata decoder is implied.
 
 Selecting a keys file remembers its path. Pasting keys stores a local file in the app's Application Support directory with owner-only permissions. Keys are passed to local build tools by path and their values are never printed by the GUI. The app neither uploads keys nor includes them in its engine snapshot.
 

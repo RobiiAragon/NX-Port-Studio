@@ -78,7 +78,7 @@
 "Refresh signed catalog" = "Refresh signed catalog";
 "Refresh the signed catalog to check this game." = "Refresh the signed catalog to check this game.";
 "Refreshing signed catalog…" = "Refreshing signed catalog…";
-"Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here." = "Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here.";
+"Use the public application ID registered in Nextendo. Sign-in returns to this device automatically." = "Use the public application ID registered in Nextendo. Sign-in returns to this device automatically.";
 "Registered application ID" = "Registered application ID";
 "Render scale" = "Render scale";
 "Reset to tested defaults" = "Reset to tested defaults";
@@ -126,3 +126,25 @@
 "Certificate resources included" = "Certificate resources included";
 "Certificate resources not included" = "Certificate resources not included";
 "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification." = "Certificate resources are packaged by the app’s publisher. Their presence does not bypass Apple’s TLS verification.";
+
+// Display modes and per-build qualification.
+"Display" = "Display";
+"Use full display resolution" = "Use full display resolution";
+"Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged." = "Keeps the picture’s proportions and borders. Internal rendering resolution is unchanged.";
+"Expand game view" = "Expand game view";
+"Needs a verified camera and HUD mod for this exact game version." = "Needs a verified camera and HUD mod for this exact game version.";
+"120 FPS" = "120 FPS";
+"Needs a verified game-timing mod and a display capable of at least 120 Hz." = "Needs a verified game-timing mod and a display capable of at least 120 Hz.";
+"No camera and HUD mod has been verified for this game build on iPhone." = "No camera and HUD mod has been verified for this game build on iPhone.";
+"No 120 FPS game-timing mod has been verified for this game build." = "No 120 FPS game-timing mod has been verified for this game build.";
+"The connected display does not report 120 Hz support." = "The connected display does not report 120 Hz support.";
+
+// Automatic public Nextendo service preparation.
+"Prepare game services" = "Prepare game services";
+"Preparing game services…" = "Preparing game services…";
+"Service preparation failed. Check your connection and try again." = "Service preparation failed. Check your connection and try again.";
+"Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay." = "Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay.";
+"Automatic connection" = "Automatic connection";
+"Disable network services" = "Disable network services";
+"Back to game settings" = "Back to game settings";
+"Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them." = "Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them.";

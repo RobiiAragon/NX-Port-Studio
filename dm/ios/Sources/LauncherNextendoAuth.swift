@@ -11,7 +11,10 @@ import UIKit
         guard let window, window.windowScene != nil else { return false }
         cancel()
         presentationWindow = window
-        let value = ASWebAuthenticationSession(url: request.authorizationURL, callback: .customScheme("nxnative-nextendo")) { url, error in
+        // The provider requires HTTP loopback. Neither a custom-scheme callback
+        // nor Apple's associated-HTTPS callback represents that redirect. Keep
+        // the browser open until our loopback receiver completes, then cancel it.
+        let value = ASWebAuthenticationSession(url: request.authorizationURL, callbackURLScheme: nil) { url, error in
             let result: Result<URL, NextendoError>
             if let url, error == nil { result = .success(url) }
             else if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin { result = .failure(.authorizationDenied) }

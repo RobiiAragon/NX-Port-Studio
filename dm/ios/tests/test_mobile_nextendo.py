@@ -26,7 +26,7 @@ class MobileNextendoTests(unittest.TestCase):
         mobile = REPO / 'dm/ios/Sources'
         with tempfile.TemporaryDirectory() as directory:
             binary = Path(directory) / 'mobile-nextendo-check'
-            sources = [core / name for name in ('NextendoAccount.swift','NextendoCatalog.swift','NextendoLoopback.swift')]
+            sources = [core / name for name in ('NextendoAccount.swift','NextendoCatalog.swift','NextendoLoopback.swift','NextendoServiceProfiles.swift')]
             sources += [mobile / name for name in ('LauncherNextendoCallback.swift','LauncherNextendoStore.swift','LauncherNextendoModel.swift')]
             sources += [Path(__file__).with_name('mobile_nextendo_check.swift')]
             result = subprocess.run(['xcrun','-sdk','macosx','swiftc','-swift-version','5','-parse-as-library','-o',str(binary),*[str(p) for p in sources]], capture_output=True, text=True)

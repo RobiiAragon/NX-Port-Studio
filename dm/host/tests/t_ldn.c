@@ -78,7 +78,12 @@ static int raw_read_frame(int fd, dm_ldn_network *out) {
 }
 static void local(void) {
     unsigned port = free_port(SOCK_STREAM); dm_ldn_transport t = transport(port, port, 1); dm_ldn_context *host = dm_ldn_start(&t, NULL, NULL); CHECK(host);
-    CHECK(dm_ldn_state(host) == 1); CHECK(dm_ldn_open(host, 1) == 0); CHECK(dm_ldn_open(host, 0) != 0);
+    CHECK(dm_ldn_state(host) == 1);
+    CHECK(dm_ldn_controller_restriction(NULL, 0) != 0);
+    CHECK(!dm_ldn_controller_restriction(host, 0)); CHECK(!dm_ldn_controller_restriction(host, 1));
+    CHECK(dm_ldn_controller_restriction(host, -1) != 0 && dm_ldn_controller_restriction(host, 2) != 0);
+    CHECK(dm_ldn_open(host, 1) == 0); CHECK(dm_ldn_open(host, 0) != 0);
+    CHECK(dm_ldn_controller_restriction(host, 0) != 0);
     dm_ldn_network_config cfg = config(); dm_ldn_security_config sec = security(); dm_ldn_user u = user("host");
     CHECK(!dm_ldn_advertise(host, "initial", 7)); CHECK(!dm_ldn_create(host, &cfg, &sec, &u, NULL, 0, NULL)); CHECK(dm_ldn_state(host) == 3);
     dm_ldn_network n; dm_ldn_update updates[8]; CHECK(!dm_ldn_get_network(host, &n, updates, 8)); CHECK(updates[0].change == 1); CHECK(n.advertise_size == 7 && !memcmp(n.advertise, "initial", 7));
