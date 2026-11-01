@@ -8,15 +8,15 @@
 
 <p align="center"><strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <a href="README.ja.md">日本語</a> · <a href="README.zh-Hans.md">简体中文</a></p>
 
-**NX Port Studio is a macOS workspace for turning your own Nintendo Switch game files into native Apple apps.** Choose a game, prepare its tools and resources, then build a Mac app or an iPhone/iPad port signed through Xcode.
+**I develop NX Port Studio as a macOS workspace for turning your own Nintendo Switch game files into native Apple apps.** Choose a game, prepare its tools and resources, then build a Mac app or an iPhone/iPad port signed through Xcode.
 
-This is an independent project built on [seedds/nxnative](https://github.com/seedds/nxnative). The upstream native-execution engine, its authors and their original MIT notice remain credited and preserved. See [Credits](CREDITS.md) and [License](LICENSE).
+I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC4:** fixes LAN adapter selection, repeated discovery queries and LDN setup on the nxnative `d2a86b05ccce` baseline. Automated host, graphics and iOS checks pass; game-by-game qualification remains open. See [release notes](docs/releases/1.6.0-rc.4.md).
+> **1.6.0 RC4:** I corrected LAN adapter selection, repeated discovery queries and LDN setup on the nxnative `d2a86b05ccce` baseline. I checked the automated host, graphics and iOS results; game-by-game qualification remains open. See [release notes](docs/releases/1.6.0-rc.4.md).
 
 ## Inside Studio
 
-Captured from the running macOS app in English.
+I captured the running macOS app in English.
 
 ![New port — choose your inputs and Apple platform](docs/images/en/studio-new-port.jpg)
 
@@ -31,18 +31,18 @@ Captured from the running macOS app in English.
 - **Signed iOS exports.** Every iOS export goes through Xcode signing and profile verification. Optional installation follows a successful signed export.
 - **Original system resources.** Import your own firmware data for Mii models, shared fonts and the certificate store, with version and content checks.
 - **Native controls.** Per-game controller settings, motion and vibration where the host platform and connected hardware expose them.
-- **Connections from the game menu.** Online uses Nextendo, local wireless uses the LDN bridge and LAN uses native IP sockets. No launcher protocol selection or restart is required; compatibility is validated for each path.
+- **Connections from the game menu.** Online uses Nextendo, local wireless uses the LDN bridge and LAN uses native IP sockets. No launcher protocol selection or restart is required; I qualify each connection path separately.
 
 The engine runs rewritten ARM64 game code on Apple silicon and implements the required host services and graphics translation. Compatibility depends on the exact game, update, profile and device. Creating an app does not by itself establish that the game is playable.
 
 ## Beyond the build UI
 
-This project also extends the native runtime and integration paths:
+Alongside Studio, I extend the native runtime and integration paths:
 
 - [Horizon socket transport](dm/host/hle_net_backend.c): explicit address/errno/flag translation, real TCP/UDP and safe descriptor close/reuse.
 - [Blocking HLE entry](dm/host/entry.S): guest-register publication, native host stacks and pause/resume-aware waits instead of fabricated progress.
 - [Apple TLS backend](dm/host/hle_ssl_apple.m): certificate/hostname verification and context-scoped trust, with original CertStore data supplied through the [firmware importer](dm/tools/nx_extract/FirmwareResources.cs).
-- [Original LDN bridge](dm/host/hle_ldn.c): real discovery, session control, roster synchronization and lifecycle over the public protocol, with owner-confirmed Mario Kart 3.0.5 LAN/LDN play across native Mac/iOS ports and a physical Switch.
+- [Original LDN bridge](dm/host/hle_ldn.c): real discovery, session control, roster synchronization and lifecycle over the public protocol. I tested Mario Kart 3.0.5 LAN/LDN play across native Mac/iOS ports and my physical Switch.
 - [Native account bridge](dm/host/hle_nextendo_apple.m), [social API](dm/host/hle_nextendo_social_apple.m) and [automatic service profiles](dm/tools/nextendo_services.py): real account/friend/presence data and per-title routing, with [complete catalog coverage and qualification](docs/nextendo-coverage.md). Scoped OAuth is not promoted into a game credential.
 - [Signed provider game adapters](dm/tools/nextendo_patches.py): exact-build guarded IPS32 plans, compiled into separate Nextendo modules while Offline/LAN keep the original rewrite.
 - [Controller mapping](dm/host/controls_map.h) and [Mac Joy-Con path](dm/host/joycon_mac.inc): Nintendo/Xbox layouts, public Apple controller APIs and a calibrated raw-device fallback on Mac. iOS remains limited to the capabilities its public APIs expose.
@@ -53,12 +53,12 @@ These mechanisms have different validation milestones. They do not establish tha
 
 | Area | Current evidence | Scope |
 | --- | --- | --- |
-| macOS Studio | Build, configuration, process handling, resource import and Xcode signing tests pass. | Apple silicon; the Studio interface requires macOS 14+. Individual games can require newer macOS/Metal features. |
-| Mac ↔ Switch LAN | An earlier tested Mac build **completed a full Mario Kart 8 Deluxe 3.0.5 race** with a physical Switch. | Historical baseline for matching versions and the game's LAN mode. The current candidate has not repeated that race. |
-| LDN bridge | The owner confirmed working Mario Kart 3.0.5 LAN and LDN play across native macOS/iOS ports and a physical Switch on October 31. Protocol and peer fixtures also pass. | Hardware result from the pre-sync ports; the new engine needs a fresh game test. IP LDN requires a compatible console module; built-in LAN is a separate path. |
-| Nextendo | Account integration plus one real **Smash 13.0.5 arena round on Mac** are verified. | Automatic connection mode; an explicitly approved per-service leaf enrollment was used. Quickplay, other titles and iOS online are not established by this result. |
-| iPhone/iPad | A signed Mario Kart 3.0.5 build has joined LAN lobbies with a physical Switch in both host roles, confirmed by the user. | Lobby entry is verified; a completed race remains unverified. Device, signing and platform restrictions still apply. |
-| Android / Windows | Planned after the Apple baseline is stable. | No builds or compatibility claims yet; ARM and x86 need separate architecture work. |
+| macOS Studio | I ran the build, configuration, process handling, resource import and Xcode signing tests successfully. | Apple silicon; the Studio interface requires macOS 14+. Individual games can require newer macOS/Metal features. |
+| Mac ↔ Switch LAN | I **completed a full Mario Kart 8 Deluxe 3.0.5 race** between an earlier Mac build and my physical Switch. | Historical baseline for matching versions and the game's LAN mode. I have not repeated that race with the current candidate. |
+| LDN bridge | On October 31, I tested Mario Kart 3.0.5 LAN and LDN play across native macOS/iOS ports and my physical Switch. I also ran the protocol and peer fixtures successfully. | Hardware result from the pre-sync ports; I still need a fresh game test with the new engine. IP LDN requires a compatible console module; built-in LAN is a separate path. |
+| Nextendo | I verified account integration and one real **Smash 13.0.5 arena round on Mac**. | Automatic connection mode; I explicitly approved the per-service leaf enrollment. I have not established Quickplay, other titles or iOS online through this result. |
+| iPhone/iPad | I checked that a signed Mario Kart 3.0.5 build joins LAN lobbies with my physical Switch, with each device as host. | I verified lobby entry; I have not verified a completed race on iPhone. Device, signing and platform restrictions still apply. |
+| Android / Windows | I plan these after the Apple baseline is stable. | I have no builds or compatibility results yet; ARM and x86 need separate architecture work. |
 
 ## Get started
 
@@ -100,26 +100,26 @@ The interface starts in Spanish. Choose English, French, Japanese or Simplified 
 
 Ports start with automatic connection services. Choose Online, Local wireless or LAN inside the game. Nextendo setup is available independently; missing online credentials do not block local play. Network disabling and a discovery peer override remain optional advanced settings.
 
-**LAN** uses a game's own LAN mode and real IP sockets. Use matching game versions and the same network. The earlier completed Mario Kart race above is the physical interoperability baseline; it does not certify a later runtime candidate. The current 3.0.5 Mac candidate can [create a local LAN room](dm/games/0100152000022000/README.md#local-network-validation), reaching the host lobby and rules. An external peer joining and a newly completed race remain unvalidated for that candidate.
+**LAN** uses a game's own LAN mode and real IP sockets. Use matching game versions and the same network. The earlier completed Mario Kart race above is the physical interoperability baseline; it does not certify a later runtime candidate. I checked that the current 3.0.5 Mac candidate can [create a local LAN room](dm/games/0100152000022000/README.md#local-network-validation), reaching the host lobby and rules. I have not validated an external peer joining or a new completed race with that candidate.
 
 **LDN** bridges local-wireless service discovery and membership over IP. It needs a compatible peer/module and a matching game. Passing peer fixtures is not a substitute for testing a physical console.
 
-Some games also require a local play-history identity during room setup. Import your own firmware in Studio and select it before building the port. The importer can extract that private resource from a recognized friends module; firmware 23.0.1 has been validated. [The implementation and its limits](docs/reference/services.md#local-play-history-identity-required-after-network-creation) are documented separately from online accounts.
+Some games also require a local play-history identity during room setup. Import your own firmware in Studio and select it before building the port. The importer can extract that private resource from a recognized friends module; I validated resources from firmware 23.0.1. [The implementation and its limits](docs/reference/services.md#local-play-history-identity-required-after-network-creation) are documented separately from online accounts.
 
-**Nextendo** adds account authorization and signed service policies. Studio uses your own registered application's client ID, saved locally, and keeps account credentials in the Mac's Keychain. Scoped OAuth access is not automatically a NEX game credential. An explicit request can obtain an identity-checked NEX credential; that account step has been verified. A listed or enabled server, an accepted version and a saved credential each describe a requirement; none proves a working native online match. Check the signed catalog in the app for current version policy.
+**Nextendo** adds account authorization and signed service policies. Studio uses your own registered application's client ID, saved locally, and keeps account credentials in the Mac's Keychain. Scoped OAuth access is not automatically a NEX game credential. An explicit request can obtain an identity-checked NEX credential; I verified that account step. A listed or enabled server, an accepted version and a saved credential each describe a requirement; none proves a working native online match. Check the signed catalog in the app for current version policy.
 
-The port also includes **Nextendo setup on iPhone/iPad**: authorize in the system browser, keep the account in the app's Keychain, refresh the signed catalog and inspect game-version/service requirements before launch. These device-side flows have fixture coverage; physical browser authorization is still being validated. Account setup does not establish a working native online match.
+The port also includes **Nextendo setup on iPhone/iPad**: authorize in the system browser, keep the account in the app's Keychain, refresh the signed catalog and inspect game-version/service requirements before launch. I covered these device-side flows with fixtures; physical browser authorization remains part of my ongoing validation. Account setup does not establish a working native online match.
 
-On iOS, the runtime implements automatic unicast discovery on an eligible, bounded IPv4 local subnet when broadcast/multicast access is unavailable. The advanced peer address is optional. The user confirmed LAN lobby entry in both host roles with a physical Switch; a complete race remains unverified.
+On iOS, the runtime implements automatic unicast discovery on an eligible, bounded IPv4 local subnet when broadcast/multicast access is unavailable. The advanced peer address is optional. I checked LAN lobby entry in both host roles with my physical Switch; I have not verified a complete race on iPhone.
 
-For rooms hosted on iPhone/iPad, Studio's **Local play → Start bridge** enables an optional [local discovery relay](dm/net/lan_relay.c) on the Mac. Keep Studio open on the same network. The bridge relays supported LAN/LDN room discovery; gameplay connects peers directly. It starts off, shows real traffic/error state and does not require an account or a manually entered IP address. **The owner confirmed LAN and LDN play across native Mac/iOS ports and physical Switch hardware on October 31.** This does not qualify every game, host pairing or the newly synchronized engine.
+For rooms hosted on iPhone/iPad, Studio's **Local play → Start bridge** enables an optional [local discovery relay](dm/net/lan_relay.c) on the Mac. Keep Studio open on the same network. The bridge relays supported LAN/LDN room discovery; gameplay connects peers directly. It starts off, shows real traffic/error state and does not require an account or a manually entered IP address. **On October 31, I tested Mario Kart 3.0.5 LAN and LDN play across native Mac/iOS ports and my physical Switch, before the engine synchronization.** This does not qualify every game, host pairing or the newly synchronized engine.
 
 ### Current game-service blockers
 
-As of 2026-10-31, five production account/BAAS/data endpoints pass the native scoped-CA handshake, including the provider’s long-lived certificates. The probed MK8 NEX endpoint still presents a self-signed certificate without its required hostname, and the device/application-auth chain does not match the published provider CA. These checks remain failures. The available Mario Kart 8 Deluxe **3.0.5** build also falls outside the catalog’s **4.0.1** requirement. The [full coverage inventory](docs/nextendo-coverage.md) lists all 58 catalog entries, 62 regional service profiles and 22 exact-build patch plans, separately from unverified native online gameplay.
+On 2026-10-31, I checked five production account/BAAS/data endpoints that passed the native scoped-CA handshake, including the provider’s long-lived certificates. The MK8 NEX endpoint I probed still presents a self-signed certificate without its required hostname, and the device/application-auth chain does not match the published provider CA. These checks remain failures. The Mario Kart 8 Deluxe **3.0.5** build I tested also falls outside the catalog’s **4.0.1** requirement. The [full coverage inventory](docs/nextendo-coverage.md) lists all 58 catalog entries, 62 regional service profiles and 22 exact-build patch plans, separately from unverified native online gameplay.
 
 ## What belongs in this repository
 
-Source, original project artwork, profiles, tooling, documentation and preserved dependency licenses belong here. Games, decrypted game assets, console keys, firmware archives, account credentials and personal save data do not. Nintendo screenshots, covers, artwork, game icons and original SDK files are excluded from this public repository. Validation results are described in text.
+I keep source, original project artwork, profiles, tooling, documentation and preserved dependency licenses here. Games, decrypted game assets, console keys, firmware archives, account credentials and personal save data do not. Nintendo screenshots, covers, artwork, game icons and original SDK files are excluded from this public repository. Validation results are described in text.
 
 See [Contributing](CONTRIBUTING.md) for useful bug reports and validation evidence, and [Roadmap](ROADMAP.md) for planned work. This project is not affiliated with Nintendo, Apple, Nextendo or the upstream authors; using an upstream engine or a service does not imply their endorsement.
