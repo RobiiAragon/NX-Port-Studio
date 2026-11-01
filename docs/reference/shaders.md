@@ -4,6 +4,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 
 ## Containers by engine
 
+### SARC archives with big-endian headers
+
+- **Symptom:** a valid archive reports an absurd entry count, such as 20,323, or its names appear to extend beyond its data.
+- **Cause:** the reader treated every SARC integer as little-endian, including archives whose byte-order mark specifies big-endian.
+- **Fix:** I select byte order from the mark and validate the SARC, SFAT and SFNT headers, declared extent, member ranges and terminated names before reading their bytes. Bounds remain mandatory for both orders; nested-archive overlap and expansion budgets are unchanged. The [primary format description](https://github.com/kinnay/Nintendo-File-Formats/blob/master/src/libs/sead/sarc.md) documents the byte-order and table fields; this is an independent implementation.
+- **Checks:** `test_sarc.py` covers both orders, nested and anonymous members, truncated headers, malformed tables, out-of-range data/names and missing terminators. `test_split_nesting.py` retains the compressed-member and overlap-budget checks with valid synthetic headers.
+- **Found on:** my experimental Splatoon 2 EUR 5.5.2 bring-up: two `System/GSys/gsys_resource_nvn*.szs` archives were valid big-endian SARC files. Their embedded [GX2 BAHS variant](#gx2-programs-in-a-bahs-v9-archive) is handled separately; recognizing the archive does not prove complete shader coverage.
+
 ### Sumo Ninty_NX shaders and MuxFDMR streams
 
 - **Symptom:** the split finds no shaders in `main` or RomFS, while reporting control sections in `main` with no code area. The game has `.sp4` resources and loose `.nvnbin` files rather than BNSH archives or whole GLSLC outputs.
@@ -49,6 +57,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **How it is stored:** agl `sharcb`, the engine utility shaders: code region at header +0x1c (size +0x18). Binary entries in the table area are 16 bytes `{code offset, 0, control size (0x880/0x88c; 0x848 in BAHS version 9, Super Mario 3D World), signed offset from this entry to the control section}`.
 - **Pairing:** control sections are shared between programs, so pair by entry, never by searching for code near a control.
 - **Found on:** [Super Mario 3D World + Bowser's Fury](../../dm/games/010028600EBDA000/README.md) (BAHS version 9).
+
+### GX2 programs in a BAHS v9 archive
+
+- **Symptom:** the NVN reader reports `BAHS code region out of bounds` for a structurally complete archive whose shader payloads are not Maxwell programs.
+- **Cause:** the BAHS signature and version are shared by different layouts. The pooled-string version-9, flags-5 variant I examined contains serialized GX2 shader structures, followed by a program array, rather than the NVN control/code region at header offsets 0x18/0x1c.
+- **Fix:** I recognize this variant only after validating every typed vertex, pixel and geometry structure, mode, aligned code range (including shared negative relative pointers), record boundary and program/stage coverage. The public [GX2 field offsets](https://github.com/devkitPro/wut/blob/master/include/gx2/shaders.h) identify the payloads positively; [the original SHARCFB format description](https://github.com/kinnay/Nintendo-File-Formats/blob/master/src/libs/agl/sharcfb.md) describes the record/program scheme. I implemented the validation independently. These foreign programs receive an informational message and are not translated as NVN. Unknown or malformed BAHS still follows the existing error path; mixed content containing NVN header markers is never excluded by this recognizer.
+- **Checks:** `test_bahs_gx2.py` uses synthetic GX2 records, geometry copy programs, shared code and corrupt pointers/lengths/modes/stages. The ordinary synthetic NVN archive still extracts both stages. `test_bahs_pairs.py` preserves the existing NVN stage/pair checks.
+- **Found on:** my Splatoon 2 EUR 5.5.2 bring-up: all three legacy `System/GSys/gsys_resource_nvn*.szs` archives contain the same 307-record GX2 archive (153 vertex, 153 pixel, one geometry). Their accompanying `Gfx2` files also identify [Wii U shader data](https://nintendo-formats.com/libs/gfd/gfx2.html). The actual `gsys_resource.Nin_NX_NVN` archives are read by the ordinary NVN path. This does not replace a full shader-map or gameplay qualification.
 
 ### BAHS intermediate stages are not direct pipeline pairs
 

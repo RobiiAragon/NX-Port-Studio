@@ -52,7 +52,10 @@ class Nesting(unittest.TestCase):
         self.assertEqual({w.split('#')[0] for w, *_ in out}, {'/UI/EUde/race.sarc/rc_L_Rank_00.szs/shader.bnsh'})
 
     def test_overlapping_members_are_stopped(self):
-        d = (REPO / 'dm/tools/fuzz/corpus/shader_split/sarc-fanout.bin').read_bytes()
+        # Keep every SARC header valid so this exercises the overlap budget,
+        # rather than the older fuzz seed's malformed SFNT header.
+        d = bytes(0x4000)
+        for _ in range(6): d = fanout(d)
         with self.assertRaisesRegex(SystemExit, r'members add up to more than 16 times the file \(members that overlap\)'): self.scan(d)
 
     def test_compressed_overlapping_members_are_stopped(self):
