@@ -6,7 +6,7 @@
 
 Ce projet indépendant repose sur [nxnative de seedds](https://github.com/seedds/nxnative). Les auteurs du moteur et leurs avis de copyright restent crédités : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **Version candidate 1.6.0 :** moteur synchronisé avec nxnative `d2a86b05ccce` (352 commits depuis la base commune). Les tests automatisés du moteur, des graphismes et d’iOS passent ; les jeux restent à revalider sur ce nouveau moteur. [Notes de version](docs/releases/1.6.0-rc.2.md).
+> **Version candidate 1.6.0 :** moteur synchronisé avec nxnative `d2a86b05ccce` (352 commits depuis la base commune). Les tests automatisés du moteur, des graphismes et d’iOS passent ; les jeux restent à revalider sur ce nouveau moteur. [Notes de version](docs/releases/1.6.0-rc.3.md).
 
 ## Dans l'application
 

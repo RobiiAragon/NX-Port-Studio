@@ -12,7 +12,7 @@
 
 Es un proyecto independiente basado en [seedds/nxnative](https://github.com/seedds/nxnative). Se conservan el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **Candidata 1.6.0:** motor sincronizado con nxnative `d2a86b05ccce` (352 commits desde la base compartida). Pasan las pruebas automáticas de host, gráficos e iOS; falta repetir la validación de juegos con este motor. [Notas de versión](docs/releases/1.6.0-rc.2.md).
+> **Candidata 1.6.0:** motor sincronizado con nxnative `d2a86b05ccce` (352 commits desde la base compartida). Pasan las pruebas automáticas de host, gráficos e iOS; falta repetir la validación de juegos con este motor. [Notas de versión](docs/releases/1.6.0-rc.3.md).
 
 ## Capturas de Studio
 

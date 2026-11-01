@@ -12,7 +12,7 @@
 
 This is an independent project built on [seedds/nxnative](https://github.com/seedds/nxnative). The upstream native-execution engine, its authors and their original MIT notice remain credited and preserved. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 release candidate:** the engine is synchronized with nxnative `d2a86b05ccce` (352 upstream commits since the shared baseline). Automated host, graphics and iOS checks pass; game-by-game qualification of this new engine remains open. See [release notes](docs/releases/1.6.0-rc.2.md).
+> **1.6.0 release candidate:** the engine is synchronized with nxnative `d2a86b05ccce` (352 upstream commits since the shared baseline). Automated host, graphics and iOS checks pass; game-by-game qualification of this new engine remains open. See [release notes](docs/releases/1.6.0-rc.3.md).
 
 ## Inside Studio
 
