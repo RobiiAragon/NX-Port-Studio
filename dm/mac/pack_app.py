@@ -19,6 +19,7 @@ sys.path.insert(0, str(HERE.parent / 'tools'))
 import romfs as rfs
 import system_data
 import nextendo_services
+import nextendo_bcat
 import mii_resources
 MODULE_FILES = ('*.patched.bin', '*.fixups.tsv', '*.gates.tsv', '*.cuts.tsv', '*.obs.tsv', '*.changed.tsv', 'nro.tsv')   # what the host reads from the module folder (build_ipa.sh copies the same tables but changed.tsv: the iPhone's cheats never write code)
 MSL_FILES = ('*.metallib', '*.json', '*.tsv')   # what the host reads from msl/ (not the Mac build's .metal sources or _b_build.json)
@@ -228,8 +229,10 @@ def pack(a):
         codesign = Path(codesign).resolve()
         minos = min_os(a.host)
         sources = [Path(__file__).resolve(), HERE / 'launcher.c', HERE.parent / 'host/romfs_image.h', HERE.parent / 'host/save_sync.c', HERE.parent / 'host/save_sync.h', HERE.parent / 'tools/romfs.py'] + swift_sources()
+        if getattr(a, 'nextendo_bcat_dir', None):
+            sources += [HERE.parent / p for p in ('tools/nextendo_bcat.py', 'tools/bcat_prepare.m', 'host/hle_bcat_apple.m', 'host/nextendo_bcat.h')]
         inputs = {'options': vars(a), 'files': [(str(p), p.stat().st_mode, digest(p), os.readlink(p) if p.is_symlink() else None) for p in files + sources],
-                  'trees': [(p, inventory(Path(p))) for p in (a.romfs, a.aoc) if p],
+                  'trees': [(p, inventory(Path(p))) for p in (a.romfs, a.aoc, getattr(a, 'nextendo_bcat_dir', None)) if p],
                   'tools': [[str(c), c.stat().st_mode, c.stat().st_size, c.stat().st_mtime_ns, c.stat().st_ctime_ns, run([c, '--version']).strip()] for c in (clang, swiftc)] + [
                             str(sdk), run(['xcrun', '--sdk', 'macosx', '--show-sdk-version']).strip(),
                             str(codesign), codesign.stat().st_mode, digest(codesign), minos]}
@@ -270,6 +273,9 @@ def pack(a):
         step("private personal Mii snapshot"); mii_resources.stage(a.mii_database, dm / 'mii_database.dmii')
     if getattr(a, "nextendo_services_dir", None):
         step("public Nextendo service profile"); nextendo_services.stage(a.nextendo_services_dir, dm / 'nextendo', a.title_id)
+    if getattr(a, "nextendo_bcat_dir", None):
+        step("Nextendo calendar recipe and any complete validated snapshot")
+        nextendo_bcat.stage(HERE.parent.parent, a.nextendo_bcat_dir, dm / 'bcat', a.title_id, a.version, allow_missing=True)
     notices = Path(__file__).resolve().parents[1] / 'third_party/notices/OpenSSL'
     (res / 'Notices').mkdir(exist_ok=True)
     copy([notices], res / 'Notices', False)
@@ -320,6 +326,7 @@ def parse(argv):
     ap.add_argument('--system-data-dir', help='extracted firmware resources (system_data/<title-id>/files)')
     ap.add_argument('--mii-database', help='validated private personal Mii library/export snapshot')
     ap.add_argument('--nextendo-services-dir', help='validated public Nextendo service profile for this title')
+    ap.add_argument('--nextendo-bcat-dir', help='verified private calendar snapshot cache for this title/version')
     ap.add_argument('--env-file', help='environment switches baked in (Resources/dm/env.txt)')
     ap.add_argument('--settings', help='the game\'s launcher settings (dm/games/settings.py output; Resources/dm/launcher.json, which the Mac front end reads)')
     ap.add_argument('--title-id', required=True); ap.add_argument('--name', required=True)

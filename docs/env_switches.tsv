@@ -97,6 +97,7 @@ DM_NETWORK_INTERFACE	player	IPv4 interface name for local sockets; otherwise use
 DM_NET_DISABLE_MULTICAST	diagnostic	1 disables direct multicast discovery, leaving configured relay discovery available
 DM_NET_DISCOVERY_PEER	player	Optional discovery relay IPv4 endpoint; automatic local discovery requires no entered address
 DM_NET_TRACE	diagnostic	Log native socket and local-network translation details
+DM_NEXTENDO_BCAT_DIR	path	Private title/version calendar recipe and validated seed snapshot; runtime checks for public HTTPS updates when online services are enabled
 DM_NEXTENDO_CLIENT_ID	switch	Public OAuth application identifier embedded in mobile account setup; never a client secret
 DM_NEXTENDO_ROUTES	path	Private reviewed Nextendo route-policy TSV with exact host and certificate constraints
 DM_NEXTENDO_SERVICES_DIR	path	Validated game service profile directory for Nextendo

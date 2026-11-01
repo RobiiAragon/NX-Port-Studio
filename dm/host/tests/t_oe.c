@@ -60,6 +60,12 @@ static int child_burst(int kind) {
     return WIFEXITED(st) && WEXITSTATUS(st) == 0;
 }
 int main(void) {
+    unsigned char recording[32]; memset(recording,0x7b,sizeof recording);
+    CHECK(!h_oe_RecordingSupported(), "system recording capability is unavailable");
+    h_oe_RecordingEnable(recording,sizeof recording);h_oe_RecordingPause();h_oe_RecordingRestart();
+    int untouched=1;for(size_t i=0;i<sizeof recording;i++)if(recording[i]!=0x7b)untouched=0;
+    CHECK(untouched&&!h_oe_RecordingSupported(), "unsupported recording controls preserve the supplied buffer and capability");
+
     unsetenv("DM_OE_SCRIPT"); reset();
     CHECK(h_oe_InactivityMode() == 0 && !h_oe_InactivityExtQ(), "inactivity extension starts disabled");
     h_oe_InactivityExtSafe(1);

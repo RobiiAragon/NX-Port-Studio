@@ -30,6 +30,7 @@ QUIET = $(if $(findstring -fsanitize,$(SAN)),,2>/dev/null)
 # tests that use the game profile need GAME=<base game title ID> (there is no default game); GINC only expands when used, so tests without the profile build as before
 GINC = $(if $(strip $(GAME)),-I../gen/$(GAME) -I../../games/$(GAME),$(error GAME is not set: make GAME=<base game title ID>: $(shell python3 ../../games/game.py list | awk -F'\t' '{printf "%s (%s)  ", $$1, $$3}')))
 $(B)/t_fs $(B)/t_fs_case $(B)/t_fs_commit_list $(B)/t_fs_commit_list_tsan: ../romfs_image.h
+$(B)/t_fs $(B)/t_fs_directory $(B)/t_fs_case $(B)/t_fs_commit_list $(B)/t_fs_commit_list_tsan $(B)/t_save_sync $(B)/t_bcat_fs: bcat_absent.h
 GAME_H = ../gen/$(GAME)/game_profile.h
 .PHONY: mii mii-sanitize
 $(B)/t_mii: t_mii.c ../hle_mii.c ../hle_mii_database.c ../mii_database.h $(GAME_H) | $(B)
@@ -537,3 +538,17 @@ coverage:
 	rm -rf $(B)/cov/prof
 	LLVM_PROFILE_FILE="$(call cov_profile,$(B)/cov)" $(MAKE) -i B=$(B)/cov SAN="$(COV_FLAGS)" run
 	@$(call cov_export,$(B)/cov)
+
+# Provider-independent BCAT fixtures: original Ed25519 key/data and real files.
+$(B)/t_bcat_store: t_bcat_store.m ../hle_bcat_apple.m ../nextendo_bcat.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -Wno-deprecated-declarations -fobjc-arc $(PRIVATE_PKI_FLAGS) -o $@ t_bcat_store.m $(PRIVATE_PKI_LIB) -lz -framework Foundation
+$(B)/t_bcat_sdk: t_bcat_sdk.c t_bcat_guest.S ../hle_bcat.c ../nextendo_bcat.h ../hle_bigstack.c $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -Wno-deprecated-declarations $(GINC) -o $@ t_bcat_sdk.c t_bcat_guest.S ../hle_bigstack.c
+.PHONY: bcat
+bcat: $(B)/t_bcat_store $(B)/t_bcat_sdk $(B)/t_bcat_fs
+	$(B)/t_bcat_store
+	$(PYTHON) test_bcat_zip.py $(abspath $(B))/t_bcat_store
+	$(B)/t_bcat_sdk
+	$(B)/t_bcat_fs
+$(B)/t_bcat_fs: t_bcat_fs.c t_bcat_fs_provider.c t_fs_stub.c ../hle_fs.c ../nextendo_bcat.h ../hle_bigstack.c ../save_sync.c $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -o $@ t_bcat_fs.c t_bcat_fs_provider.c t_fs_stub.c ../hle_bigstack.c ../save_sync.c

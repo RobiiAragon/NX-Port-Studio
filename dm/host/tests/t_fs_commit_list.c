@@ -50,13 +50,13 @@ static int same(const char *path, const char *s) {
     return n == strlen(s) && !memcmp(b, s, n);
 }
 static Result write_save(const char *path, const char *s) {
-    uint64_t h; Result r = h_fs_OpenFile(&h, path, MODE_WRITE); if (r) return r;
+    uint64_t h = 0; Result r = h_fs_OpenFile(&h, path, MODE_WRITE); if (r) return r;
     r = h_fs_SetFileSize(h, (int64_t)strlen(s));
     if (!r) r = h_fs_WriteFile(h, 0, s, strlen(s), NULL);
     h_fs_CloseFile(h); return r;
 }
 static int read_save(const char *path, char *out, size_t n) {
-    uint64_t h; size_t got = 0; if (h_fs_OpenFile(&h, path, MODE_READ)) return 0;
+    uint64_t h = 0; size_t got = 0; if (h_fs_OpenFile(&h, path, MODE_READ)) return 0;
     Result r = h_fs_ReadFile(&got, h, 0, out, n - 1); h_fs_CloseFile(h); out[got] = 0; return !r;
 }
 static pthread_mutex_t first_lock = PTHREAD_MUTEX_INITIALIZER;
