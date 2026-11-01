@@ -53,7 +53,7 @@
 #   With an update: give RomFS and main as comma-separated lists (base game first, e.g. data/v0/RomFS,data/v327680/RomFS); the output is the union of both versions (see main())
 #   Unity type trees need Unity's common string table, which is taken from the first main
 # Pair table: (vertex key, pixel key) of every BNSH variation (every Unity program); dmsh_build uses it to give vertex shaders the outputs their pixel shaders read but they do not write (see dmsh_build.py vs_pad)
-import collections, concurrent.futures as cf, hashlib, json, os, re, struct, subprocess, sys, time, zlib
+import bisect, collections, concurrent.futures as cf, hashlib, json, os, re, struct, subprocess, sys, time, zlib
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools'))
 from romfs import os, open, is_image
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../games')); import game as _game
@@ -148,7 +148,64 @@ def bnsh_shaders(d, base, label):
             out.append((f'{label}#BNSH@{base:#x}#var{v}', st, ctl, code))
     return out
 
+def gx2_bahs_count(d):
+    """Recognize the pooled-string BAHS v9 variant only through complete GX2 records.
+    Public GX2 structure offsets: devkitPro/wut include/gx2/shaders.h. No foreign
+    implementation is imported; unknown or damaged candidates stay on the NVN error path.
+    """
+    if len(d) < 24 or d[:4] != b'BAHS': return 0
+    version, size, flags, reserved, strings = struct.unpack_from('<5I', d, 4)
+    if version != 9 or size != len(d) or flags != 5 or reserved or not strings or strings > len(d) - 40: return 0
+    if any(marker in d for marker in (CTL_MAGIC, GFX_MAGIC, CS_MAGIC)): return 0   # never exclude ambiguous/mixed NVN content
+    array = 24 + strings
+    if b'\0' not in d[24:array]: return 0
+    size, count = struct.unpack_from('<II', d, array)
+    end = array + size
+    if size < 8 or end > len(d) - 8 or not count or count > (size - 8) // 16: return 0
+    p, tails, ranges, kinds = array + 8, [], [], []
+    # (structure bytes, program-size field, mode field). Geometry also has a
+    # copy-vertex program. Serialized pointers are signed, data-relative offsets.
+    layouts = {0: (0x134, 0xd0, 0xd8), 1: (0xe8, 0xa4, 0xac), 2: (0xb0, 0x4c, 0x5c)}
+    for _ in range(count):
+        if p + 16 > end: return 0
+        record, kind, _, data_size = struct.unpack_from('<4I', d, p)
+        if kind not in layouts or record < 16 or record > end - p: return 0
+        minimum, program_offset, mode_offset = layouts[kind]
+        if data_size < minimum or data_size > record - 16: return 0
+        at = p + 16
+        if struct.unpack_from('<I', d, at + mode_offset)[0] not in (0, 1, 2): return 0
+        for offset in (program_offset, 0x54) if kind == 2 else (program_offset,):
+            length, relative = struct.unpack_from('<Ii', d, at + offset)
+            start = at + relative
+            if not length or length % 8 or start % 256: return 0
+            ranges.append((start, start + length))
+        tails.append((at + minimum, at + data_size)); kinds.append(kind); p += record
+    if p != end: return 0
+    starts = [lo for lo, _ in tails]
+    for lo, hi in ranges:
+        owner = bisect.bisect_right(starts, lo) - 1
+        if owner < 0 or hi > tails[owner][1]: return 0
+    size, count = struct.unpack_from('<II', d, p)
+    if size < 8 or size != len(d) - p or not count or count > (size - 8) // 16: return 0
+    p += 8; programs = []
+    for _ in range(count):
+        if p + 16 > len(d): return 0
+        record, name_length, mask, base = struct.unpack_from('<4I', d, p)
+        if record < 16 or record > len(d) - p or not name_length or name_length > record - 16 or d[p + 15 + name_length] != 0: return 0
+        if mask not in (3, 7) or base >= len(kinds) or (programs and base <= programs[-1][0]): return 0
+        programs.append((base, mask)); p += record
+    if p != len(d) or programs[0][0]: return 0
+    for i, (base, mask) in enumerate(programs):
+        end = programs[i + 1][0] if i + 1 < len(programs) else len(kinds)
+        stages = [0, 1, 2] if mask == 7 else [0, 1]
+        if (end - base) % len(stages) or any(sorted(kinds[j:j + len(stages)]) != stages for j in range(base, end, len(stages))): return 0
+    return len(kinds)
+
+
 def bahs_shaders(d, label):
+    if foreign := gx2_bahs_count(d):
+        print(f'foreign shader archive: {label}: {foreign} bounded GX2 shader records (not NVN)', flush=True)
+        return []
     rsz, region = field(d, '<II', 0x18, f'{label} BAHS header')
     if region + rsz > len(d): red(f'{label} BAHS code region out of bounds')
     out = []
@@ -2036,14 +2093,26 @@ def yaz0(s, label='Yaz0'):
 def sarc_members(d, label='SARC'):
     """(name, bytes) of each member of a SARC: the header, SFAT (its entries), SFNT (the names), then the data, where every member lies. A member range outside the data
     (one spanning the whole archive would be scanned as the archive again, without end) is a damaged archive"""
-    hl, bom, size, doff = field(d, '<HHII', 4, f'{label} SARC header')
-    n = field(d, '<H', hl + 6, f'{label} SFAT header')[0]
+    bom = span(d, 6, 2, f'{label} SARC byte order')
+    if bom not in (b'\xfe\xff', b'\xff\xfe'): red(f'{label}: invalid SARC byte-order mark')
+    order = '>' if bom == b'\xfe\xff' else '<'
+    hl, _, size, doff = field(d, order + 'HHII', 4, f'{label} SARC header')
+    if d[:4] != b'SARC' or hl != 0x14 or size > len(d): red(f'{label}: invalid SARC header or declared size')
+    tag, length, n, _ = field(d, order + '4sHHI', hl, f'{label} SFAT header')
+    if tag != b'SFAT' or length != 12 or n > 0x3fff: red(f'{label}: invalid SARC SFAT header')
     names = hl + 12 + 16 * n + 8
-    if not names <= doff <= len(d): red(f'{label}: SARC data at {doff:#x}, its {n} entries and the names end at {names:#x}, the archive at {len(d):#x}')
+    if not names <= doff <= size: red(f'{label}: SARC data at {doff:#x}, its {n} entries and the names end at {names:#x}, the archive at {size:#x}')
+    tag, length = field(d, order + '4sH', names - 8, f'{label} SFNT header')
+    if tag != b'SFNT' or length != 8: red(f'{label}: invalid SARC SFNT header')
     for i in range(n):
-        h, attr, s, e = struct.unpack_from('<IIII', d, hl + 12 + 16 * i)
-        if not s <= e <= len(d) - doff: red(f'{label}: SARC member {i} at {s:#x}..{e:#x} of the data lies outside its {len(d) - doff:#x} bytes')
-        nm = d[names + (attr & 0xffffff) * 4:].split(b'\0')[0].decode('utf-8', 'replace') if attr >> 24 else f'#{i}'
+        _, attr, s, e = struct.unpack_from(order + 'IIII', d, hl + 12 + 16 * i)
+        if not s <= e <= size - doff: red(f'{label}: SARC member {i} at {s:#x}..{e:#x} of the data lies outside its {size - doff:#x} bytes')
+        nm = f'#{i}'
+        if attr >> 24:
+            start = names + (attr & 0xffffff) * 4
+            end = d.find(b'\0', start, doff)
+            if not names <= start < doff or end < 0: red(f'{label}: SARC member {i} has an out-of-range or unterminated name')
+            nm = d[start:end].decode('utf-8', 'replace')
         yield nm, d[doff + s:doff + e]
 
 NV_STAGES = ['vs', 'ps', 'gs', 'hs', 'ds', 'cs']   # NVN stage order
