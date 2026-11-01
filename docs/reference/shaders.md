@@ -58,6 +58,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Pairing:** control sections are shared between programs, so pair by entry, never by searching for code near a control.
 - **Found on:** [Super Mario 3D World + Bowser's Fury](../../dm/games/010028600EBDA000/README.md) (BAHS version 9).
 
+### GX2 programs in a BAHS v9 archive
+
+- **Symptom:** the NVN reader reports `BAHS code region out of bounds` for a structurally complete archive whose shader payloads are not Maxwell programs.
+- **Cause:** the BAHS signature and version are shared by different layouts. The pooled-string version-9, flags-5 variant I examined contains serialized GX2 shader structures, followed by a program array, rather than the NVN control/code region at header offsets 0x18/0x1c.
+- **Fix:** I recognize this variant only after validating every typed vertex, pixel and geometry structure, mode, aligned code range (including shared negative relative pointers), record boundary and program/stage coverage. The public [GX2 field offsets](https://github.com/devkitPro/wut/blob/master/include/gx2/shaders.h) identify the payloads positively; [the original SHARCFB format description](https://github.com/kinnay/Nintendo-File-Formats/blob/master/src/libs/agl/sharcfb.md) describes the record/program scheme. I implemented the validation independently. These foreign programs receive an informational message and are not translated as NVN. Unknown or malformed BAHS still follows the existing error path; mixed content containing NVN header markers is never excluded by this recognizer.
+- **Checks:** `test_bahs_gx2.py` uses synthetic GX2 records, geometry copy programs, shared code and corrupt pointers/lengths/modes/stages. The ordinary synthetic NVN archive still extracts both stages. `test_bahs_pairs.py` preserves the existing NVN stage/pair checks.
+- **Found on:** my Splatoon 2 EUR 5.5.2 bring-up: all three legacy `System/GSys/gsys_resource_nvn*.szs` archives contain the same 307-record GX2 archive (153 vertex, 153 pixel, one geometry). Their accompanying `Gfx2` files also identify [Wii U shader data](https://nintendo-formats.com/libs/gfd/gfx2.html). The actual `gsys_resource.Nin_NX_NVN` archives are read by the ordinary NVN path. This does not replace a full shader-map or gameplay qualification.
+
 ### BAHS intermediate stages are not direct pipeline pairs
 
 - **Symptom:** offline pipeline packing fails in `metal-tt` with `Fragment input(s) user(locn0),user(locn1),user(locn2) mismatching vertex shader output type(s) or not written by vertex shader`; the device prebuild reports the same pair as a failed base.
