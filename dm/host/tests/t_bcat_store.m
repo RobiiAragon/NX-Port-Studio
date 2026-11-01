@@ -11,6 +11,7 @@ static NSData *envelope(NSData *payload,EVP_PKEY *key){
 int main(int argc,const char **argv){@autoreleasepool{
     if(argc==3){NSData *zip=boundedRead([NSString stringWithUTF8String:argv[1]],zipLimit+1);BOOL expected=atoi(argv[2])!=0;NSDictionary *files=unzip(zip,NULL);if((files!=nil)!=expected)return 1;return 0;}
     CHECK(dm_bcat_supported("0100F8F0000A2000"));CHECK(!dm_bcat_supported("0100152000022000"));
+    CHECK(!dm_bcat_supported("\xff"));
     CHECK(safePath(@"vsdata/VSSetting_0.byaml"));CHECK(!safePath(@"../data"));CHECK(!safePath(@"/absolute"));CHECK(!safePath(@"a//b"));CHECK(!safePath(@"a/../b"));CHECK(!safePath(@"a\\b"));CHECK(!safePath(@"c:/b"));
     CHECK(!json([@"{\"a\":1,\"a\":2}" dataUsingEncoding:NSUTF8StringEncoding]));
     CHECK(!json([@"{\"a\":1,\"\\u0061\":2}" dataUsingEncoding:NSUTF8StringEncoding]));

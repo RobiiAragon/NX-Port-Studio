@@ -69,7 +69,17 @@ HLE_FORCE("_ZN2nn4bcat22DeliveryCacheDirectory4OpenERKNS0_13DirectoryNameE","sna
     pthread_mutex_lock(&bcatLock);BcatObject *o=find(object,BCAT_DIRECTORY);if(o){memcpy(o->entries,entries,(size_t)count*sizeof entries[0]);o->count=count;o->cursor=0;o->opened=1;}pthread_mutex_unlock(&bcatLock);return o?RES_OK:RES_FAIL;
 }
 HLE_FORCE("_ZN2nn4bcat22DeliveryCacheDirectory4ReadEPiPNS0_27DeliveryCacheDirectoryEntryEi","bounded enumeration of the opened directory snapshot",Result,h_bcat_DirRead,void *object,int *out,BcatEntry *entries,int capacity){
-    if(!out||capacity<0||(!entries&&capacity))return RES_FAIL;*out=0;pthread_mutex_lock(&bcatLock);BcatObject *o=find(object,BCAT_DIRECTORY);int ok=o&&o->opened;if(ok){int n=o->count-o->cursor;if(n>capacity)n=capacity;if(n)memcpy(entries,o->entries+o->cursor,(size_t)n*sizeof *entries);o->cursor+=n;*out=n;}pthread_mutex_unlock(&bcatLock);return ok?RES_OK:RES_FAIL;
+    if(!out||capacity<0||(!entries&&capacity))return RES_FAIL;*out=0;
+    pthread_mutex_lock(&bcatLock);BcatObject *o=find(object,BCAT_DIRECTORY);
+    if(!o||!o->opened){pthread_mutex_unlock(&bcatLock);return RES_FAIL;}
+    int n=o->count-o->cursor;
+    if(n<0){pthread_mutex_unlock(&bcatLock);return RES_FAIL;}
+    if(n>capacity)n=capacity;
+    if(n>0){
+        if(!entries){pthread_mutex_unlock(&bcatLock);return RES_FAIL;}
+        memcpy(entries,o->entries+o->cursor,(size_t)n*sizeof *entries);
+    }
+    o->cursor+=n;*out=n;pthread_mutex_unlock(&bcatLock);return RES_OK;
 }
 HLE_FORCE("_ZN2nn4bcat31EnumerateDeliveryCacheDirectoryEPiPNS0_13DirectoryNameEi","enumerate real delivery directories",Result,h_bcat_Enumerate,int *out,char (*names)[32],int capacity){
     if(!out||capacity<0||(!names&&capacity))return RES_FAIL;*out=0;char root[1024];if(!dm_bcat_copy_delivery(root,sizeof root))return RES_FAIL;DIR *dir=opendir(root);if(!dir)return RES_FAIL;struct dirent *e;int total=0;char found[64][32];

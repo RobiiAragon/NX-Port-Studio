@@ -38,6 +38,7 @@ int main(void){char temp[]="/tmp/nx-bcat-sdk-XXXXXX";CHECK(mkdtemp(temp));strlcp
     CHECK(!memcmp(registers,expected,16)&&guest_routes==1&&after_sp==guest_end-16);guest_begin=guest_end=0;CHECK(!munmap(mapping,page*4));
     CHECK(unopened_getter_fails(0)&&unopened_getter_fails(1)&&unopened_getter_fails(2));
     h_bcat_DirCtor(&dir);BcatEntry unopened;int missing=123;CHECK(h_bcat_DirRead(&dir,&missing,&unopened,1)!=0);CHECK(!h_bcat_DirOpen(&dir,"vsdata"));BcatEntry entry;int n=123;
+    CHECK(!h_bcat_DirRead(&dir,&n,NULL,0)&&n==0);CHECK(h_bcat_DirRead(&dir,&n,NULL,1)!=0);
     CHECK(!h_bcat_DirRead(&dir,&n,&entry,1024)&&n==1&&!strcmp(entry.name,"VSSetting_0.byaml")&&entry.size==8&&!memcmp(entry.digest,&digest,16));
     CHECK(h_bcat_DirCount(&dir)==1);CHECK(!h_bcat_DirRead(&dir,&n,&entry,1)&&n==0);CHECK(h_bcat_DirRead(&dir,&n,&entry,-1)!=0);
     char names[4][32];CHECK(!h_bcat_Enumerate(&n,names,4)&&n==1&&!strcmp(names[0],"vsdata"));

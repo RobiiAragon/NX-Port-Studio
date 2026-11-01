@@ -21,7 +21,7 @@ static const NSUInteger zipLimit = 8 * 1024 * 1024, expandedLimit = 32 * 1024 * 
 static NSString *const xmlHash = @"8d8d21a93dce2f8eab1659a3bf5cdca10f61df83d50bc0a34784b1629dd215fa";
 static NSString *const dummyHash = @"5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9";
 static NSArray<NSString *> *titles(void) { return @[@"0100f8f0000a2000", @"01003bc0000a0000", @"01003c700009c800"]; }
-int dm_bcat_supported(const char *title) { return title && [titles() containsObject:[[NSString stringWithUTF8String:title] lowercaseString]]; }
+int dm_bcat_supported(const char *title) { if(!title)return 0;NSString *value=[NSString stringWithUTF8String:title];return value&&[titles() containsObject:value.lowercaseString]; }
 static NSString *digest(NSData *data) { uint8_t h[32]; CC_SHA256(data.bytes, (CC_LONG)data.length, h); NSMutableString *s = [NSMutableString new]; for (int i=0;i<32;i++) [s appendFormat:@"%02x",h[i]]; return s; }
 static BOOL fail(NSString **error, NSString *message) { if (error) *error = message; return NO; }
 static BOOL integer(id n) { if(![n isKindOfClass:NSNumber.class]||CFGetTypeID((__bridge CFTypeRef)n)==CFBooleanGetTypeID())return NO;int64_t value;return CFNumberGetValue((__bridge CFNumberRef)n,kCFNumberSInt64Type,&value)&&[n compare:@(value)]==NSOrderedSame; }
@@ -212,7 +212,9 @@ int dm_bcat_validate(const char *title,const char *version,const char *directory
 static BOOL publishLocked(NSString *cache,NSString *title,NSString *version,NSData *envelope,NSString *old,NSString **error){
     NSDictionary *oldManifest=old?snapshot(old,title,version):nil;NSInteger minimum=[oldManifest[@"catalogRevision"] integerValue];NSDictionary *policy=catalog(envelope,title,version,YES,minimum,error);if(!policy)return NO;
     if(oldManifest){NSDictionary *previous=catalog(boundedRead([old stringByAppendingPathComponent:@"catalog.json"],1048576),title,version,NO,0,NULL);
-        if([previous[@"revision"] isEqual:policy[@"revision"]]&&[date(policy[@"issued_at"]) compare:date(previous[@"issued_at"])]==NSOrderedAscending)return fail(error,@"Catalog issue time rolled back; previous calendar retained");}
+        NSDate *previousIssued=date(previous[@"issued_at"]),*issued=date(policy[@"issued_at"]);
+        if(!previous||!previousIssued||!issued)return fail(error,@"Calendar eligibility changed during validation; previous calendar retained");
+        if([previous[@"revision"] isEqual:policy[@"revision"]]&&[issued compare:previousIssued]==NSOrderedAscending)return fail(error,@"Catalog issue time rolled back; previous calendar retained");}
     NSInteger status=0;NSString *etag=nil;NSData *zip=download([provider stringByAppendingFormat:@"/api/bcat/%@",title],zipLimit,oldManifest[@"etag"],&status,&etag);
     BOOL unchanged=zip&&status==304&&oldManifest&&[oldManifest[@"etag"] isKindOfClass:NSString.class]&&[oldManifest[@"etag"] length]&&(!etag||[etag isEqual:oldManifest[@"etag"]]);NSMutableDictionary<NSString *,NSData *> *contents=[NSMutableDictionary new];
     if(unchanged){
