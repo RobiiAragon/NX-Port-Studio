@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #include "../hle.h"
+#include "t_gate_fixture.h"
 #include "../nextendo_account.h"
 #include "../net_socket.h"
 #include <mach-o/getsect.h>
@@ -39,6 +40,7 @@ int hle_signal_system_event_binding(uint64_t binding) { for (unsigned i = 0; i <
 void hle_signal_system_event(void *pointer) { hle_bind_system_event(pointer, 0); hle_signal_system_event_binding(hle_system_event_binding(pointer)); }
 static void close_event(TestEvent *event) { for (unsigned i = 0; i < eventCount; i++) if (events[i] == event) events[i] = NULL; event->id = 0; event->signaled = false; }
 static void *hook(const char *name) {
+    fixture_gate_prepare();
     unsigned long size; const hle_force_ent *table = (const hle_force_ent *)getsectiondata(&_mh_execute_header, "__DATA", "swforce", &size);
     for (unsigned long i = 0; table && i < size / sizeof *table; i++) if (!strcmp(table[i].name, name)) return table[i].fn;
     fprintf(stderr, "Missing account hook: %s\n", name); abort();

@@ -531,9 +531,7 @@ static void placeLabel(CATextLayer *t, CGPoint c, CGFloat fs) {
 // gets its player back) and goes to dm_pad_set_player, and hle_hid.c reports player n on its own npad while the slot is held (dm_pad_players). Player 1's controller is ORed
 // with the touch gamepad; a one-player game that supports only No1 / Handheld still sees every controller as player 1 (hle_hid.c). Each player has its controller's rumble and
 // gyro; the phone's gyro is player 1's. With DM_PAD_MERGE=1 every controller is player 1, as before (the last one moved wins)
-static pad_slots g_slots;
-static GCController *g_held[DM_PLAYERS];   // the controller of each slot, kept alive while it holds it (the slot table keys on its pointer)
-static int g_merge;
+static int tilted(int32_t x, int32_t y) { return (int64_t)x * x + (int64_t)y * y > (int64_t)4000 * 4000; }
 static int32_t axis(float v) { return (int32_t)(fmaxf(-1.f, fminf(1.f, v)) * 32767); }
 static void read_pad(DmPhysicalPad *pad) {
     if (!g_controllersActive || !pad || pad->player < 0 || ![g_physicalPads containsObject:pad]) return;
@@ -630,7 +628,6 @@ static void read_pad(DmPhysicalPad *pad) {
         dm_haptics_apple_controller_pair(p, route, other);
     }
     dm_pad_players(g_controllersActive ? mask : 0); publish_pads();
-    pthread_mutex_lock(&g_mu); g_pad_btn = 0; g_pad_lx = g_pad_ly = g_pad_rx = g_pad_ry = 0; pthread_mutex_unlock(&g_mu);
     BOOL any = player != 0; self->_padOff = any; self->_controls.hidden = any; [self reset];
 }
 - (void)controllersInactive {
@@ -653,10 +650,7 @@ static void read_pad(DmPhysicalPad *pad) {
 @end
 
 UIView *dm_gamepad_view(CGRect frame) { DmGamepad *v = [[DmGamepad alloc] initWithFrame:frame]; g_view = v; return v; }
-void dm_gamepad_active(void) { dispatch_async(dispatch_get_main_queue(), ^{ for (GCController *c in GCController.controllers) dm_motion_rearm(c); }); }   // On become active: motion_apple.h
+void dm_gamepad_active(void) { dispatch_async(dispatch_get_main_queue(), ^{ [g_view controllersActive]; for (GCController *c in GCController.controllers) dm_motion_rearm(c); }); }   // On become active: motion_apple.h
 void dm_gamepad_reset(void) {   // On resign active: release everything (a key held while switching away and released in background gets no "release")
-    dispatch_async(dispatch_get_main_queue(), ^{ [g_view reset]; });
-    pthread_mutex_lock(&g_mu); g_shake_btn = 0; pthread_mutex_unlock(&g_mu); publish();
-    if (g_merge) dm_pad_set(0, 0, 0, 0, 0);
-    else for (int p = 0; p < DM_PLAYERS; p++) if (g_held[p]) dm_pad_set_player(p, 0, 0, 0, 0, 0);
+    dispatch_async(dispatch_get_main_queue(), ^{ [g_view controllersInactive]; });
 }

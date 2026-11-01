@@ -68,7 +68,7 @@ def main():
     env['DM_OPENSSL_ROOT'] = run(sys.executable, REPO / 'dm/tools/apple_crypto.py', 'ios', capture=True).stdout.strip()
     config = run(sys.executable, ios / 'tools/gen_build.py', REPO / 'dm/host', gen, capture=True).stdout
     flags = run(sys.executable, ios / 'tools/gen_embed.py', patched, gen / 'embed.S', *modules, capture=True).stdout.strip()
-    (gen / 'dm.xcconfig').write_text(config + f'OTHER_LDFLAGS = $(inherited) $(DM_FRAMEWORKS) {flags}\n')
+    (gen / 'dm.xcconfig').write_text(config + f'OTHER_LDFLAGS = $(inherited) $(DM_FRAMEWORKS) $(DM_EXTRA_LIBRARIES) {flags}\n')
     run('xcodegen', 'generate')
 
     # Exercise the real resource-copy phase with tiny, clearly synthetic data.

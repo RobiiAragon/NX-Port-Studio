@@ -115,7 +115,8 @@ uint32_t dm_nextendo_api_request(const char *resource, const uint8_t *body, size
         *output_size = size; return 0;
     }
 #endif
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+    NSURL *endpoint = [NSURL URLWithString:url]; if (!endpoint) return DM_ACCOUNT_FAIL;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:endpoint];
     request.HTTPMethod = method; request.timeoutInterval = 12;
     [request setValue:authorization forHTTPHeaderField:@"Authorization"];
     [request setValue:@"NX-Port-Studio" forHTTPHeaderField:@"User-Agent"];

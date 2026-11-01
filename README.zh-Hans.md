@@ -6,7 +6,7 @@
 
 这是基于 [seedds/nxnative](https://github.com/seedds/nxnative) 的独立项目，保留了原引擎作者署名、MIT 许可和版权声明。请参阅[致谢](CREDITS.md)与[许可证](LICENSE)。
 
-> **1.6.0 候选版本：**引擎已同步至 nxnative `4a1f68301877`（自共同基线以来共349次提交）。主机、图形与 iOS 自动测试通过；新引擎仍需逐款游戏重新验证。[版本说明](docs/releases/1.6.0-rc.1.md)。
+> **1.6.0 候选版本：**引擎已同步至 nxnative `d2a86b05ccce`（自共同基线以来共352次提交）。主机、图形与 iOS 自动测试通过；新引擎仍需逐款游戏重新验证。[版本说明](docs/releases/1.6.0-rc.2.md)。
 
 ## 应用截图
 

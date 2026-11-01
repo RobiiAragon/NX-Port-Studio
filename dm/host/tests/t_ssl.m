@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #include "../hle.h"
+#include "t_gate_fixture.h"
 #include "../ssl_backend.h"
 #include "../net_socket.h"
 #include <arpa/inet.h>
@@ -29,6 +30,7 @@ uint64_t gate_dispatch(uint64_t ret, uint64_t *registers) { (void)ret; (void)reg
 uint64_t unimpl_c(unsigned index, uint64_t *registers) { (void)index; (void)registers; abort(); }
 void dm_thread_returned(void) { abort(); }
 static void *hook(const char *name) {
+    fixture_gate_prepare();
     unsigned long bytes; const hle_force_ent *p = (const hle_force_ent *)getsectiondata(&_mh_execute_header, "__DATA", "swforce", &bytes);
     for (unsigned long i = 0; p && i < bytes / sizeof *p; i++) if (!strcmp(p[i].name, name)) return p[i].fn;
     fprintf(stderr, "Missing TLS hook: %s\n", name); abort();

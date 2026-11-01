@@ -12,7 +12,7 @@
 
 This is an independent project built on [seedds/nxnative](https://github.com/seedds/nxnative). The upstream native-execution engine, its authors and their original MIT notice remain credited and preserved. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 release candidate:** the engine is synchronized with nxnative `4a1f68301877` (349 upstream commits since the shared baseline). Automated host, graphics and iOS checks pass; game-by-game qualification of this new engine remains open. See [release notes](docs/releases/1.6.0-rc.1.md).
+> **1.6.0 release candidate:** the engine is synchronized with nxnative `d2a86b05ccce` (352 upstream commits since the shared baseline). Automated host, graphics and iOS checks pass; game-by-game qualification of this new engine remains open. See [release notes](docs/releases/1.6.0-rc.2.md).
 
 ## Inside Studio
 
@@ -64,7 +64,7 @@ These mechanisms have different validation milestones. They do not establish tha
 
 ### Requirements
 
-- An Apple silicon Mac with macOS 14 or later for Studio, plus [Xcode 27.1](https://developer.apple.com/xcode/) with Swift 6. The engine validates that version’s Metal compiler against its translation lock. The engine or an individual game may need newer graphics tooling.
+- An Apple silicon Mac with macOS 14 or later for Studio, plus [Xcode 27.2](https://developer.apple.com/xcode/) with Swift 6. The engine validates that version’s Metal compiler against its translation lock. The engine or an individual game may need newer graphics tooling.
 - Your own game files and console keys. Matching updates and DLC belong in the same game's input folder.
 - For iPhone/iPad exports: an eligible physical device, Xcode account/team configuration, pairing, trust and Developer Mode. Current engine targets use iOS/iPadOS 26 and supported A17 Pro/M-series hardware; consult the per-game notes.
 

@@ -403,7 +403,7 @@ $(B)/t_joycon_output: t_joycon_output.m ../joycon_mac.inc ../joycon_protocol.h .
 joycon: $(B)/t_joycon_output
 
 SSL_SOURCES = t_ssl.m ../hle_ssl.c ../hle_ssl_apple.m ../hle_nextendo_x509.c ../hle_net_backend.c ../hle_nsd_backend.c ../hle_bigstack.c ../entry.S
-SSL_DEPS = ../nsd.h $(SSL_SOURCES) ../ssl_backend.h ../net_socket.h ../hle.h $(GAME_H) test_ssl_transport.py
+SSL_DEPS = t_gate_fixture.h ../nsd.h $(SSL_SOURCES) ../ssl_backend.h ../net_socket.h ../hle.h $(GAME_H) test_ssl_transport.py
 SSL_FLAGS = -O1 -g -fobjc-arc -mmacosx-version-min=14.0 -Wall -Wextra -Werror -Wno-unused-function $(GINC)
 $(B)/t_ssl: $(SSL_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -o $@ $(SSL_SOURCES) -framework Foundation -framework Security
@@ -416,7 +416,7 @@ ssl-sanitize: $(B)/t_ssl_asan
 	$(PYTHON) test_ssl_transport.py $(B)/t_ssl_asan
 
 ACCOUNT_SOURCES = t_nextendo_account.m ../hle_account.c ../hle_nextendo_apple.m ../hle_nextendo_api_apple.m ../hle_bigstack.c ../entry.S
-ACCOUNT_DEPS = $(ACCOUNT_SOURCES) ../nextendo_account.h ../net_socket.h ../hle.h $(GAME_H)
+ACCOUNT_DEPS = t_gate_fixture.h $(ACCOUNT_SOURCES) ../nextendo_account.h ../net_socket.h ../hle.h $(GAME_H)
 $(B)/t_nextendo_account: $(ACCOUNT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -o $@ $(ACCOUNT_SOURCES) -framework Foundation -framework Security
 $(B)/t_nextendo_account_asan: $(ACCOUNT_DEPS) | $(B)
