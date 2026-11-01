@@ -2036,14 +2036,26 @@ def yaz0(s, label='Yaz0'):
 def sarc_members(d, label='SARC'):
     """(name, bytes) of each member of a SARC: the header, SFAT (its entries), SFNT (the names), then the data, where every member lies. A member range outside the data
     (one spanning the whole archive would be scanned as the archive again, without end) is a damaged archive"""
-    hl, bom, size, doff = field(d, '<HHII', 4, f'{label} SARC header')
-    n = field(d, '<H', hl + 6, f'{label} SFAT header')[0]
+    bom = span(d, 6, 2, f'{label} SARC byte order')
+    if bom not in (b'\xfe\xff', b'\xff\xfe'): red(f'{label}: invalid SARC byte-order mark')
+    order = '>' if bom == b'\xfe\xff' else '<'
+    hl, _, size, doff = field(d, order + 'HHII', 4, f'{label} SARC header')
+    if d[:4] != b'SARC' or hl != 0x14 or size > len(d): red(f'{label}: invalid SARC header or declared size')
+    tag, length, n, _ = field(d, order + '4sHHI', hl, f'{label} SFAT header')
+    if tag != b'SFAT' or length != 12 or n > 0x3fff: red(f'{label}: invalid SARC SFAT header')
     names = hl + 12 + 16 * n + 8
-    if not names <= doff <= len(d): red(f'{label}: SARC data at {doff:#x}, its {n} entries and the names end at {names:#x}, the archive at {len(d):#x}')
+    if not names <= doff <= size: red(f'{label}: SARC data at {doff:#x}, its {n} entries and the names end at {names:#x}, the archive at {size:#x}')
+    tag, length = field(d, order + '4sH', names - 8, f'{label} SFNT header')
+    if tag != b'SFNT' or length != 8: red(f'{label}: invalid SARC SFNT header')
     for i in range(n):
-        h, attr, s, e = struct.unpack_from('<IIII', d, hl + 12 + 16 * i)
-        if not s <= e <= len(d) - doff: red(f'{label}: SARC member {i} at {s:#x}..{e:#x} of the data lies outside its {len(d) - doff:#x} bytes')
-        nm = d[names + (attr & 0xffffff) * 4:].split(b'\0')[0].decode('utf-8', 'replace') if attr >> 24 else f'#{i}'
+        _, attr, s, e = struct.unpack_from(order + 'IIII', d, hl + 12 + 16 * i)
+        if not s <= e <= size - doff: red(f'{label}: SARC member {i} at {s:#x}..{e:#x} of the data lies outside its {size - doff:#x} bytes')
+        nm = f'#{i}'
+        if attr >> 24:
+            start = names + (attr & 0xffffff) * 4
+            end = d.find(b'\0', start, doff)
+            if not names <= start < doff or end < 0: red(f'{label}: SARC member {i} has an out-of-range or unterminated name')
+            nm = d[start:end].decode('utf-8', 'replace')
         yield nm, d[doff + s:doff + e]
 
 NV_STAGES = ['vs', 'ps', 'gs', 'hs', 'ds', 'cs']   # NVN stage order

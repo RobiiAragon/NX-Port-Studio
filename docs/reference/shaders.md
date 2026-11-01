@@ -4,6 +4,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 
 ## Containers by engine
 
+### SARC archives with big-endian headers
+
+- **Symptom:** a valid archive reports an absurd entry count, such as 20,323, or its names appear to extend beyond its data.
+- **Cause:** the reader treated every SARC integer as little-endian, including archives whose byte-order mark specifies big-endian.
+- **Fix:** I select byte order from the mark and validate the SARC, SFAT and SFNT headers, declared extent, member ranges and terminated names before reading their bytes. Bounds remain mandatory for both orders; nested-archive overlap and expansion budgets are unchanged. The [primary format description](https://github.com/kinnay/Nintendo-File-Formats/blob/master/src/libs/sead/sarc.md) documents the byte-order and table fields; this is an independent implementation.
+- **Checks:** `test_sarc.py` covers both orders, nested and anonymous members, truncated headers, malformed tables, out-of-range data/names and missing terminators. `test_split_nesting.py` retains the compressed-member and overlap-budget checks with valid synthetic headers.
+- **Found on:** my experimental Splatoon 2 EUR 5.5.2 bring-up: two `System/GSys/gsys_resource_nvn*.szs` archives were valid big-endian SARC files. Their embedded BAHS variant remains a separate format question; recognizing the archive does not prove complete shader coverage.
+
 ### Sumo Ninty_NX shaders and MuxFDMR streams
 
 - **Symptom:** the split finds no shaders in `main` or RomFS, while reporting control sections in `main` with no code area. The game has `.sp4` resources and loose `.nvnbin` files rather than BNSH archives or whole GLSLC outputs.
