@@ -186,6 +186,12 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
         run: brew install spirv-tools
+      - name: Prepare Metal for shader compiler fixtures
+        run: |
+          if ! xcrun metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          python3 dm/gfx/tools/own_compilers.py --check-metal
       - name: Run the test files
         env:
           DM_GAME: ${{ env.GAME }}   # test_tbdr_budget runs a tool that needs a profile
