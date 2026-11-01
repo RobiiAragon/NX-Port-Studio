@@ -85,6 +85,33 @@ On 2026-10-31, the installed Mac Smash 13.0.5 port played a real Nextendo arena 
 | UNO | SDK / unspecified | 1.1.17 | 1 | 0 | Unverified |
 | Zombie Army 4: Dead War | SDK / unspecified | 1.1.1 | 1 | 0 | Unverified |
 
+## Native-profile qualification scope
+
+The revision-19 catalog intersects **16 titles** with the native game profiles in this engine snapshot. Fourteen have a declared native build whose display version is accepted by the catalog. Scarlet and Violet currently declare native profiles for 1.0.0, while the service requires 4.0.0; those newer builds still need their own native qualification. A matching title ID or display version does not establish completed online play.
+
+All 62 regional service configurations were prepared and staged through the production integrity checks using the pinned public provider CA. These are route/configuration checks, separate from the native profiles below and from authentication, matchmaking or a completed match.
+
+| Game | Native profile | Declared native build versions | Catalog accepts | Native online qualification |
+| --- | --- | --- | --- | --- |
+| Animal Crossing: New Horizons | [01006F8002326000](../dm/games/01006F8002326000/README.md) | 3.0.3 | 3.0.3 | Not qualified |
+| Luigi's Mansion 3 | [0100DCA0064A6000](../dm/games/0100DCA0064A6000/README.md) | 1.4.0 | 1.4.0 | Not qualified |
+| Mario Kart 8 Deluxe | [0100152000022000](../dm/games/0100152000022000/README.md) | 4.0.0, 4.0.1 | 4.0.1 | Not qualified |
+| Mario Party Superstars | [01006FE013472000](../dm/games/01006FE013472000/README.md) | 1.1.1 | 1.1.1 | Not qualified |
+| MONSTER HUNTER RISE | [0100B04011742000](../dm/games/0100B04011742000/README.md) | 16.0.2 | 16.0.2 | Not qualified |
+| Pokémon Legends: Z-A | [0100F43008C44000](../dm/games/0100F43008C44000/README.md) | 2.0.2 | 2.0.2 | Not qualified |
+| Pokémon Scarlet | [0100A3D008C5C000](../dm/games/0100A3D008C5C000/README.md) | 1.0.0 | 4.0.0 | Accepted update not yet qualified |
+| Pokémon Shield | [01008DB008C2C000](../dm/games/01008DB008C2C000/README.md) | 1.3.2 | 1.3.2 | Not qualified |
+| Pokémon Sword | [0100ABF008968000](../dm/games/0100ABF008968000/README.md) | 1.3.2 | 1.3.2 | Not qualified |
+| Pokémon Violet | [01008F6008C5E000](../dm/games/01008F6008C5E000/README.md) | 1.0.0 | 4.0.0 | Accepted update not yet qualified |
+| Portal 2 | [0100ABD01785C000](../dm/games/0100ABD01785C000/README.md) | 1.0.3 | 1.0.3 | Not qualified |
+| Super Mario 3D World + Bowser's Fury | [010028600EBDA000](../dm/games/010028600EBDA000/README.md) | 1.2.2 | 1.2.2 | Not qualified |
+| Super Mario Bros. Wonder | [010015100B514000](../dm/games/010015100B514000/README.md) | 1.0.0, 1.0.1, 1.2.1 | 1.2.1 | Not qualified |
+| Super Mario Odyssey | [0100000000010000](../dm/games/0100000000010000/README.md) | 1.4.1 | 1.4.1 | Not qualified |
+| Super Mario Party Jamboree | [0100965017338000](../dm/games/0100965017338000/README.md) | 2.3.0 | 2.3.0 | Not qualified |
+| Super Smash Bros. Ultimate | [01006A800016E000](../dm/games/01006A800016E000/README.md) | 13.0.5 | 13.0.5 | [One Mac arena round; Quickplay and stability open](../dm/games/01006A800016E000/README.md#native-network-validation) |
+
+The full catalog contains other titles without a native profile in this snapshot. Generating their service routes does not add a native execution or graphics implementation for those games. Qualification must name the game build, platform, authentication path and actual multiplayer result.
+
 ## Community version reports
 
 The user supplied a 24-title community list on 2026-10-31. These reports remain separate from authenticated provider eligibility. The current signed catalog has entries matching 21 of those reported names, including Terraria (`1.4.4.9` and `4.5.6`). Stardew Valley (`1.6.15.13`), Monopoly for Nintendo Switch (`1.0.5`) and Dying Light: Platinum Edition (`1.0.5`) are not present in revision 19; their service qualification is pending rather than silently omitted or marked supported.
