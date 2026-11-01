@@ -120,17 +120,24 @@ $(B)/t_net_discovery: $(DISCOVERY_SOURCES) $(DISCOVERY_HEADERS) | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -DDM_NET_TEST -o $@ $(DISCOVERY_SOURCES)
 $(B)/t_net_discovery_asan: $(DISCOVERY_SOURCES) $(DISCOVERY_HEADERS) | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -DDM_NET_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(DISCOVERY_SOURCES)
+# Exercise the production interface/routing selector with synthetic OS metadata.
+$(B)/t_net_interface: t_net_interface.c ../hle_net_backend.c $(DISCOVERY_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -o $@ t_net_interface.c
+$(B)/t_net_interface_asan: t_net_interface.c ../hle_net_backend.c $(DISCOVERY_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_net_interface.c
 .PHONY: net-discovery net-discovery-sanitize
 $(B)/t_discovery_protocol: t_discovery_protocol.c ../discovery_protocol.h | $(B)
 	$(CLANG) -std=c11 -O2 -Wall -Wextra -Werror -pedantic -o $@ t_discovery_protocol.c
 $(B)/t_discovery_protocol_asan: t_discovery_protocol.c ../discovery_protocol.h | $(B)
 	$(CLANG) -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_discovery_protocol.c
-net-discovery: $(B)/t_net_discovery $(B)/t_discovery_protocol
+net-discovery: $(B)/t_net_discovery $(B)/t_discovery_protocol $(B)/t_net_interface
 	$(B)/t_net_discovery
 	$(B)/t_discovery_protocol
-net-discovery-sanitize: $(B)/t_net_discovery_asan $(B)/t_discovery_protocol_asan
+	$(B)/t_net_interface
+net-discovery-sanitize: $(B)/t_net_discovery_asan $(B)/t_discovery_protocol_asan $(B)/t_net_interface_asan
 	$(B)/t_net_discovery_asan
 	$(B)/t_discovery_protocol_asan
+	$(B)/t_net_interface_asan
 LDN_SOURCES = t_ldn.c ../hle_ldn.c ../hle_ldn_protocol.c ../hle_net_backend.c ../hle_nsd_backend.c
 $(B)/t_ldn: $(LDN_SOURCES) ../nsd.h ../hle_ldn.h ../net_socket.h ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_NET_TEST -DDM_LDN_TEST -DDM_LDN_NET_TEST -o $@ $(LDN_SOURCES)

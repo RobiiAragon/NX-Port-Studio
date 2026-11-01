@@ -2,6 +2,14 @@
 
 ## Build tools
 
+### Network survey reports implemented socket imports as missing
+
+- **Symptom:** the SDK-surface survey lists `nn::socket::Socket`, `Bind`, `Close`, `Listen` and `SetSockOpt` as unavailable even though the host registers their translated implementations.
+- **Cause:** `nso_syms.host_hooks` scanned only direct `HLE` and `HLE_FORCE` declarations. The socket implementation declares those entries through local `SKF` and `SKW` wrappers, forwarding the symbol name to the same registration macros.
+- **Fix:** recognize local wrappers that forward their first argument to a known hook declaration, including nested and continued definitions. Preserve whether the entry is a forced takeover, so the `forced=False` survey still excludes it. This changes import classification; it does not add a network service or establish gameplay compatibility.
+- **Checks:** synthetic declarations cover direct, blocking, nested, weak and unrelated macros. Auditing the installed Smash 13.0.5 modules recognizes five additional existing socket hooks; the remaining unhooked network/account imports are SDK-local helpers.
+- **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md#native-network-validation), while auditing the native networking imports for the Nextendo catalog's supported-profile intersection.
+
 ### Homebrew .NET is on PATH but apphosts cannot find the runtime
 
 - **Symptom:** the first extraction stops with `nx_extract exit code 131` and `.NET location: Not found`, even though `dotnet` is on `PATH`. The shader translator can fail the same way.

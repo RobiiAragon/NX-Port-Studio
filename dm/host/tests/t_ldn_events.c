@@ -63,7 +63,18 @@ int main(void) {
     h_ldn_Fini(); assert(!waits); ldn_event(NULL); assert(events[1].signals == 2 && events[2].signals == 1);
     h_ldn_Attach(storage[2]); ldn_event(NULL); assert(events[3].signals == 1 && events[1].signals == 2);
     getter_lifetime(0);getter_lifetime(1);
+    // Smash 13.0.5 imports this SDK entry. After the host replaces Initialize,
+    // it must not execute the SDK wrapper's uninitialized service vtable.
+    assert(h_ldn_ControllerRestriction(1) != 0 && waits == 0);
+    dm_ldn_context *context = calloc(1, sizeof *context); assert(context);
+    pthread_mutex_init(&context->lock, NULL); context->state = LDN_INITIALIZED; g_ldn = context;
+    assert(!h_ldn_ControllerRestriction(1) && context->controller_restriction == 1 && !waits);
+    assert(h_ldn_ControllerRestriction(2) != 0 && context->controller_restriction == 1 && !waits);
+    assert(!h_ldn_ControllerRestriction(0) && context->controller_restriction == 0 && !waits);
+    context->state = LDN_AP;
+    assert(h_ldn_ControllerRestriction(1) != 0 && context->controller_restriction == 0 && !waits);
+    g_ldn = NULL; pthread_mutex_destroy(&context->lock); free(context);
     setenv("DM_NETWORK", "offline", 1); assert(h_ldn_Init() == LDN_ERROR(22)); assert(h_ldn_State() == 0 && waits == 0);
     setenv("DM_NETWORK", "auto", 1); assert(ldn_enabled());
-    puts("LDN event close/reuse, observers, concurrent getter/Finalize and offline state passed."); return 0;
+    puts("LDN event close/reuse, observers, controller policy, concurrent getter/Finalize and offline state passed."); return 0;
 }

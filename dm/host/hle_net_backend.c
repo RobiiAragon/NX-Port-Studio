@@ -51,7 +51,7 @@ void dm_net_set_dns_provider(dm_net_dns_provider provider) { atomic_store(&g_dns
 static _Atomic uint32_t g_net_broadcast;
 static _Atomic int g_net_broadcast_known;
 typedef struct { uint32_t address, mask, gateway; unsigned index, flags; int local_link; } net_interface;
-static int net_interface_get(net_interface *out);
+static int net_interface_get(net_interface *out, int local_only);
 #ifdef DM_NET_TEST
 static net_interface g_test_interface;
 static int g_test_interface_set;
@@ -80,7 +80,7 @@ void dm_net_set_multicast_allowed(int allowed) { atomic_store(&g_net_multicast_a
 int dm_net_multicast_allowed(void) { return atomic_load(&g_net_multicast_allowed); }
 static int net_discovery_unicast_plan(dm_net_discovery_plan *p) {
     net_interface adapter;
-    if (net_interface_get(&adapter) || !adapter.index || !(adapter.flags & IFF_UP) ||
+    if (net_interface_get(&adapter, 1) || !adapter.index || !(adapter.flags & IFF_UP) ||
         !(adapter.flags & IFF_BROADCAST) || (adapter.flags & (IFF_LOOPBACK | IFF_POINTOPOINT))) {
         dm_net_set_errno(99); return -1;
     }
@@ -669,7 +669,7 @@ static unsigned net_route(unsigned wanted, uint32_t *gateway) {
     (void)wanted; (void)gateway; return 0;
 #endif
 }
-static int net_interface_get(net_interface *out) {
+static int net_interface_get(net_interface *out, int local_only) {
     memset(out, 0, sizeof *out);
 #ifdef DM_NET_TEST
     if (g_test_interface_set) { *out = g_test_interface; return out->address ? 0 : -1; }
@@ -679,6 +679,10 @@ static int net_interface_get(net_interface *out) {
     unsigned primary = net_route(wanted, &out->gateway); if (wanted) primary = wanted;
     struct ifaddrs *list = NULL; if (getifaddrs(&list)) return -1;
     int control = socket(AF_INET, SOCK_DGRAM, 0);
+    // A default Internet route can belong to a VPN. Discovery still needs a
+    // broadcast-capable physical LAN adapter, preferably the primary one when
+    // it is eligible. Keep the generic/online interface query independent.
+    for (int local_pass = 0; local_pass < (local_only && primary && !wanted ? 2 : 1) && !out->address; ++local_pass) {
 #if TARGET_OS_IOS
     // getifaddrs ordering is not the preferred route on iOS. Automatic mode
     // must not select a cellular/VPN entry before an available LAN adapter,
@@ -690,11 +694,12 @@ static int net_interface_get(net_interface *out) {
     for (struct ifaddrs *p = list; p; p = p->ifa_next) {
         if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET || !(p->ifa_flags & IFF_UP) || (!wanted && (p->ifa_flags & IFF_LOOPBACK))) continue;
         unsigned index = if_nametoindex(p->ifa_name);
-        if (!index || (primary && index != primary)) continue;
+        if (!index || (primary && index != primary && (!local_only || local_pass == 0))) continue;
         struct ifreq request = {0}; strlcpy(request.ifr_name, p->ifa_name, sizeof request.ifr_name);
         unsigned type = control >= 0 && !ioctl(control, SIOCGIFFUNCTIONALTYPE, &request) ?
                         request.ifr_ifru.ifru_functional_type : IFRTYPE_FUNCTIONAL_UNKNOWN;
         int local_link = type == IFRTYPE_FUNCTIONAL_WIFI_INFRA || type == IFRTYPE_FUNCTIONAL_WIRED;
+        if (local_only && (!local_link || !(p->ifa_flags & IFF_BROADCAST) || (p->ifa_flags & IFF_POINTOPOINT))) continue;
 #if TARGET_OS_IOS
         // TN3179: BSD names such as en0 are not API. Ask the functional type.
         if ((mode == DM_NET_LAN || mode == DM_NET_LDN || (mode == DM_NET_AUTO && pass == 0)) &&
@@ -703,11 +708,14 @@ static int net_interface_get(net_interface *out) {
         out->address = ((struct sockaddr_in *)p->ifa_addr)->sin_addr.s_addr;
         if (p->ifa_netmask && p->ifa_netmask->sa_family == AF_INET)
             out->mask = ((struct sockaddr_in *)p->ifa_netmask)->sin_addr.s_addr;
-        out->index = index; out->flags = p->ifa_flags; out->local_link = local_link; break;
+        out->index = index; out->flags = p->ifa_flags; out->local_link = local_link;
+        if (primary && index != primary) out->gateway = 0; // The VPN's gateway does not belong to this LAN.
+        break;
     }
 #if TARGET_OS_IOS
     }
 #endif
+    }
     if (control >= 0) close(control);
     freeifaddrs(list);
     return out->address ? 0 : -1;
@@ -717,9 +725,14 @@ int dm_net_ipconfig(uint32_t *address, uint32_t *mask, uint32_t *gateway, uint32
     for (int i = 0; i < 5; i++) if (outputs[i]) *outputs[i] = 0;
     if (!dm_net_enabled()) return -1;
     net_interface adapter;
-    if (net_interface_get(&adapter)) return -1;
+    dm_net_mode_t mode = dm_net_mode();
+    if (net_interface_get(&adapter, mode == DM_NET_LAN || mode == DM_NET_LDN)) return -1;
     values[0] = adapter.address; values[1] = adapter.mask; values[2] = adapter.gateway;
-    atomic_store(&g_net_broadcast, adapter.mask && (adapter.flags & IFF_BROADCAST) ? adapter.address | ~adapter.mask : 0);
+    net_interface local = adapter;
+    if (!adapter.local_link || !(adapter.flags & IFF_BROADCAST) || (adapter.flags & IFF_POINTOPOINT)) {
+        if (net_interface_get(&local, 1)) memset(&local, 0, sizeof local);
+    }
+    atomic_store(&g_net_broadcast, local.mask && (local.flags & IFF_BROADCAST) ? local.address | ~local.mask : 0);
     atomic_store(&g_net_broadcast_known, 1);
     if (!values[0]) return -1;
     // DNS is advisory for LAN and never invented. macOS publishes the default resolver here;

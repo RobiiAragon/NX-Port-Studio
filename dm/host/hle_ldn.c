@@ -34,7 +34,7 @@ typedef struct { dm_ldn_network network; struct sockaddr_in endpoint; } ldn_room
 struct dm_ldn_context {
     pthread_mutex_t lock; pthread_cond_t changed; pthread_t worker;
     dm_ldn_transport transport; dm_ldn_notify notify; void *opaque;
-    int udp, listener, wake[2], stopping, state, reason, scanning;
+    int udp, listener, wake[2], stopping, state, reason, scanning, controller_restriction;
     dm_net_discovery_plan scan_plan,scan_supplement; uint64_t scan_next; int scan_tx_failed;
     uint64_t generation; dm_ldn_network network; dm_ldn_network_config config;
     dm_ldn_update updates[8]; ldn_peer peers[8]; ldn_room rooms[LDN_ROOM_MAX]; int room_count;
@@ -367,6 +367,16 @@ uint32_t dm_ldn_filter_add(dm_ldn_context *c, const uint8_t mac[6]) {
     pthread_mutex_unlock(&c->lock); return result;
 }
 uint32_t dm_ldn_filter_clear(dm_ldn_context *c) { if (!c) return LDN_INVALID_STATE; pthread_mutex_lock(&c->lock); uint32_t r = LDN_INVALID_STATE; if (c->state == LDN_AP || c->state == LDN_CREATED) { c->filter_count = 0; r = 0; } pthread_mutex_unlock(&c->lock); return r; }
+uint32_t dm_ldn_controller_restriction(dm_ldn_context *c, int restriction) {
+    if (restriction < 0 || restriction > 1) return LDN_INVALID;
+    if (!c) return LDN_INVALID_STATE;
+    pthread_mutex_lock(&c->lock); uint32_t result = LDN_INVALID_STATE;
+    // This policy belongs to the console's shared LDN/Bluetooth radio budget.
+    // The Apple bridge uses ordinary IP and public native controller APIs;
+    // retain the request without inventing a limit on those devices.
+    if (c->state == LDN_INITIALIZED) { c->controller_restriction = restriction; result = 0; }
+    pthread_mutex_unlock(&c->lock); return result;
+}
 uint32_t dm_ldn_reject(dm_ldn_context *c, uint32_t ip) {
     if (!c) return LDN_INVALID_STATE; pthread_mutex_lock(&c->lock); uint32_t result = c->state == LDN_CREATED ? LDN_NODE_NOT_FOUND : LDN_INVALID_STATE;
     if (c->state == LDN_CREATED) for (int i = 1; i < 8; ++i) if (c->peers[i].active && c->network.nodes[i].ip == ip) { ldn_drop(c, i); result = 0; break; }
@@ -434,6 +444,7 @@ HLE_FORCE("_ZN2nn3ldn22AttachStateChangeEventEPNS_2os15SystemEventTypeE", "real 
     for (int i = 0; i < 64; ++i) { uint64_t empty = 0; if (__atomic_compare_exchange_n(&g_ldn_events[i], &empty, id, 0, __ATOMIC_RELEASE, __ATOMIC_RELAXED) || empty == id) return; }
     die("LDN state event binding table full");
 }
+HLE_FORCE_WAIT("_ZN2nn3ldn32SetWirelessControllerRestrictionENS0_29WirelessControllerRestrictionE", "retain the requested console-radio policy on the native IP transport", Result, h_ldn_ControllerRestriction, int restriction) { LDN_USE(); return ldn_hook_result("ControllerRestriction", dm_ldn_controller_restriction(g_ldn, restriction)); }
 HLE_FORCE_WAIT("_ZN2nn3ldn11OpenStationEv", "native LDN station lifecycle", Result, h_ldn_OpenSt, void) { LDN_USE(); return ldn_hook_result("OpenSt", dm_ldn_open(g_ldn, 0)); }
 HLE_FORCE_WAIT("_ZN2nn3ldn12CloseStationEv", "native LDN station lifecycle", Result, h_ldn_CloseSt, void) { LDN_USE(); return ldn_hook_result("CloseSt", dm_ldn_close(g_ldn, 0)); }
 HLE_FORCE_WAIT("_ZN2nn3ldn15OpenAccessPointEv", "native LDN access point lifecycle", Result, h_ldn_OpenAp, void) { LDN_USE(); return ldn_hook_result("OpenAp", dm_ldn_open(g_ldn, 1)); }

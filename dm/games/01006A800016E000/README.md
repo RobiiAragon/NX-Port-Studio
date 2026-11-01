@@ -61,6 +61,9 @@ This run used the owner's imported system resources, private Nextendo credential
 
 ## Found on this game
 
+- [LDN controller policy must not fall back to an uninitialized SDK service](../../../docs/reference/services.md#ldn-controller-policy-must-not-fall-back-to-an-uninitialized-sdk-service): the 13.0.5 import audit found one service entry left in the SDK after native initialization. The native lifecycle hook and synthetic regression pass; a new physical local-wireless session remains unverified.
+- **Network import survey:** [Network survey reports implemented socket imports as missing](../../../docs/reference/packing.md#network-survey-reports-implemented-socket-imports-as-missing). The source scanner now recognizes existing socket hook wrappers; this is an audit correction, not a Quickplay fix.
+
 - [Game menus choose network services automatically](../../../docs/reference/services.md#game-menus-choose-network-services-automatically): Apple launchers enable independent online, LDN and LAN capabilities together; runtime fixtures pass, and an actual Mac arena round ran in automatic mode. iPhone installation/launch passed; physical LDN qualification remains pending.
 
 - **Fullscreen software keyboard (verified):** [Software keyboard hidden behind the fullscreen game](../../../docs/reference/services.md#software-keyboard-hidden-behind-the-fullscreen-game). The attached name sheet was canceled, reopened, typed and accepted in the installed port; the accepted name reached the actual arena.
