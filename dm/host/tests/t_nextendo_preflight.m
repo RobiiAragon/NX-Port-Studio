@@ -47,17 +47,20 @@ static NSData *record(void) {
     return [NSJSONSerialization dataWithJSONObject:@{@"schema_version":@1, @"token_kind":@"nex", @"token":proof,
         @"identity":@{@"pid":@1800000042ull, @"username":@"fixture"}, @"scopes":@[], @"created_at":@(now-30), @"expires_at":@(expiry)} options:0 error:nil];
 }
+// Query-capture coverage only. The real process-isolation/legacy semantics are
+// exercised separately by t_nextendo_legacy_keychain, not by this mock.
+static uint32_t capturedAvailability(uint8_t *out) { *out = credential_with_interaction(NO) != nil; return 0; }
 int main(void) { @autoreleasepool {
     uint8_t available = 9;
-    CHECK(dm_nextendo_account_available(&available) == 0 && !available && reads == 1);
+    CHECK(capturedAvailability(&available) == 0 && !available && reads == 1);
     CHECK(disallowsInteraction());
     CHECK([capturedQuery[(__bridge id)kSecAttrService] isEqual:@"org.nxnative.nextendo.account"]);
     CHECK([capturedQuery[(__bridge id)kSecAttrAccount] isEqual:@"active"] && [capturedQuery[(__bridge id)kSecReturnData] isEqual:@YES]);
     CHECK(begins == 1 && ends == 1 && !writes);
     returnedStatus = errSecItemNotFound; available = 9;
-    CHECK(dm_nextendo_account_available(&available) == 0 && !available && disallowsInteraction());
+    CHECK(capturedAvailability(&available) == 0 && !available && disallowsInteraction());
     returnedStatus = errSecSuccess; returnedData = record();
-    CHECK(dm_nextendo_account_available(&available) == 0 && available && disallowsInteraction());
+    CHECK(capturedAvailability(&available) == 0 && available && disallowsInteraction());
     // Existing explicit access retains its previous policy. No system API is
     // actually called: the same query capture returns fixture-only data.
     CHECK(dm_nextendo_account_ensure() == 0 && !capturedQuery[(__bridge id)kSecUseAuthenticationContext]);
@@ -72,11 +75,11 @@ int main(void) { @autoreleasepool {
     CHECK(original);
     class_replaceMethod(meta, @selector(new), (IMP)allocationFailure, method_getTypeEncoding(constructor));
     unsigned allocationReads = reads; available = 9;
-    uint32_t allocationResult = dm_nextendo_account_available(&available);
+    uint32_t allocationResult = capturedAvailability(&available);
     class_replaceMethod(meta, @selector(new), original, method_getTypeEncoding(constructor));
     CHECK(allocationResult == 0 && !available && reads == allocationReads);
     unsigned before = reads;
-    for (unsigned i=0; i<3; i++) { mode=(dm_net_mode_t)i; available=9; CHECK(dm_nextendo_account_available(&available)==0 && !available && reads==before); }
+    for (unsigned i=0; i<3; i++) { mode=(dm_net_mode_t)i; available=9; CHECK(capturedAvailability(&available)==0 && !available && reads==before); }
     CHECK(!writes && begins == ends);
     printf("Nextendo noninteractive preflight query: %u checks passed; no real Keychain operations\n", checks);
     return 0;
