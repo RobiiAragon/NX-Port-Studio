@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Pack a self-contained, double-clickable Mac app of a game (the NSP script's --platform mac-app): the launcher (dm/mac/launcher.c, linked here with its settings window,
-# dm/mac/Launcher.swift, and the iOS launcher's model and rows) as CFBundleExecutable, the Mac host beside it,
+# Pack a self-contained Mac app: the real native host is CFBundleExecutable.
+# Its in-process bootstrap dylib supplies environment/settings before guest boot,
+# and a non-GUI helper sends cloud saves after that primary process exits.
 # and in Contents/Resources what the IPA carries (dm/ios/tools/build_ipa.sh): romfs.img (the RomFS image), msl/<b-chain | vk | gl>/ (the Mac shader libraries, the folder named as in the IPA),
 # aoc/<index>/ (DLC), pso/ (an NVN game's pipeline archive made offline for this Mac's GPU, dm/gfx/tools/pso_offline.py: the launcher hands it to the host as DM_PSO_BUNDLE),
 # and dm/ (the rewritten modules and their rewriter tables, nro.tsv, the profile's shader_map.tsv / pso_manifest.tsv / c1_full.tsv / cb_extent.tsv / shader_pairs.tsv / pso_pairs.tsv, font/, env.txt,
@@ -27,7 +28,7 @@ MSL_FILES = ('*.metallib', '*.json', '*.tsv')   # what the host reads from msl/ 
 # app makes no pulling bases, a hybrid draw has no stand-in and a new pipeline compiles on the submit thread (build_ipa.sh copies them into the IPA the same way)
 TABLES = ('shader_map.tsv', 'pso_manifest.tsv', 'c1_full.tsv', 'cb_extent.tsv', 'shader_pairs.tsv', 'pso_pairs.tsv')
 PSO_FILES = ('*.mtl4a', 'prebuilt.tsv', 'rest_pairs.tsv', 'archive.tsv')   # what the app takes of pso_offline.py's output folder
-EXE = 'nxnative'   # the launcher's file name (Contents/MacOS/nxnative)
+EXE = 'nxnative'   # the native host, started directly by LaunchServices
 ICON_SIZES = (16, 32, 128, 256, 512)
 
 
@@ -84,17 +85,26 @@ def min_os(host):   # the host's deployment target (LC_BUILD_VERSION minos): the
     return m.group(1) if m else '14.0'
 
 
+def require_primary_host(host):
+    if not re.search(r'\b_dm_mac_bundle_prepare\s*$', run(['nm', '-gU', host]), re.M):
+        raise SystemExit('the Mac host has no primary-app bootstrap; rebuild the host from this engine before packing')
+
+
 def swift_sources():   # the settings window, with the iOS launcher's model and rows
     return [HERE / 'Launcher.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift']
 
 
-def build_launcher(out, minos, clang, swiftc, sdk):   # launcher.c's main and the host's cloud-save code (its send after the host exits), linked by swiftc with the settings window (no Swift main: -parse-as-library)
+def build_launcher(out, minos, clang, swiftc, sdk):   # in-process C bootstrap + existing SwiftUI settings; no main or second NSApplication
     with tempfile.TemporaryDirectory(dir=out.parents[3]) as t:
-        objs = [Path(t) / 'launcher.o', Path(t) / 'save_sync.o']
-        for obj, src in zip(objs, (HERE / 'launcher.c', HERE.parent / 'host/save_sync.c')):
+        objs = [Path(t) / 'launcher.o', Path(t) / 'save_supervisor_start.o']
+        for obj, src in zip(objs, (HERE / 'launcher.c', HERE / 'save_supervisor_start.c')):
             run([clang, '-isysroot', sdk, '-arch', 'arm64', f'-mmacosx-version-min={minos}', '-O2', '-Wall', '-I', HERE.parent / 'host', '-c', '-o', obj, src])
         run([swiftc, '-sdk', sdk, '-target', f'arm64-apple-macos{minos}', '-O', '-swift-version', '5', '-parse-as-library', '-module-cache-path', Path(t) / 'module-cache',
+             '-emit-library', '-Xlinker', '-install_name', '-Xlinker', '@rpath/DMMacBootstrap.dylib',
              '-o', out, *swift_sources(), *objs, '-framework', 'CoreFoundation', '-framework', 'AppKit', '-framework', 'SwiftUI'])
+        helper = out.parent.parent / 'Helpers/dm-save-supervisor'; helper.parent.mkdir(exist_ok=True)
+        run([clang, '-isysroot', sdk, '-arch', 'arm64', f'-mmacosx-version-min={minos}', '-O2', '-Wall', '-I', HERE.parent / 'host',
+             '-o', helper, HERE / 'save_supervisor.c', HERE.parent / 'host/save_sync.c'])
 
 
 def make_icns(jpg, out):   # the game's icon (256x256 JPEG) at every size an .icns holds
@@ -120,7 +130,7 @@ def info_plist(a, minos, icon):
          'CFBundleVersion': a.version or '1.0', 'CFBundleShortVersionString': a.version or '1.0', 'CFBundlePackageType': 'APPL', 'CFBundleExecutable': EXE,
          'CFBundleInfoDictionaryVersion': '6.0', 'LSMinimumSystemVersion': minos, 'LSArchitecturePriority': ['arm64'], 'NSHighResolutionCapable': True,
          'LSApplicationCategoryType': a.category or 'public.app-category.games', 'DMTitleID': a.title_id.upper(), 'DMRomfsMarker': a.marker or '', 'DMLanguage': a.lang or 'en-US',
-         'NSLocalNetworkUsageDescription': 'Connect to compatible games on your local network when you choose Local network (LAN).'}
+         'NSLocalNetworkUsageDescription': 'Connect to compatible games on your local network when you choose Local network (LAN).', 'DMPrimaryHost': True}
     if icon: p['CFBundleIconFile'] = 'AppIcon'
     if a.settings:
         listed = json.loads(Path(a.settings).read_text(encoding='utf-8'))['settings']
@@ -139,9 +149,8 @@ def source_commit():   # DMCommit: the checkout that packed the app (scripts/bug
     return head + ('+dirty' if dirty else '') if head else None
 
 
-def sign(app, identity, codesign):   # the inner host first, then the bundle (its resources and the launcher); no --options runtime (see the top)
-    host = app / 'Contents/MacOS/dmhost'
-    for target in (host, app):
+def sign(app, identity, codesign):   # nested code first, then the primary host/bundle; no --options runtime (see the top)
+    for target in (app / 'Contents/Frameworks/DMMacBootstrap.dylib', app / 'Contents/Helpers/dm-save-supervisor', app):
         try: run([codesign, '--force', '--sign', identity, target])
         except SystemExit as e:
             if 'detritus' not in str(e): raise
@@ -227,8 +236,9 @@ def pack(a):
         codesign = shutil.which('codesign')
         if not codesign: raise SystemExit('codesign is not available')
         codesign = Path(codesign).resolve()
+        require_primary_host(a.host)
         minos = min_os(a.host)
-        sources = [Path(__file__).resolve(), HERE / 'launcher.c', HERE.parent / 'host/romfs_image.h', HERE.parent / 'host/save_sync.c', HERE.parent / 'host/save_sync.h', HERE.parent / 'tools/romfs.py'] + swift_sources()
+        sources = [Path(__file__).resolve(), HERE / 'launcher.c', HERE / 'save_supervisor.c', HERE / 'save_supervisor_start.c', HERE / 'save_supervisor.h', HERE.parent / 'host/front.h', HERE.parent / 'host/romfs_image.h', HERE.parent / 'host/save_sync.c', HERE.parent / 'host/save_sync.h', HERE.parent / 'tools/romfs.py'] + swift_sources()
         if getattr(a, 'nextendo_bcat_dir', None):
             sources += [HERE.parent / p for p in ('tools/nextendo_bcat.py', 'tools/bcat_prepare.m', 'host/hle_bcat_apple.m', 'host/nextendo_bcat.h')]
         inputs = {'options': vars(a), 'files': [(str(p), p.stat().st_mode, digest(p), os.readlink(p) if p.is_symlink() else None) for p in files + sources],
@@ -247,7 +257,7 @@ def pack(a):
     tmp = out.with_name(out.name + '.partial')
     shutil.rmtree(tmp, ignore_errors=True)
     c = tmp / 'Contents'; mac, res = c / 'MacOS', c / 'Resources'; dm = res / 'dm'
-    for d in (mac, dm / 'font'): d.mkdir(parents=True)
+    for d in (mac, dm / 'font', c / 'Frameworks'): d.mkdir(parents=True)
     romfs, msl, aoc = Path(a.romfs), Path(a.msl), Path(a.aoc) if a.aoc else None
     # each source is probed on its own, as they may lie on different volumes; cp -c copies what it cannot clone, so a probe decides only the free-space check and the step line
     trees, lists = {'romfs': romfs, 'aoc': aoc}, {'mods': mods, 'msl': msls, 'pso': pso}
@@ -257,8 +267,8 @@ def pack(a):
         free = shutil.disk_usage(res).free
         if need + (1 << 30) > free: raise SystemExit(f'the app needs {need / 2**30:.1f} GB on the volume of {out.parent} (no APFS clones from the build there) and {free / 2**30:.1f} GB are free')
     step(f'launcher and host ({"clones" if clone["romfs"] else "copies"} of the game files)')
-    build_launcher(mac / EXE, minos, clang, swiftc, sdk)
-    shutil.copy2(a.host, mac / 'dmhost')
+    build_launcher(c / 'Frameworks/DMMacBootstrap.dylib', minos, clang, swiftc, sdk)
+    shutil.copy2(a.host, mac / EXE)
     copy(mods, dm, clone['mods'])
     variant = Path(a.patched) / 'nextendo'
     if (variant / 'main.fixups.tsv').is_file():

@@ -1209,7 +1209,14 @@ void front_run(void (*guest)(void)) {
         g_layer.device = MTLCreateSystemDefaultDevice();
         g_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
         g_layer.contentsScale = win.backingScaleFactor;
-        if (getenv("DM_METAL_HUD") && atoi(getenv("DM_METAL_HUD"))) { g_layer.developerHUDProperties = @{@"mode": @"default"}; LOG("front end: Metal performance HUD on (DM_METAL_HUD)"); }   // Apple's HUD over the game: frame rate, frame and GPU time, memory
+        const char *hud = getenv("DM_METAL_HUD");
+        if (hud) {
+            // The game is the main layer, rather than an earlier settings
+            // layer. Hiding a previously enabled HUD works without relaunch;
+            // enabling its runtime still requires the first Metal device.
+            g_layer.developerHUDProperties = @{@"mode": atoi(hud) ? @"main" : @"disabled"};
+            LOG("front end: Metal performance HUD %s (DM_METAL_HUD)", atoi(hud) ? "on" : "off");
+        }
         v.layer = g_layer; [(DmGameView *)v fitDrawable];
         [win center];
         [win makeKeyAndOrderFront:nil];

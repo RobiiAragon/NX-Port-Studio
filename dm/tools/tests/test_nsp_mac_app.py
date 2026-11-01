@@ -30,15 +30,18 @@ TID = '01008CF01BAAC000'
 TEST_ROOT = Path(os.environ.get('NXNATIVE_TEST_ROOT', tempfile.gettempdir()))
 
 HOST_C = r'''#include <signal.h>
+#include "bundle_mac.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 extern char **environ;
 static void term(int s) { (void)s; _exit(3); }
 int main(int argc, char **argv) {
+    int bootstrap = dm_mac_bundle_prepare(&argc, &argv); if (bootstrap >= 0) return bootstrap;
     char p[1024]; snprintf(p, sizeof p, "%s/host_run.txt", getenv("HOME")); FILE *f = fopen(p, "w");
     for (char **e = environ; *e; e++) fprintf(f, "%s\n", *e);
     for (int i = 0; i < argc; i++) fprintf(f, "argv%d=%s\n", i, argv[i]);
+    fprintf(f, "pid=%d\nppid=%d\n", getpid(), getppid());
     char cwd[1024]; fprintf(f, "cwd=%s\n", getcwd(cwd, sizeof cwd)); fclose(f);
     printf("standin host output\n"); fflush(stdout);
     if (getenv("STANDIN_WAIT")) { signal(SIGTERM, term); for (;;) pause(); }
@@ -117,7 +120,8 @@ class PackReuse(unittest.TestCase):
             'font/nintendo_ext.ttf': b'font', 'aoc/1/data': b'dlc', 'pso/gpu.mtl4a': b'archive',
             'pso/prebuilt.tsv': b'prebuilt', 'pso/rest_pairs.tsv': b'rest', 'pso/archive.tsv': b'index',
             'env.txt': b'DM_TEST=1', 'split.tsv': b'split', 'icon.jpg': b'jpeg', 'source/launcher.c': b'launcher',
-            'host/romfs_image.h': b'validator', 'host/save_sync.c': b'sync', 'host/save_sync.h': b'sync api', 'tools/romfs.py': b'reader',
+            'source/save_supervisor.c': b'supervisor', 'source/save_supervisor_start.c': b'spawn', 'source/save_supervisor.h': b'api',
+            'host/front.h': b'early HUD api', 'host/romfs_image.h': b'validator', 'host/save_sync.c': b'sync', 'host/save_sync.h': b'sync api', 'tools/romfs.py': b'reader',
             'third_party/notices/OpenSSL/LICENSE.txt': b'fixture notice', 'source/Launcher.swift': b'window', 'ios/Sources/LauncherSettings.swift': b'model', 'ios/Sources/LauncherRow.swift': b'rows', 'ios/Sources/LauncherLocalization.swift': b'localization',
         }
         for n in pack_app.TABLES: files['profile/' + n] = n.encode()
@@ -141,6 +145,7 @@ class PackReuse(unittest.TestCase):
             name = Path(cmd[0]).name
             if self.failed_tool == name and (name not in ('clang', 'swiftc') or '-o' in cmd): raise SystemExit('fixture ' + name + ' failed')
             if name == 'otool': return 'cmd LC_BUILD_VERSION\n minos 14.0\n'
+            if name == 'nm': return '0000000010000000 T _dm_mac_bundle_prepare\n'
             if name == 'xcrun':
                 if '--find' in cmd: return str(self.swiftc if 'swiftc' in cmd else self.clang) + '\n'
                 if '--show-sdk-path' in cmd: return str(self.sdk) + '\n'
@@ -216,7 +221,7 @@ class PackReuse(unittest.TestCase):
                  'patched/main.obs.tsv', 'patched/nro.tsv', 'msl/k.metallib', 'msl/k.json', 'msl/inputs.tsv', 'font/nintendo_ext.ttf',
                  'pso/gpu.mtl4a', 'pso/prebuilt.tsv', 'pso/rest_pairs.tsv', 'pso/archive.tsv', 'env.txt', 'icon.jpg', 'source/launcher.c',
                  'source/Launcher.swift', 'ios/Sources/LauncherSettings.swift', 'ios/Sources/LauncherRow.swift',   # the settings window's sources
-                 'host/save_sync.c', 'host/save_sync.h']   # the cloud-save code the launcher links (its send after the host exits)
+                 'host/front.h', 'host/save_sync.c', 'host/save_sync.h']   # early HUD and post-exit save code
         names += ['profile/' + n for n in pack_app.TABLES]
         for name in names:
             with self.subTest(name=name):
@@ -272,10 +277,12 @@ class PackReuse(unittest.TestCase):
         c = next(c for c in self.commands if Path(c[0]).name == 'clang' and '-o' in c)
         s = next(c for c in self.commands if Path(c[0]).name == 'swiftc' and '-o' in c)
         self.assertIn('-c', c); self.assertIn('-parse-as-library', s)
-        self.assertEqual(s[s.index('-o') + 1], str(Path(self.args.out).resolve().with_name('Game.app.partial') / 'Contents/MacOS/nxnative'))
-        self.assertIn(c[c.index('-o') + 1], s)   # launcher.c's object, with its main
+        self.assertEqual(s[s.index('-o') + 1], str(Path(self.args.out).resolve().with_name('Game.app.partial') / 'Contents/Frameworks/DMMacBootstrap.dylib'))
+        self.assertIn(c[c.index('-o') + 1], s)   # in-process bootstrap, with no main
+        self.assertIn('-emit-library', s)
         sync = next(c for c in self.commands if Path(c[0]).name == 'clang' and '-o' in c and c[-1].endswith('save_sync.c'))
-        self.assertIn(sync[sync.index('-o') + 1], s)   # save_sync.c's object: the launcher sends the save once the host has exited
+        self.assertTrue(sync[sync.index('-o') + 1].endswith('/Helpers/dm-save-supervisor'))
+        self.assertNotIn(sync[sync.index('-o') + 1], s)   # cloud send survives primary host failure
         self.assertEqual([Path(x).name for x in s if x.endswith('.swift')], ['Launcher.swift', 'LauncherSettings.swift', 'LauncherRow.swift', 'LauncherLocalization.swift'])
 
     def test_selected_file_modes_and_file_additions_and_removals_invalidate(self):
@@ -387,7 +394,9 @@ class App(unittest.TestCase):
         cls.tmp = Path(tempfile.mkdtemp(dir=TEST_ROOT)).resolve()
         t = cls.tmp
         (t / 'host.c').write_text(HOST_C)
-        subprocess.run(['xcrun', 'clang', '-arch', 'arm64', '-o', t / 'dmhost', t / 'host.c'], check=True)
+        (t / 'game_profile.h').write_text(f'#define DM_GAME_ID "{TID}"\n')
+        subprocess.run(['xcrun', 'clang', '-arch', 'arm64', '-I', REPO / 'dm/host', '-I', t, '-framework', 'CoreFoundation',
+                        '-o', t / 'dmhost', t / 'host.c', REPO / 'dm/host/bundle_mac.c'], check=True)
         for d in ('patched', 'romfs/region_common/audio', 'cache/b-0123456789ab', 'profile', 'font', 'aoc/1', 'bin', 'home'): (t / d).mkdir(parents=True)
         for n, b in (('main.patched.bin', b'code'), ('main.fixups.tsv', b'f'), ('main.gates.tsv', b'g'), ('main.cuts.tsv', b'c'), ('main.obs.tsv', b'o'), ('main.changed.tsv', b'w'), ('main.sites.tsv', b's'), ('build_src.sha256', b'h')):
             (t / 'patched' / n).write_bytes(b)
@@ -435,7 +444,14 @@ class App(unittest.TestCase):
     def test_layout(self):
         c = self.app / 'Contents'
         self.assertFalse(self.app.with_name(self.app.name + '.partial').exists())
-        self.assertEqual(sorted(p.name for p in (c / 'MacOS').iterdir()), ['dmhost', 'nxnative'])
+        self.assertEqual(sorted(p.name for p in (c / 'MacOS').iterdir()), ['nxnative'])
+        # Signing changes the Mach-O signature and its load-command size. The
+        # native host's machine instructions must remain the actual executable.
+        def instructions(path):
+            return subprocess.run(['otool', '-s', '__TEXT', '__text', path], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
+        self.assertEqual(instructions(c / 'MacOS/nxnative'), instructions(self.tmp / 'dmhost'))
+        self.assertTrue((c / 'Frameworks/DMMacBootstrap.dylib').is_file())
+        self.assertTrue((c / 'Helpers/dm-save-supervisor').is_file())
         self.assertEqual(sorted(p.name for p in (c / 'Resources/dm').iterdir()),
                          ['c1_full.tsv', 'env.txt', 'font', 'launcher.json', 'main.changed.tsv', 'main.cuts.tsv', 'main.fixups.tsv', 'main.gates.tsv', 'main.obs.tsv', 'main.patched.bin', 'pso_manifest.tsv', 'pso_pairs.tsv',
                           'shader_map.tsv', 'shader_pairs.tsv', 'system_data'])   # the shader pairs: the pipeline prebuild's, without which hybrid draws have no stand-in
@@ -543,7 +559,7 @@ class App(unittest.TestCase):
             Path(os.path.expanduser(f'~/Library/Preferences/{domain}.plist')).unlink(missing_ok=True)
 
     def test_signed(self):   # ad-hoc, both the host and the bundle, never the hardened runtime (it refuses the executable memory the host makes for the game's code)
-        for target in (self.app, self.app / 'Contents/MacOS/dmhost'):
+        for target in (self.app, self.app / 'Contents/Frameworks/DMMacBootstrap.dylib', self.app / 'Contents/Helpers/dm-save-supervisor'):
             subprocess.run(['codesign', '--verify', '--strict', target], check=True, capture_output=True)
             d = subprocess.run(['codesign', '-dv', target], capture_output=True, text=True).stderr
             self.assertIn('Signature=adhoc', d); self.assertNotIn('runtime', d.split('CodeDirectory', 1)[1].split('\n')[0])
@@ -552,9 +568,10 @@ class App(unittest.TestCase):
         home = self.tmp / 'home'; sup = home / f'Library/Application Support/nxnative/{TID}'; logs = home / 'Library/Logs/nxnative'
         sup.mkdir(parents=True, exist_ok=True); (sup / 'env.txt').write_text('DM_BOTH=player\n')
         p = self.launch(DM_LANG='ja'); p.communicate(timeout=30)
-        self.assertEqual(p.returncode, 7)   # the host's exit code
+        self.assertEqual(p.returncode, 7)   # the primary host's exit code
+        self.assertEqual(int(self.host_run()['pid']), p.pid)   # no renderer child or exec handover
         r, res = self.host_run(), self.app / 'Contents/Resources'
-        self.assertEqual(r['argv0'], str(self.app / 'Contents/MacOS/dmhost')); self.assertEqual(r['argv1'], str(res / 'dm'))
+        self.assertEqual(r['argv0'], str(self.app / 'Contents/MacOS/nxnative')); self.assertEqual(r['argv1'], str(res / 'dm'))
         self.assertEqual((r['DM_ROMFS'], r['DM_MSL_DIR'], r['DM_NVN_SHMAP'], r['DM_FONT_DIR'], r['DM_AOC_DIR']),
                          (str(res / 'romfs'), str(res / 'msl'), str(res / 'dm/shader_map.tsv'), str(res / 'dm/font'), str(res / 'aoc')))
         self.assertEqual(r['DM_PSO_BUNDLE'], str(res / 'pso'))   # the pipeline archive made offline, as the iOS app's main.m sets it
@@ -585,7 +602,7 @@ class App(unittest.TestCase):
             if previous is None: env_file.unlink(missing_ok=True)
             else: env_file.write_bytes(previous)
 
-    def test_sigterm(self):   # forwarded to the host, whose exit code comes back
+    def test_sigterm(self):   # delivered directly to the primary host, with its exit code intact
         p = self.launch(wait=True)
         for _ in range(100):
             if (self.tmp / 'home/host_run.txt').exists() and 'STANDIN_WAIT' in self.host_run(): break
@@ -593,6 +610,54 @@ class App(unittest.TestCase):
         time.sleep(0.2)
         p.send_signal(signal.SIGTERM); p.communicate(timeout=30)
         self.assertEqual(p.returncode, 3)
+
+    def test_primary_pid_preserves_host_and_game_arguments(self):
+        p = self.launch(args=('--no-launcher', 'main', '--', '--no-launcher', 'one argument'))
+        p.communicate(timeout=30)
+        self.assertEqual(p.returncode, 7)
+        ran = self.host_run()
+        self.assertEqual(int(ran['pid']), p.pid)
+        self.assertEqual([ran[f'argv{i}'] for i in range(2, 6)], ['main', '--', '--no-launcher', 'one argument'])
+
+    def test_unbundled_host_keeps_normal_cli(self):
+        p = subprocess.run([self.tmp / 'dmhost', 'plain-module-directory', '--', 'game-arg'],
+                           env=dict(HOME=str(self.tmp / 'home'), PATH='/usr/bin:/bin'), capture_output=True, timeout=30)
+        self.assertEqual(p.returncode, 7)
+        ran = self.host_run()
+        self.assertEqual([ran[f'argv{i}'] for i in range(1, 4)], ['plain-module-directory', '--', 'game-arg'])
+        self.assertNotIn('DM_ROOT', ran)
+
+    def test_bundle_must_match_compiled_game_title(self):
+        broken = self.tmp / 'Wrong profile.app'; shutil.copytree(self.app, broken)
+        info_file = broken / 'Contents/Info.plist'; info = plistlib.loads(info_file.read_bytes())
+        info['DMTitleID'] = '0100000000000001'; info_file.write_bytes(plistlib.dumps(info))
+        p = subprocess.run([broken / 'Contents/MacOS/nxnative'], capture_output=True, timeout=30)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b'bundle title does not match', p.stderr)
+
+    def test_cloud_supervisor_sends_after_normal_exit_crash_and_signal(self):
+        home = self.tmp / 'home'
+        for mode in ('normal', 'term', 'int', 'hup', 'crash'):
+            with self.subTest(mode=mode):
+                save = self.tmp / f'committed-{mode}'; save.mkdir(); (save / 'progress').write_bytes(b'original synthetic save')
+                cloud = self.tmp / f'cloud-{mode}'
+                report = home / 'host_run.txt'; report.unlink(missing_ok=True)
+                p = self.launch(wait=mode != 'normal', DM_SAVE=str(save), DM_SAVE_SYNC=str(cloud))
+                deadline = time.monotonic() + 10
+                while not report.exists():
+                    if time.monotonic() > deadline: self.fail('primary host did not start')
+                    time.sleep(.01)
+                self.assertEqual(int(self.host_run()['pid']), p.pid)
+                if mode != 'normal':
+                    time.sleep(.1)
+                    p.send_signal({'term': signal.SIGTERM, 'int': signal.SIGINT, 'hup': signal.SIGHUP, 'crash': signal.SIGKILL}[mode])
+                p.communicate(timeout=10)
+                self.assertEqual(p.returncode, {'normal': 7, 'term': 3, 'int': -signal.SIGINT, 'hup': -signal.SIGHUP, 'crash': -signal.SIGKILL}[mode])
+                packed = cloud / TID / 'save.dmsync'; deadline = time.monotonic() + 10
+                while not packed.is_file():
+                    if time.monotonic() > deadline: self.fail('supervisor lost committed save after ' + mode)
+                    time.sleep(.01)
+                self.assertGreater(packed.stat().st_size, 32)
 
     def test_missing_data(self):
         broken = self.tmp / 'Broken.app'; shutil.rmtree(broken, ignore_errors=True)
@@ -717,7 +782,7 @@ class Script(unittest.TestCase):
                 o = Path(cmd[cmd.index('--out') + 1]); o.mkdir(parents=True, exist_ok=True)
                 if not kw.get('no_bases'): (o / f'{cmd[cmd.index("--gpu") + 1]}.mtl4a').write_bytes(b'arch')
                 return
-            (out / 'Contents/MacOS').mkdir(parents=True); (out / 'Contents/MacOS/dmhost').write_bytes(b'x')
+            (out / 'Contents/MacOS').mkdir(parents=True); (out / 'Contents/MacOS/nxnative').write_bytes(b'x')
             on_line('step: launcher and host (clones of the game files)')
             on_line(f'app: {out}')
         g = types.SimpleNamespace(table=lambda n: tmp / 'profile' / n, get={'app_category': 'public.app-category.games', 'romfs_marker': 'a/b'}.get)

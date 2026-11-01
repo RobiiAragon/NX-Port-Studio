@@ -664,7 +664,7 @@ class MacApp(Base):
             if not on_line: return   # the launcher settings (dm/games/settings.py)
             packs.append(cmd)
             (out / 'Contents/MacOS').mkdir(parents=True, exist_ok=True)
-            (out / 'Contents/MacOS/dmhost').write_bytes(b'host')
+            (out / 'Contents/MacOS/nxnative').write_bytes(b'host')
             if len(packs) == 1: on_line('step: launcher and host (clones of the game files)')
             on_line(f'app: {out}' + (', reused (inputs unchanged)' if len(packs) > 1 else ''))
         with mock.patch.object(nsp, 'run', side_effect=pack):
