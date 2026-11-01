@@ -5,6 +5,8 @@
 #include <TargetConditionals.h>
 #if !TARGET_OS_IOS
 #import <LocalAuthentication/LocalAuthentication.h>
+#include "nextendo_preflight_mac.h"
+#include <signal.h>
 #endif
 #include <CommonCrypto/CommonDigest.h>
 #include "nextendo_account.h"
@@ -13,6 +15,7 @@
 #include <stdatomic.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <math.h>
@@ -32,6 +35,10 @@ static SecKeyRef signingKey;
 static NSData *publicSigningKey;
 static pthread_once_t signingOnce = PTHREAD_ONCE_INIT;
 static BOOL enabled(void) { return dm_net_nextendo_enabled(); }
+static _Atomic uint64_t preflightGeneration;
+#if !TARGET_OS_IOS
+static BOOL preflightChild;
+#endif
 
 @interface DmNextendoCredential : NSObject
 @property(nonatomic) uint64_t pid;
@@ -61,6 +68,7 @@ static BOOL unsigned_decimal(NSString *text, uint64_t *out) {
 }
 static BOOL number(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID(); }
 static NSData *read_credentials(BOOL allowInteraction) {
+    if (allowInteraction) atomic_fetch_add(&preflightGeneration, 1);
     dm_nextendo_credential_provider provider = atomic_load(&credentialProvider);
     if (provider) { NSMutableData *data = [NSMutableData dataWithLength:65536]; size_t size = 0; if (!data || !provider(data.mutableBytes, data.length, &size) || !size || size > data.length) return nil; data.length = size; return data; }
 #if TARGET_OS_IOS
@@ -84,7 +92,11 @@ static NSData *read_credentials(BOOL allowInteraction) {
         context.interactionNotAllowed = YES;
         query[(__bridge id)kSecUseAuthenticationContext] = context;
     }
-    CFTypeRef result = NULL; dm_guest_host_wait_begin(); OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result); dm_guest_host_wait_end();
+    CFTypeRef result = NULL;
+    // The probe has no guest scheduler/TLS: it runs before host preload.
+    if (!preflightChild) dm_guest_host_wait_begin();
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (!preflightChild) dm_guest_host_wait_end();
     if (status || !result) { if (result) CFRelease(result); return nil; }
     id data = CFBridgingRelease(result); return [data isKindOfClass:NSData.class] && [data length] <= 65536 ? data : nil;
 #endif
@@ -109,15 +121,71 @@ static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) 
     id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return nil; for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return nil;
     DmNextendoCredential *c = [DmNextendoCredential new]; c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
 }
-static DmNextendoCredential *credential(void) { return credential_with_interaction(YES); }
+static DmNextendoCredential *credential(void) { DmNextendoCredential *c = credential_with_interaction(YES); atomic_fetch_add(&preflightGeneration, 1); return c; }
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) {
+    atomic_fetch_add(&preflightGeneration, 1);
     atomic_store(&credentialProvider, provider); pthread_mutex_lock(&accountLock); cachedFingerprint = nil; cachedToken = nil; cachedVersion = nil; cachedExpiry = 0; pthread_mutex_unlock(&accountLock);
 }
 void dm_nextendo_set_game_version(const char *version) {
     NSString *value = version ? [NSString stringWithUTF8String:version] : nil;
     pthread_mutex_lock(&accountLock); explicitVersion = value; cachedToken = nil; cachedVersion = nil; pthread_mutex_unlock(&accountLock);
 }
-uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool { if (!out) return DM_ACCOUNT_FAIL; *out = credential_with_interaction(NO) != nil; return 0; } }
+#if !TARGET_OS_IOS
+// The legacy SecItem shim ignores LAContext for password decryption. Its public
+// UI switch applies to every Keychain call in a process, so use it only in this
+// short-lived instance of the identical executable, before AppKit or guest boot.
+int dm_nextendo_account_preflight_child(int fd) { @autoreleasepool {
+    struct stat st; if (fd < 3 || fstat(fd, &st) || !S_ISFIFO(st.st_mode)) return 64;
+    preflightChild = YES;
+    // Also bound this child if the renderer exits before it can cancel us.
+    struct sigaction action = {.sa_handler=SIG_DFL}; sigemptyset(&action.sa_mask);
+    sigset_t unblock; sigemptyset(&unblock); sigaddset(&unblock, SIGALRM);
+    if (sigaction(SIGALRM, &action, NULL) || pthread_sigmask(SIG_UNBLOCK, &unblock, NULL)) return 68;
+    alarm(5);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    Boolean previous = true;
+    if (SecKeychainGetUserInteractionAllowed(&previous) || SecKeychainSetUserInteractionAllowed(false)) return 65;
+    DmNextendoCredential *c = credential_with_interaction(NO);
+    OSStatus restored = SecKeychainSetUserInteractionAllowed(previous);
+#pragma clang diagnostic pop
+    if (restored) return 66;
+    BOOL representable = c && c.expiry < (double)UINT64_MAX / 1000;
+    dm_nextendo_preflight_reply reply = {.magic=DM_NEXTENDO_PREFLIGHT_MAGIC, .version=1, .pid=(uint32_t)getpid(),
+        .available=representable, .expires_ms=representable ? (uint64_t)floor(c.expiry * 1000) : 0};
+    size_t done = 0; const uint8_t *bytes = (const uint8_t *)&reply;
+    while (done < sizeof reply) { ssize_t n = write(fd, bytes + done, sizeof reply - done); if (n < 0 && errno == EINTR) continue; if (n <= 0) return 67; done += (size_t)n; }
+    return 0;
+} }
+static BOOL preflight_available(void) {
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    static uint64_t generation; static NSTimeInterval checkedUntil, expiresAt; static BOOL available;
+    dm_guest_host_wait_begin(); pthread_mutex_lock(&lock);
+    uint64_t before = atomic_load(&preflightGeneration);
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970, uptime = NSProcessInfo.processInfo.systemUptime;
+    if (generation != before || uptime >= checkedUntil || (available && now >= expiresAt)) {
+        dm_nextendo_preflight_reply reply; int valid = dm_nextendo_preflight_query(&reply, 3000);
+        now = NSDate.date.timeIntervalSince1970;
+        expiresAt = valid ? (double)reply.expires_ms / 1000 : 0;
+        available = valid && reply.available && expiresAt > now;
+        generation = before; checkedUntil = NSProcessInfo.processInfo.systemUptime + MIN(1, available ? expiresAt - now : 1);
+        // Explicit reads/provider changes can happen concurrently. Do not
+        // publish an older observation over that change, even for one second.
+        if (atomic_load(&preflightGeneration) != before) { checkedUntil = 0; available = NO; }
+    }
+    BOOL result = available;
+    pthread_mutex_unlock(&lock); dm_guest_host_wait_end(); return result;
+}
+#endif
+uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool {
+    if (!out) return DM_ACCOUNT_FAIL; *out = 0; if (!enabled()) return 0;
+#if TARGET_OS_IOS
+    *out = credential_with_interaction(NO) != nil;
+#else
+    *out = atomic_load(&credentialProvider) ? credential_with_interaction(NO) != nil : preflight_available();
+#endif
+    return 0;
+} }
 uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
     if (!out) return DM_ACCOUNT_FAIL; *out = 0; DmNextendoCredential *c = credential(); if (!c) return DM_ACCOUNT_FAIL;
     if (dm_nextendo_api_baas_namespace("account")) return dm_nextendo_api_baas_id(out);

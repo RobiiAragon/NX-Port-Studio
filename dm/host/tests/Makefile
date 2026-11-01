@@ -433,23 +433,36 @@ ssl: $(B)/t_ssl
 ssl-sanitize: $(B)/t_ssl_asan
 	$(PYTHON) test_ssl_transport.py $(B)/t_ssl_asan
 
-ACCOUNT_SOURCES = t_nextendo_account.m ../hle_account.c ../hle_nextendo_apple.m ../hle_nextendo_api_apple.m ../hle_bigstack.c ../entry.S
-ACCOUNT_DEPS = t_gate_fixture.h $(ACCOUNT_SOURCES) ../nextendo_account.h ../net_socket.h ../hle.h $(GAME_H)
+ACCOUNT_SOURCES = t_nextendo_account.m ../hle_account.c ../hle_nextendo_apple.m ../hle_nextendo_preflight_mac.c ../hle_nextendo_api_apple.m ../hle_bigstack.c ../entry.S
+ACCOUNT_DEPS = t_gate_fixture.h $(ACCOUNT_SOURCES) ../nextendo_account.h ../nextendo_preflight_mac.h ../net_socket.h ../hle.h $(GAME_H)
 $(B)/t_nextendo_account: $(ACCOUNT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -o $@ $(ACCOUNT_SOURCES) -framework Foundation -framework Security -framework LocalAuthentication
 $(B)/t_nextendo_account_asan: $(ACCOUNT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer -o $@ $(ACCOUNT_SOURCES) -framework Foundation -framework Security -framework LocalAuthentication
-$(B)/t_nextendo_preflight: t_nextendo_preflight.m ../hle_nextendo_apple.m ../nextendo_account.h ../net_socket.h | $(B)
-	$(CLANG) $(SSL_FLAGS) -o $@ t_nextendo_preflight.m -framework Foundation -framework Security -framework LocalAuthentication
-$(B)/t_nextendo_preflight_asan: t_nextendo_preflight.m ../hle_nextendo_apple.m ../nextendo_account.h ../net_socket.h | $(B)
-	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nextendo_preflight.m -framework Foundation -framework Security -framework LocalAuthentication
+PREFLIGHT_DEPS = ../hle_nextendo_apple.m ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h ../nextendo_account.h ../net_socket.h
+$(B)/t_nextendo_preflight: t_nextendo_preflight.m $(PREFLIGHT_DEPS) | $(B)
+	$(CLANG) $(SSL_FLAGS) -o $@ t_nextendo_preflight.m ../hle_nextendo_preflight_mac.c -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_nextendo_preflight_asan: t_nextendo_preflight.m $(PREFLIGHT_DEPS) | $(B)
+	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nextendo_preflight.m ../hle_nextendo_preflight_mac.c -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_nextendo_legacy_keychain: t_nextendo_legacy_keychain.m $(PREFLIGHT_DEPS) | $(B)
+	$(CLANG) $(SSL_FLAGS) -o $@ t_nextendo_legacy_keychain.m ../hle_nextendo_preflight_mac.c -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_nextendo_legacy_keychain_asan: t_nextendo_legacy_keychain.m $(PREFLIGHT_DEPS) | $(B)
+	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nextendo_legacy_keychain.m ../hle_nextendo_preflight_mac.c -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_nextendo_preflight_ownership: t_nextendo_preflight_ownership.c ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -o $@ t_nextendo_preflight_ownership.c
+$(B)/t_nextendo_preflight_ownership_asan: t_nextendo_preflight_ownership.c ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nextendo_preflight_ownership.c
 .PHONY: nextendo-account nextendo-account-sanitize
-nextendo-account: $(B)/t_nextendo_account $(B)/t_nextendo_preflight
+nextendo-account: $(B)/t_nextendo_account $(B)/t_nextendo_preflight $(B)/t_nextendo_legacy_keychain $(B)/t_nextendo_preflight_ownership
 	$(B)/t_nextendo_account
 	$(B)/t_nextendo_preflight
-nextendo-account-sanitize: $(B)/t_nextendo_account_asan $(B)/t_nextendo_preflight_asan
+	$(B)/t_nextendo_legacy_keychain
+	$(B)/t_nextendo_preflight_ownership
+nextendo-account-sanitize: $(B)/t_nextendo_account_asan $(B)/t_nextendo_preflight_asan $(B)/t_nextendo_legacy_keychain_asan $(B)/t_nextendo_preflight_ownership_asan
 	$(B)/t_nextendo_account_asan
 	$(B)/t_nextendo_preflight_asan
+	$(B)/t_nextendo_legacy_keychain_asan
+	$(B)/t_nextendo_preflight_ownership_asan
 
 ROUTE_SOURCES = t_nextendo_routes.c ../hle_nextendo_routes.c ../hle_net_backend.c ../hle_nsd_backend.c ../hle_ssl_apple.m ../hle_nextendo_x509.c
 ROUTE_DEPS = ../nsd.h $(ROUTE_SOURCES) ../nextendo_routes.h ../net_socket.h ../ssl_backend.h test_nextendo_routes.py test_ssl_transport.py Makefile
