@@ -1,4 +1,5 @@
-// Mac app launcher: the settings window shown before the game starts, in the launcher's own process (launcher.c calls dm_mac_launcher before it starts the host). Its settings come from the
+// Mac app settings shown before guest boot, inside the primary native host's
+// process. launcher.c calls dm_mac_launcher without spawning another renderer. Its settings come from the
 // app's Resources/dm/launcher.json (dm/games/settings.py with SETTINGS_PLATFORM=mac); the model and the rows are the iOS launcher's (dm/ios/Sources/LauncherSettings.swift, LauncherRow.swift),
 // and so is the store: launcher.<VAR> in the app's preferences, which launcher.c reads when the window is not shown (docs/frontends.md, Saved choices). Basic settings (level basic) come
 // first, the others under Advanced settings, each in the list's sections. Play puts the settings into this process's environment, which the host inherits; Quit and closing the window end the
@@ -15,6 +16,7 @@ struct LauncherView: View {
     let fit: (CGFloat) -> Void
     @AppStorage("window.show") private var show = true
     @AppStorage("window.advanced") private var advanced = false
+    private let hudRuntimeWasEnabled = (Int(ProcessInfo.processInfo.environment["MTL_HUD_ENABLED"] ?? "0") ?? 0) != 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,9 +67,27 @@ struct LauncherView: View {
             let rows = m.rows(in: section, basic: basic)
             if !rows.isEmpty {
                 Section(section) {
-                    ForEach(rows) { SettingRow(s: $0, m: m) }
+                    ForEach(rows) { setting in
+                        SettingRow(s: setting, m: m)
+                        if setting.env == "DM_METAL_HUD", !hudRuntimeWasEnabled,
+                           (m.values[setting.env] ?? setting.def) == setting.onValue {
+                            Text(MacHUDNotice.text(m.uiLanguage)).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+enum MacHUDNotice {
+    static func text(_ language: LauncherUILanguage) -> String {
+        switch language {
+        case .spanish: "Al activar el HUD desde esta ventana, vuelve a abrir la app para aplicarlo. Play guarda esta opción."
+        case .english: "After enabling the HUD in this window, reopen the app to apply it. Play saves this choice."
+        case .french: "Après avoir activé le HUD dans cette fenêtre, rouvrez l’app pour l’appliquer. Play enregistre ce choix."
+        case .japanese: "この画面でHUDを有効にした後は、アプリを開き直すと適用されます。Playで設定を保存します。"
+        case .simplifiedChinese: "在此窗口启用HUD后，请重新打开应用以使其生效。点按Play可保存此选项。"
         }
     }
 }
@@ -125,6 +145,11 @@ private final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate 
     init(_ model: LauncherModel) { self.model = model }
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        showWindow()
+    }
+
+    func showWindow() {
+        guard window == nil else { return }
         let name = info("CFBundleName") ?? "Game"
         let menu = NSMenu(), item = NSMenuItem(), app = NSMenu()
         app.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -161,8 +186,7 @@ private final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate 
         guard let w = window else { return }
         window = nil; self.play = play
         w.delegate = nil; w.orderOut(nil)
-        NSApp.stop(nil)
-        NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0)!, atStart: true)   // run returns at the next event
+        NSApp.stopModal(withCode: play ? .OK : .cancel)
     }
 }
 
@@ -185,11 +209,18 @@ public func dmMacLauncher() -> Int32 {
     }
     let model = LauncherModel(file.settings)
     let app = NSApplication.shared, launcher = Launcher(model)
+    let previousDelegate = app.delegate, previousMenu = app.mainMenu
     app.setActivationPolicy(.regular)
     app.delegate = launcher
+    defer { app.delegate = previousDelegate; app.mainMenu = previousMenu }
     fputs("launcher: \(file.settings.count) settings shown\n", stderr)
-    app.run()
-    app.setActivationPolicy(.prohibited)   // the host is the game's app from here on
+    // One NSApplication lives on into front_run. A normal AppKit modal session
+    // finishes settings without stopping/restarting the application's run loop
+    // or changing the primary process into a prohibited background launcher.
+    app.finishLaunching()
+    launcher.showWindow()
+    guard let window = launcher.window else { return 0 }
+    app.runModal(for: window)
     guard launcher.play else { fputs("launcher: quit without starting the game\n", stderr); return 0 }
     model.apply()
     return 1

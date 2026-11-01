@@ -50,13 +50,18 @@ public final class MacPortBuildSession: Sendable {
     private static func metadata(_ app: URL) throws -> [String: Any] {
         let fm = FileManager.default
         guard (try? fm.destinationOfSymbolicLink(atPath: app.path)) == nil,
-              fm.isExecutableFile(atPath: app.appendingPathComponent("Contents/MacOS/dmhost").path),
               let data = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
               let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let title = info["DMTitleID"] as? String,
               title.range(of: "^[0-9A-Fa-f]{16}$", options: .regularExpression) != nil,
               let identifier = info["CFBundleIdentifier"] as? String, !identifier.isEmpty else {
             throw PortError.invalidConfiguration("The destination already exists and is not a recognized game port. Use another app name.")
+        }
+        let primary = info["DMPrimaryHost"] as? Bool == true
+        let code = primary ? ["Contents/MacOS/nxnative", "Contents/Frameworks/DMMacBootstrap.dylib", "Contents/Helpers/dm-save-supervisor"] : ["Contents/MacOS/dmhost"]
+        guard code.allSatisfy({ fm.isExecutableFile(atPath: app.appendingPathComponent($0).path) }),
+              !primary || info["CFBundleExecutable"] as? String == "nxnative" else {
+            throw PortError.invalidConfiguration("The game port is missing its executable or bootstrap. Build it again before installing.")
         }
         return info
     }

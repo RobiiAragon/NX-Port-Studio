@@ -1,13 +1,13 @@
-// Mac app launcher (CFBundleExecutable of the .app that dm/mac/pack_app.py packs): sets the host's environment from the bundle, then runs the Mac host (Contents/MacOS/dmhost) as a child.
-// The host is not exec'ed: macOS privacy checks (TCC) attribute a child's file access to the app that launched it, while a launcher that hands its process over (a shell script exec'ing
-// dmhost) gets EPERM on every open on a removable volume, with no prompt, signed or not. The launcher forwards SIGTERM / SIGINT / SIGHUP to the host and returns its exit code.
+// Packed Mac app bootstrap, loaded by the real primary host before guest boot.
+// LaunchServices starts the declared engine executable directly: no child
+// renderer and no exec handover, so this keeps both app ownership and TCC.
 // Bundle layout: Resources/romfs.img (the game's RomFS image; legacy romfs/ also supported), Resources/msl/<b-chain | vk | gl> (the Mac shader libraries), Resources/aoc/<index> (DLC), Resources/pso (the pipeline archive made
 // offline, handed to the host as DM_PSO_BUNDLE as the iOS app's main.m does), Resources/dm (the rewritten modules, the shader tables and pairs, font/, env.txt). Saves, the pipeline list and temporary files go to ~/Library/Application Support/nxnative/<title ID>/, the host's output to ~/Library/Logs/nxnative/<title ID>.log
 // (the previous run's kept as <title ID>.prev.log). Environment switches: one KEY=VALUE per line in <Application Support folder>/env.txt, then Resources/dm/env.txt (the first one wins; neither
 // replaces a variable already set), as the iOS app reads Documents/env.txt and dm/env.txt. Then the player's saved choices: launcher.<VAR> strings in the app's preferences domain (its bundle ID), which a
 // front end or a settings window writes, each checked against the bundle's settings (Info.plist DMSettings, from launcher.json) and used only for a variable still unset; DM_SAVED_CHOICES=0 ignores them.
 // So the order is: the launch environment, the player's env.txt, the bundle's, saved choices, the host's tested defaults (docs/frontends.md, Saved choices).
-// Before the host starts, the settings window (dm/mac/Launcher.swift dm_mac_launcher, linked in by pack_app.py) runs in this process and puts the player's settings into the environment; it keeps
+// Before the guest starts, the settings window (dm/mac/Launcher.swift dm_mac_launcher) runs in this process and puts the player's settings into the environment; it keeps
 // what the launch environment and the env files set (DM_ENV_LAUNCH_KEYS, DM_ENV_FILE_KEYS). DM_LAUNCHER=0 or --no-launcher (open <app> --args --no-launcher) starts the game without the window,
 // with the saved choices; so does "Show this window at launch" turned off.
 #include <CoreFoundation/CoreFoundation.h>
@@ -25,11 +25,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "romfs_image.h"
-#include "save_sync.h"
+#include "save_supervisor.h"
+#include "front.h"
 
 extern char **environ;
 int dm_mac_launcher(void);   // Launcher.swift: 1 = Play (the settings are in the environment), 0 = the player quit, 2 = no window (apply the saved choices here)
-static pid_t g_child;
 static char *g_file_keys, *g_launch_keys;   // the variables the env files set, and the settings the launch environment set (DM_ENV_FILE_KEYS, DM_ENV_LAUNCH_KEYS)
 
 static void add_key(char **list, const char *k) {   // a space-separated list of names
@@ -37,8 +37,6 @@ static void add_key(char **list, const char *k) {   // a space-separated list of
     if (asprintf(&s, "%s%s%s", *list ? *list : "", *list ? " " : "", k) < 0) { fputs("[RED] launcher: out of memory\n", stderr); exit(1); }
     free(*list); *list = s;
 }
-
-static void forward(int sig) { if (g_child > 0) kill(g_child, sig); }
 
 static int info_string(const char *key, char *out, size_t n) {   // a string key of the bundle's Info.plist
     CFBundleRef b = CFBundleGetMainBundle(); if (!b) return 0;
@@ -150,25 +148,26 @@ static void cloud_saves_folder(void) {
     if (v) CFRelease(v);
 }
 
-int main(int argc, char **argv) {
+int dm_mac_app_prepare(int *host_argc, char ***host_argv, const char *expected_title) {
+    int argc = *host_argc; char **argv = *host_argv;
     char self[PATH_MAX], exe[PATH_MAX]; uint32_t n = sizeof self;
     if (_NSGetExecutablePath(self, &n) || !realpath(self, exe)) return 1;
-    char contents[PATH_MAX], res[PATH_MAX], host[PATH_MAX], dm[PATH_MAX], romfs[PATH_MAX], p[PATH_MAX];
+    char contents[PATH_MAX], res[PATH_MAX], helper[PATH_MAX], dm[PATH_MAX], romfs[PATH_MAX], p[PATH_MAX];
     snprintf(contents, sizeof contents, "%s", exe); *strrchr(contents, '/') = 0; *strrchr(contents, '/') = 0;   // .../Contents/MacOS/<launcher> → .../Contents
-    snprintf(res, sizeof res, "%s/Resources", contents); snprintf(host, sizeof host, "%s/MacOS/dmhost", contents);
+    snprintf(res, sizeof res, "%s/Resources", contents); snprintf(helper, sizeof helper, "%s/Helpers/dm-save-supervisor", contents);
     snprintf(dm, sizeof dm, "%s/dm", res); snprintf(romfs, sizeof romfs, "%s/romfs", res);
     char name[256] = "nxnative", id[64] = "", marker[512] = "", lang[32] = "";
     if (!info_string("CFBundleName", name, sizeof name)) snprintf(name, sizeof name, "nxnative");
     info_string("DMRomfsMarker", marker, sizeof marker); info_string("DMLanguage", lang, sizeof lang);
-    if (!info_string("DMTitleID", id, sizeof id) || strchr(id, '/')) { alert(name, "This app has no title ID in its Info.plist (DMTitleID): pack it again with build_ipa_from_nsp.py --platform mac-app."); return 1; }
+    if (!info_string("DMTitleID", id, sizeof id) || strlen(id) != 16 || strspn(id, "0123456789abcdefABCDEF") != 16 || strcasecmp(id, expected_title)) { alert(name, "This app has no title ID in its Info.plist (DMTitleID): pack it again with build_ipa_from_nsp.py --platform mac-app."); return 1; }
     struct stat st; snprintf(p, sizeof p, "%s/romfs.img", res);
     int valid_romfs;
     if (!stat(p, &st)) {
         romfs_img *image = romfs_image_open(p); valid_romfs = image != NULL;
         romfs_image_close(image); snprintf(romfs, sizeof romfs, "%s", p);
     } else { snprintf(p, sizeof p, "%s/%s", romfs, marker); valid_romfs = !stat(p, &st); }
-    if (access(host, X_OK) || !valid_romfs || !modules_present(dm)) {
-        alert(name, "The game data inside this app is missing or incomplete (Contents/Resources/romfs.img, Contents/Resources/dm or Contents/MacOS/dmhost): pack it again with build_ipa_from_nsp.py --platform mac-app.");
+    if (!valid_romfs || !modules_present(dm)) {
+        alert(name, "The game data inside this app is missing or incomplete (Contents/Resources/romfs.img, Contents/Resources/dm): pack it again with build_ipa_from_nsp.py --platform mac-app.");
         return 1;
     }
     const char *home = getenv("HOME"); if (!home || !*home) return 1;
@@ -181,13 +180,18 @@ int main(int argc, char **argv) {
     rename(log, prev);
     int fd = open(log, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); setvbuf(stdout, NULL, _IOLBF, 0); }
-    fprintf(stderr, "launcher: %s (%s), host %s\n", name, id, host);
+    fprintf(stderr, "launcher: %s (%s), primary host pid %d\n", name, id, getpid());
     CFArrayRef rules = setting_rules();   // the settings the launch environment already set: the window shows them, fixed
     for (CFIndex i = 0; rules && i < CFArrayGetCount(rules); i++) { char env[128]; if (rule_env(CFArrayGetValueAtIndex(rules, i), env, sizeof env) && getenv(env)) add_key(&g_launch_keys, env); }
     snprintf(p, sizeof p, "%s/env.txt", sup); env_file(p);
     snprintf(p, sizeof p, "%s/env.txt", dm); env_file(p);
     setenv("DM_ENV_FILE_KEYS", g_file_keys ? g_file_keys : "", 1); setenv("DM_ENV_LAUNCH_KEYS", g_launch_keys ? g_launch_keys : "", 1);
     free(g_file_keys); free(g_launch_keys);
+    // Saved values seed the engine before SwiftUI can create its first Metal
+    // device. They are deliberately not added to the fixed-override lists:
+    // the settings window must still let the player edit or reset them.
+    saved_choices();
+    front_hud_env();
     // Personal Miis are shared by native Mac ports, independently of game saves
     // and read-only firmware model resources. An explicit launch override wins.
     snprintf(p, sizeof p, "%s/Library/Application Support/NX Port Studio/Miis/library.dmii", home);
@@ -195,11 +199,10 @@ int main(int argc, char **argv) {
     snprintf(p, sizeof p, "%s/mii_database.dmii", dm);
     if (!stat(p, &st) && S_ISREG(st.st_mode)) setenv("DM_MII_SEED", p, 0);
     int window = !(getenv("DM_LAUNCHER") && !strcmp(getenv("DM_LAUNCHER"), "0"));
-    for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--no-launcher")) window = 0;
+    for (int i = 1; i < argc && strcmp(argv[i], "--"); i++) if (!strcmp(argv[i], "--no-launcher")) window = 0;
     if (!window) fprintf(stderr, "launcher: no settings window (DM_LAUNCHER=0 or --no-launcher)\n");
     int shown = window ? dm_mac_launcher() : 2;
     if (!shown) return 0;   // Quit: no game
-    if (shown == 2) saved_choices();
     cloud_saves_folder();
     setenv("DM_ROOT", sup, 0); setenv("DM_ROMFS", romfs, 0); setenv("DM_SAVE", save, 0); setenv("DM_TEMP", temp, 0);
     snprintf(p, sizeof p, "%s/msl", res); setenv("DM_MSL_DIR", p, 0);
@@ -212,18 +215,19 @@ int main(int argc, char **argv) {
     if (*lang) setenv("DM_LANG", lang, 0);
     setenv("DM_WINDOW", "1", 0); setenv("DM_AUDIO", "1", 0);
     if (chdir(sup)) { fprintf(stderr, "[RED] launcher: cannot enter %s\n", sup); return 1; }
-    struct sigaction sa = {.sa_handler = forward};   // no SA_RESTART: waitpid below sees EINTR and waits again
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGTERM, &sa, NULL); sigaction(SIGINT, &sa, NULL); sigaction(SIGHUP, &sa, NULL);
-    char *host_argv[] = {host, dm, NULL};
-    int err = posix_spawn(&g_child, host, NULL, NULL, host_argv, environ);
-    if (err) { fprintf(stderr, "[RED] launcher: cannot start %s: %s\n", host, strerror(err)); return 1; }
-    int status;
-    while (waitpid(g_child, &status, 0) < 0) if (errno != EINTR) return 1;
-    // Cloud saves (DM_SAVE_SYNC, dm/host/save_sync.h): what the host committed and had not sent yet goes now, after a crash too (the committed save is whole whatever the host was doing)
-    // DM_SAVE as the host had it: an env file or the launch environment may have set another folder than this app's own
-    if (!save_sync_after_exit(getenv("DM_SAVE"), id)) fprintf(stderr, "launcher: the save did not reach the cloud; it goes at the next start\n");
-    if (WIFSIGNALED(status)) { fprintf(stderr, "launcher: the host stopped on signal %d\n", WTERMSIG(status)); return 128 + WTERMSIG(status); }
-    fprintf(stderr, "launcher: the host exited with %d\n", WEXITSTATUS(status));
-    return WEXITSTATUS(status);
+    // Engine and bootstrap share this PID. Keep the host's own signal/exit
+    // semantics; the helper only observes exit and cannot become a renderer.
+    if (!dm_mac_save_supervisor_start(helper, getenv("DM_SAVE"), id)) return 1;
+    char **prepared = calloc((size_t)argc + 2, sizeof *prepared);
+    if (!prepared) { fputs("[RED] launcher: cannot prepare host arguments\n", stderr); return 1; }
+    int count = 0, game_args = 0;
+    prepared[count++] = argv[0]; prepared[count++] = strdup(dm);
+    if (!prepared[1]) { free(prepared); return 1; }
+    for (int i = 1; i < argc; i++) {
+        if (!game_args && !strcmp(argv[i], "--no-launcher")) continue;
+        if (!strcmp(argv[i], "--")) game_args = 1;
+        prepared[count++] = argv[i];
+    }
+    *host_argc = count; *host_argv = prepared;
+    return -1;   // continue into the engine, in the declared app executable
 }

@@ -12,6 +12,7 @@
 #include <TargetConditionals.h>
 #include <mach/mach.h>
 #include <mach/vm_statistics.h>
+#include <stdatomic.h>
 #if TARGET_OS_IPHONE
 #include <os/proc.h>
 #endif
@@ -102,15 +103,17 @@ static void *memstat_thread(void *p) {
     return NULL;
 }
 
-__attribute__((constructor)) static void memstat_start(void) {
+void dm_memstat_start(void) {
     const char *p = getenv("DM_MEMSTAT");
     if (!p || !*p) return;
+    static _Atomic int started; if (atomic_exchange(&started, 1)) return;
     char *path = strdup(p);
 #if TARGET_OS_IPHONE
     if (*p != '/') { size_t n = strlen(getenv("HOME")) + strlen(p) + 16; path = malloc(n); snprintf(path, n, "%s/Documents/%s", getenv("HOME"), p); }   // Relative name → the container's Documents (the container path is not known before launch)
 #endif
     pthread_t th; pthread_create(&th, NULL, memstat_thread, path); pthread_detach(th);
 }
+__attribute__((constructor)) static void memstat_start(void) { dm_memstat_start(); }
 
 // ---------- Per-thread CPU: DM_THRCPU=<tsv path>[,interval in seconds (default 10)] (common to Mac / iOS; on iOS a relative name → the container's Documents) ----------
 // Every interval, walk all threads of this process (task_threads), take the thread name and user + system CPU time (ns) from THREAD_EXTENDED_INFO, and difference them by thread id:
@@ -144,12 +147,14 @@ static void *thrcpu_thread(void *p) {
     }
     return NULL;
 }
-__attribute__((constructor)) static void thrcpu_start(void) {
+void dm_thrcpu_start(void) {
     const char *p = getenv("DM_THRCPU");
     if (!p || !*p) return;
+    static _Atomic int started; if (atomic_exchange(&started, 1)) return;
     char *spec = strdup(p);
 #if TARGET_OS_IPHONE
     if (*p != '/') { size_t n = strlen(getenv("HOME")) + strlen(p) + 16; spec = malloc(n); snprintf(spec, n, "%s/Documents/%s", getenv("HOME"), p); }
 #endif
     pthread_t th; pthread_create(&th, NULL, thrcpu_thread, spec); pthread_detach(th);
 }
+__attribute__((constructor)) static void thrcpu_start(void) { dm_thrcpu_start(); }
