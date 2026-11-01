@@ -62,6 +62,22 @@ The game builds Mii heads from the console's MiiModel system data, starting at b
 - **Current iPhone validation:** the corrected build, signed with a free Personal Team, renders the title's demo race on an iPhone 18 Pro (A20 Pro). It reached frame 2400 at about 60 fps (frame-time p50 16.72 ms, GPU 5.69 ms), with no audio underruns logged. Language `es-419` and the Booster Course Pass were recognized. This run used Metal 4 pipelines off and standard upscaling; a complete manual race has not been validated.
 - **Current Mac app validation:** export through NX Port Studio succeeds with 21,495 offline pipeline bases after regenerating the BAHS pairs. The standalone app opens its `applegpu_g17s` archive (547.6 MB; 16/16 probe bases valid), reaches the title and demo, and passes frame 5100. The last three windows ran at 60 fps (frame-time p50 16.66–16.68 ms, GPU 4.09–4.12 ms, no discarded frames). The app contains version 3.0.5, `es-419` and add-on content 1. This validates startup and demo rendering, not a complete manual race.
 
+## Primary Mac process validation
+
+I tested the 4.0.1 port on an M5 Max (48 GB), macOS 27.2, using shader chain `a7dbbce711c3`, the real settings window and private offline state. Play continued in the same primary process that LaunchServices opened. I changed window → fullscreen → window without changing rendering settings:
+
+| Phase | Frames | Measured fps | GPU median | On-screen interval p99 | Intervals above 25 ms / discarded |
+|---|---:|---:|---:|---:|---:|
+| Initial window | 301–3300 | 59.916 | 3.554 ms | 16.667 ms | 2 / 0 |
+| Fullscreen | 3601–7200 | 59.867 | 3.318 ms | 16.667 ms | 2 / 0 |
+| Return to window | 13501–17100 | 59.916 | 3.825 ms | 16.670 ms | 5 / 0 |
+
+These are existing per-frame NVN timing records; no callback probe was injected. The fullscreen span was 60.116 seconds, its callback-gap p99 was 16.715 ms, and no callback gap exceeded 25 ms. Independent LaunchServices sampling found the renderer foreground in all 57 samples of the selected fullscreen interval. The log contains zero library-applet requests or MiiEditor opens; I used only launcher and window controls during the measurement. Short loading spikes remain in the sample.
+
+I repeated the fullscreen test after installing the production bundle in `/Applications`, with the normal saved settings, MetalFX enabled and network mode `auto`. This bundle contained the production bootstrap, with no diagnostic HOME shim or callback probe. Frames 3601–7200 completed twelve 300-frame windows at 59.8–60.0 fps (about 60.05 seconds, estimated from the rounded FPS summaries); per-window GPU medians ranged from 3.39 to 5.01 ms. Six long on-screen intervals remained around loading and no presentation was discarded. I then quit the installed game normally. This repeats the pacing result with real settings; it is not an online-race qualification.
+
+The corresponding spawned-renderer controls stayed around 40 fps with roughly 1,500 long on-screen intervals per 3,600 frames, including controls that were independently foreground. Pumping that parent or adding a process activity did not improve them. See [the general launch-ownership fix](../../../docs/reference/frame-rate.md#a-mac-app-renders-in-its-primary-process). This is startup/demo and pacing evidence for this game/build on Mac; it does not validate online-match stability, another title, or iOS.
+
 ## Mac routes
 
 - The work folder's `run/ctl.sh` drives a run started with `DM_CTL`.

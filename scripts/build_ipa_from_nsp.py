@@ -2347,7 +2347,7 @@ def mac_app(py, repo, out, app, work, game, patched, host, font, msl, aoc, gfx, 
         if ln.startswith('step: '): PROG.set(step=ln[6:].strip())
         if ln.startswith('app: ') and ln.endswith(', reused (inputs unchanged)'): unchanged = True
     run(cmd, logs / 'mac_app.log', env=env, on_line=line)
-    if not (out / 'Contents/MacOS/dmhost').is_file(): raise BuildError(f'no app at {out}')
+    if not (out / 'Contents/MacOS/nxnative').is_file(): raise BuildError(f'no app at {out}')
     PROG.end(f'{out.name}, ' + ('reused (inputs unchanged)' if unchanged else amount(tree_size(out)[1], 'B')))
 
 

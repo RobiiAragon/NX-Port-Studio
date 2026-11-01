@@ -194,6 +194,8 @@ jobs:
         run: |
           if ! xcrun metal --version; then
             xcodebuild -downloadComponent MetalToolchain
+            # The first lookup may have cached Xcode's missing-component shim.
+            xcrun --kill-cache
           fi
           python3 dm/gfx/tools/own_compilers.py --check-metal
       - name: Run the test files
@@ -230,6 +232,8 @@ jobs:
           # Hosted images may omit the selected Xcode's optional Metal component.
           if ! xcrun metal --version; then
             xcodebuild -downloadComponent MetalToolchain
+            # Re-resolve the compiler after installing the optional component.
+            xcrun --kill-cache
           fi
           xcrun metal --version
           python3 dm/gfx/tools/own_compilers.py --check-metal
