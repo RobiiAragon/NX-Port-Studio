@@ -159,6 +159,22 @@ class PackReuse(unittest.TestCase):
             patch.start(); self.addCleanup(patch.stop)
         self.clone = pack_app.can_clone
 
+    def test_personal_mii_snapshot_participates_in_reuse_and_validated_packaging(self):
+        # Original synthetic personal data: changing appearance must repack even
+        # though the library path, count and ID stay the same.
+        raw = bytearray(88); raw[0] = 1; raw[8] = 0x80; raw[16] = ord('T'); raw[0x41] = 3
+        source = self.tmp / 'private.charinfo'; source.write_bytes(raw)
+        self.args.mii_database = str(source)
+        with contextlib.redirect_stdout(io.StringIO()): pack_app.pack(self.args)
+        staged = self.tmp / 'Game.app/Contents/Resources/dm/mii_database.dmii'
+        self.assertEqual(staged.read_bytes(), raw)
+        raw[0x29] = 77; source.write_bytes(raw)
+        with contextlib.redirect_stdout(io.StringIO()): pack_app.pack(self.args)
+        self.assertEqual(staged.read_bytes(), raw)
+        source.write_bytes(b'corrupt')
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(ValueError): pack_app.pack(self.args)
+        self.assertEqual(staged.read_bytes(), raw)
+
     def pack(self):
         self.commands.clear(); self.clone.reset_mock()
         with contextlib.redirect_stdout(io.StringIO()) as output: pack_app.pack(self.args)
@@ -543,6 +559,7 @@ class App(unittest.TestCase):
                          (str(res / 'romfs'), str(res / 'msl'), str(res / 'dm/shader_map.tsv'), str(res / 'dm/font'), str(res / 'aoc')))
         self.assertEqual(r['DM_PSO_BUNDLE'], str(res / 'pso'))   # the pipeline archive made offline, as the iOS app's main.m sets it
         self.assertEqual(r['DM_SYSTEM_DATA_DIR'], str(res / 'dm/system_data'))
+        self.assertEqual(r['DM_MII_DATABASE'], str(home / 'Library/Application Support/NX Port Studio/Miis/library.dmii'))
         self.assertEqual((r['DM_SAVE'], r['DM_TEMP'], r['DM_ROOT'], r['cwd']), (str(sup / 'save'), str(sup / 'temp'), str(sup), str(sup)))   # pso_user.tsv goes beside save/
         self.assertEqual((r['DM_WINDOW'], r['DM_AUDIO'], r['DM_LANG']), ('1', '1', 'ja'))   # the caller's DM_LANG wins over the packed language
         self.assertEqual((r['DM_BAKED'], r['DM_BOTH']), ('1', 'player'))   # the player's env.txt before the bundle's
@@ -551,6 +568,22 @@ class App(unittest.TestCase):
         p = self.launch(); p.communicate(timeout=30)
         self.assertIn('standin host output', (logs / f'{TID}.prev.log').read_text())
         self.assertEqual(self.host_run()['DM_LANG'], 'fr')   # Info.plist DMLanguage
+
+    def test_personal_mii_path_override_is_not_logged(self):
+        sup = self.tmp / f'home/Library/Application Support/nxnative/{TID}'
+        sup.mkdir(parents=True, exist_ok=True)
+        env_file = sup / 'env.txt'; previous = env_file.read_bytes() if env_file.exists() else None
+        try:
+            private = '/private/PersonalNickname.charinfo'
+            env_file.write_text('DM_MII_DATABASE=' + private + '\n')
+            process = self.launch(); process.communicate(timeout=30)
+            self.assertEqual(self.host_run()['DM_MII_DATABASE'], private)
+            log = (self.tmp / f'home/Library/Logs/nxnative/{TID}.log').read_text()
+            self.assertIn('DM_MII_DATABASE=<private Mii path>', log)
+            self.assertNotIn('PersonalNickname', log)
+        finally:
+            if previous is None: env_file.unlink(missing_ok=True)
+            else: env_file.write_bytes(previous)
 
     def test_sigterm(self):   # forwarded to the host, whose exit code comes back
         p = self.launch(wait=True)

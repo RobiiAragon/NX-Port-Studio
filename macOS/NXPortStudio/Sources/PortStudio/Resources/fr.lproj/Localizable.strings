@@ -327,3 +327,17 @@
 "Quit the installed game before updating it." = "Quittez le jeu installé avant de le mettre à jour.";
 "Build failed. Review Activity or export its log before trying again." = "La compilation a échoué. Consultez Activité ou exportez son journal avant de réessayer.";
 "A Mac app, installed in Applications." = "Une app Mac, installée dans Applications.";
+
+// Personal Mii library
+"Your personal Miis" = "Vos Miis personnels";
+"Firmware includes the models used to draw Miis. Import your own Mii exports separately to make your characters available to compatible games." = "Le micrologiciel inclut les modèles des Miis. Importez séparément vos propres Miis pour les utiliser dans les jeux compatibles.";
+"Import Miis" = "Importer des Miis";
+"No personal Miis imported. Games keep their built-in defaults." = "Aucun Mii personnel importé. Les jeux conservent leurs Miis par défaut.";
+"%d personal Miis available" = "%d Miis personnels disponibles";
+"Accepted: .charinfo, StoreData and decrypted NFDB exports from your console. Miis stay on this Mac and are included privately in new ports. Importing Miis does not add a Mii editor." = "Formats acceptés : .charinfo, StoreData et NFDB déchiffré de votre console. Les Miis restent sur ce Mac et sont inclus dans vos nouveaux portages. Cette importation ne fournit pas d’éditeur de Mii.";
+"Choose personal Mii data exported from your Switch" = "Choisissez les Miis exportés de votre Switch";
+"The Mii library could not be read. Import valid personal Mii data or update Studio." = "Impossible de lire la bibliothèque de Miis. Importez des données valides ou mettez Studio à jour.";
+"Choose a .charinfo, StoreData or decrypted NFDB export. Encrypted saves and NFIF files are not supported." = "Choisissez un fichier .charinfo, StoreData ou NFDB déchiffré. Les sauvegardes chiffrées et les fichiers NFIF ne sont pas pris en charge.";
+"Importing personal Miis" = "Importation des Miis personnels";
+"Personal Miis imported" = "Miis personnels importés";
+"Mii import failed" = "Échec de l’importation des Miis";

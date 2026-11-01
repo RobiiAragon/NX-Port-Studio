@@ -19,6 +19,7 @@ sys.path.insert(0, str(HERE.parent / 'tools'))
 import romfs as rfs
 import system_data
 import nextendo_services
+import mii_resources
 MODULE_FILES = ('*.patched.bin', '*.fixups.tsv', '*.gates.tsv', '*.cuts.tsv', '*.obs.tsv', '*.changed.tsv', 'nro.tsv')   # what the host reads from the module folder (build_ipa.sh copies the same tables but changed.tsv: the iPhone's cheats never write code)
 MSL_FILES = ('*.metallib', '*.json', '*.tsv')   # what the host reads from msl/ (not the Mac build's .metal sources or _b_build.json)
 # read beside DM_NVN_SHMAP; any of them may be absent (a Vulkan or GL game has no c1_full.tsv). The shader pairs are the pipeline prebuild's (nvn_mtl.m pso_prebuild): without them the
@@ -188,6 +189,7 @@ def selected_inputs(a):
     fonts = sorted(Path(a.font).glob('*.ttf'))
     files = [Path(a.host)] + mods + msls + pso + tables + fonts + ([pairs] if pairs else [])
     files += [Path(p) for p in (a.env_file, a.settings, a.icon) if p]
+    if getattr(a, 'mii_database', None): files.append(Path(a.mii_database))
     for p in files:
         if not p.is_file(): raise SystemExit(f'no input file at {p}')
     return mods, msls, pso, tables, pairs, fonts, files
@@ -264,6 +266,8 @@ def pack(a):
     if a.env_file: shutil.copyfile(a.env_file, dm / 'env.txt')
     if getattr(a, "system_data_dir", None):
         step("imported firmware resources"); system_data.stage(a.system_data_dir, dm / "system_data")
+    if getattr(a, "mii_database", None):
+        step("private personal Mii snapshot"); mii_resources.stage(a.mii_database, dm / 'mii_database.dmii')
     if getattr(a, "nextendo_services_dir", None):
         step("public Nextendo service profile"); nextendo_services.stage(a.nextendo_services_dir, dm / 'nextendo', a.title_id)
     notices = Path(__file__).resolve().parents[1] / 'third_party/notices/OpenSSL'
@@ -314,6 +318,7 @@ def parse(argv):
     ap.add_argument('--pso', help='the pipeline archive made offline for this Mac (pso_offline.py --platform macos output: <arch>.mtl4a, prebuilt.tsv)')
     ap.add_argument('--pso-pairs', help='pso_pairs.tsv for a profile that has none (the shader split\'s copy)')
     ap.add_argument('--system-data-dir', help='extracted firmware resources (system_data/<title-id>/files)')
+    ap.add_argument('--mii-database', help='validated private personal Mii library/export snapshot')
     ap.add_argument('--nextendo-services-dir', help='validated public Nextendo service profile for this title')
     ap.add_argument('--env-file', help='environment switches baked in (Resources/dm/env.txt)')
     ap.add_argument('--settings', help='the game\'s launcher settings (dm/games/settings.py output; Resources/dm/launcher.json, which the Mac front end reads)')

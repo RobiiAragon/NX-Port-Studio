@@ -32,6 +32,10 @@ final class StudioModel {
         didSet { UserDefaults.standard.set(selectedFirmwarePath, forKey: "selectedFirmwarePath") }
     }
     var importedFirmware: [ImportedFirmware] = []
+    var personalMiis = MiiLibrarySummary.empty
+    var miiLibraryError: String?
+    var isLoadingMiis = false
+    @ObservationIgnored let miiRunner = ProcessRunner()
     var devices: [AppleDevice] = []
     var selectedDeviceID = ""
     var dependencies: [DependencyStatus] = []
@@ -119,7 +123,7 @@ final class StudioModel {
     var missingRequirements: [DependencyStatus] { dependencies.filter { $0.isRequired && !$0.isAvailable } }
     var hasSigningTeam: Bool { teamID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil }
     var signingReady: Bool { destination != .iOS || (hasSigningTeam && selectedDevice?.canAttemptConnection == true) }
-    var canBuild: Bool { (selectedFirmwarePath.isEmpty || selectedFirmware != nil) && signingReady && !isBusy && !isPreparing && !isChecking && missingRequirements.isEmpty && !gameFiles.isEmpty && !keysPath.isEmpty && !repositoryPath.isEmpty }
+    var canBuild: Bool { (selectedFirmwarePath.isEmpty || selectedFirmware != nil) && signingReady && !isBusy && !isLoadingMiis && !isPreparing && !isChecking && missingRequirements.isEmpty && !gameFiles.isEmpty && !keysPath.isEmpty && !repositoryPath.isEmpty }
     var approximateSpace: String { ByteCountFormatter.string(fromByteCount: estimatedInputSpace, countStyle: .file) }
 
     func initialize() async {
@@ -164,6 +168,7 @@ final class StudioModel {
         } catch { failure = error.localizedDescription; status = "Engine unavailable" }
         isPreparing = false
         reloadFirmware()
+        await reloadMiis()
         await checkEnvironment()
     }
 
@@ -254,7 +259,7 @@ final class StudioModel {
         failure = nil; completedURL = nil; projectURL = nil
         progress = nil; stageIndex = 0; stageTotal = 0; stageName = ""; logs = []
         isBusy = true; status = "Building port"
-        let requestedConfig = BuildConfiguration(repositoryURL: URL(fileURLWithPath: repositoryPath), gameDirectoryURL: URL(fileURLWithPath: gamePath), keysURL: URL(fileURLWithPath: keysPath), outputURL: outputURL, destination: destination, appName: appName, language: language, showFPS: showFPS, prepareXcode: destination == .iOS, teamID: teamID.isEmpty ? nil : teamID, systemDataURL: selectedSystemDataURL, nextendoClientID: nextendoClientID)
+        let requestedConfig = BuildConfiguration(repositoryURL: URL(fileURLWithPath: repositoryPath), gameDirectoryURL: URL(fileURLWithPath: gamePath), keysURL: URL(fileURLWithPath: keysPath), outputURL: outputURL, destination: destination, appName: appName, language: language, showFPS: showFPS, prepareXcode: destination == .iOS, teamID: teamID.isEmpty ? nil : teamID, systemDataURL: selectedSystemDataURL, nextendoClientID: nextendoClientID, miiDatabaseURL: selectedMiiDatabaseURL)
         let signingDevice = selectedDevice
         let installAfterBuild = installMode
         let runID = UUID(); operationID = runID

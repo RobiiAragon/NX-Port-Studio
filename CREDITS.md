@@ -24,6 +24,7 @@ Preserve the exact license files and attribution in the source tree. This overvi
 | Vulkan-Headers / NVIDIA FLIP / MacNativeGames | Graphics interfaces, verification and individually attributed implementation components. |
 | Atmosphère / libnx / Switchbrew / Nintendo Switch reverse-engineering contributors | Primary references for observable platform structures, synchronization, hardware protocols and service semantics. |
 | ldn_mitm contributors | Public wire-format and interoperability references for the original C bridge. The bridge implementation does not copy the GPL discovery implementation. This does not change the license of the external Switch module. |
+| Genwald / MiiPort | ISC-licensed primary documentation of personal CharInfo/CoreData/StoreData/NFDB formats and console export workflow. The native importer is an original implementation, with no original Mii data, Nintendo SDK or console authentication material. |
 | Nextendo contributors | Account, service and signed-catalog infrastructure used by the integration. No endorsement or ownership of that service is implied. |
 | OpenSSL contributors | Static libcrypto for strict private-PKI service verification. The [Apache-2.0 license and provenance](dm/third_party/notices/OpenSSL/PROVENANCE.md) accompany Studio and exported games. |
 | Capstone / lz4 / fontTools / XcodeGen | Build and analysis tools, with their respective licenses. |

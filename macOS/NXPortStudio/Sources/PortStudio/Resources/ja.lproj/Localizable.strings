@@ -327,3 +327,17 @@
 "Quit the installed game before updating it." = "更新する前にインストール済みのゲームを終了してください。";
 "Build failed. Review Activity or export its log before trying again." = "ビルドに失敗しました。再試行する前にアクティビティを確認するか、ログを書き出してください。";
 "A Mac app, installed in Applications." = "アプリケーションにインストールされるMacアプリ。";
+
+// Personal Mii library
+"Your personal Miis" = "自分のMii";
+"Firmware includes the models used to draw Miis. Import your own Mii exports separately to make your characters available to compatible games." = "ファームウェアにはMiiの描画モデルが含まれます。対応ゲームで自分のMiiを使うには、個人のMiiデータを別途読み込んでください。";
+"Import Miis" = "Miiを読み込む";
+"No personal Miis imported. Games keep their built-in defaults." = "個人のMiiは未読み込みです。ゲームは標準のMiiを使用します。";
+"%d personal Miis available" = "個人のMii：%d体";
+"Accepted: .charinfo, StoreData and decrypted NFDB exports from your console. Miis stay on this Mac and are included privately in new ports. Importing Miis does not add a Mii editor." = "自分の本体から書き出した.charinfo、StoreData、復号済みNFDBに対応します。MiiはこのMacに保存され、新しい移植アプリに含まれます。Miiエディターは追加されません。";
+"Choose personal Mii data exported from your Switch" = "自分のSwitchから書き出したMiiデータを選択";
+"The Mii library could not be read. Import valid personal Mii data or update Studio." = "Miiライブラリを読み込めません。有効なMiiデータを読み込むか、Studioを更新してください。";
+"Choose a .charinfo, StoreData or decrypted NFDB export. Encrypted saves and NFIF files are not supported." = " .charinfo、StoreData、または復号済みNFDBを選択してください。暗号化セーブデータとNFIFには対応していません。";
+"Importing personal Miis" = "個人のMiiを読み込み中";
+"Personal Miis imported" = "個人のMiiを読み込みました";
+"Mii import failed" = "Miiの読み込みに失敗しました";

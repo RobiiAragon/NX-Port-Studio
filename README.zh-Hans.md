@@ -24,6 +24,7 @@
 - 每个游戏使用独立文件夹，集中管理本体、更新与 DLC，并显示实际构建进度和错误。
 - iOS 导出必须经过 Xcode 签名和验证，之后才能报告成功。
 - 导入自己主机中的 Mii 模型、字体、证书等系统资源。
+- 我在**固件 → 导入 Mii**中添加了私人的个人 Mii 库，与固件模型分开保存。我已用合成记录验证格式、持久化及 Mac/iOS 打包；仍需在游戏中验证从自己主机导出的 Mii。参阅[格式与限制](docs/reference/services.md#personal-mii-imports-are-separate-from-firmware-model-archives)。
 - 根据系统与设备开放的能力提供按键映射、体感和振动。
 - 实现原生网络传输、LAN/LDN 房间发现，以及实验性的 Nextendo 集成。
 - 可在 iPhone/iPad 内通过系统浏览器连接 Nextendo，将账户保存在应用钥匙串中，并检查游戏与服务要求。

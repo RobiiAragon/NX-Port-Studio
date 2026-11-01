@@ -337,3 +337,17 @@
 "Quit the installed game before updating it." = "Cierra el juego instalado antes de actualizarlo.";
 "Build failed. Review Activity or export its log before trying again." = "La compilación falló. Revisa Actividad o exporta su registro antes de intentarlo de nuevo.";
 "A Mac app, installed in Applications." = "Una app de Mac, instalada en Aplicaciones.";
+
+// Personal Mii library
+"Your personal Miis" = "Tus Miis personales";
+"Firmware includes the models used to draw Miis. Import your own Mii exports separately to make your characters available to compatible games." = "El firmware incluye los modelos para dibujar Miis. Importa tus Miis por separado para usarlos en los juegos compatibles.";
+"Import Miis" = "Importar Miis";
+"No personal Miis imported. Games keep their built-in defaults." = "No has importado Miis personales. Los juegos conservan los predeterminados.";
+"%d personal Miis available" = "%d Miis personales disponibles";
+"Accepted: .charinfo, StoreData and decrypted NFDB exports from your console. Miis stay on this Mac and are included privately in new ports. Importing Miis does not add a Mii editor." = "Admite archivos .charinfo, StoreData y NFDB descifrados de tu consola. Los Miis se guardan en esta Mac y se incluyen en tus nuevos ports. Importarlos no añade un editor de Miis.";
+"Choose personal Mii data exported from your Switch" = "Selecciona los Miis exportados de tu Switch";
+"The Mii library could not be read. Import valid personal Mii data or update Studio." = "No se pudo leer la biblioteca de Miis. Importa datos válidos o actualiza Studio.";
+"Choose a .charinfo, StoreData or decrypted NFDB export. Encrypted saves and NFIF files are not supported." = "Selecciona un archivo .charinfo, StoreData o NFDB descifrado. No se admiten partidas cifradas ni archivos NFIF.";
+"Importing personal Miis" = "Importando Miis personales";
+"Personal Miis imported" = "Miis personales importados";
+"Mii import failed" = "Falló la importación de Miis";

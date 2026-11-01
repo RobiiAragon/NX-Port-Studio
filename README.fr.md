@@ -25,6 +25,7 @@ L'interface démarre en espagnol. Son sélecteur propose aussi l'anglais, le fra
 - Jeux de base, mises à jour et DLC dans un dossier par jeu, avec progression réelle et erreurs consultables.
 - Exportations iOS signées par Xcode et vérifiées avant de signaler une réussite.
 - Importation de vos ressources de firmware : modèles Mii, polices et certificats.
+- J’ai ajouté une bibliothèque privée de Miis personnels dans **Micrologiciel → Importer des Miis**, distincte des modèles du micrologiciel. J’ai testé les formats, la persistance et l’intégration Mac/iOS avec des données synthétiques ; la vérification d’un Mii exporté de ma console dans un jeu reste à faire. Voir [formats et limites](docs/reference/services.md#personal-mii-imports-are-separate-from-firmware-model-archives).
 - Mappage des contrôles, mouvement et vibrations selon les capacités du système et des manettes.
 - Transport réseau natif, découverte LAN/LDN et intégration expérimentale de Nextendo.
 - Configuration Nextendo depuis l’iPhone/iPad : navigateur du système, Trousseau de l’app et vérification des exigences du jeu et du service.

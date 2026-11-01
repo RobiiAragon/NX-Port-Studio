@@ -30,6 +30,7 @@ I captured the running macOS app in English.
 - **Flexible local imports.** ZIP/7z archives, nested folders and upper-case extensions are recognized, with bounded extraction and byte-verified reuse. Known build failures include recovery steps in all five interface languages.
 - **Signed iOS exports.** Every iOS export goes through Xcode signing and profile verification. Optional installation follows a successful signed export.
 - **Original system resources.** Import your own firmware data for Mii models, shared fonts and the certificate store, with version and content checks.
+- **Personal Miis.** I added a private import library in **Firmware → Import Miis**, separate from the firmware models. I tested formats, persistence and Mac/iOS packaging with synthetic records; I still need to verify a personal console export in a game. See [formats and limits](docs/reference/services.md#personal-mii-imports-are-separate-from-firmware-model-archives).
 - **Native controls.** Per-game controller settings, motion and vibration where the host platform and connected hardware expose them.
 - **Connections from the game menu.** Online uses Nextendo, local wireless uses the LDN bridge and LAN uses native IP sockets. No launcher protocol selection or restart is required; I qualify each connection path separately.
 

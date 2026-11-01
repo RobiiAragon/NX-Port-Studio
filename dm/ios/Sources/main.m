@@ -153,7 +153,11 @@ static int boot_env(void) {
             if (dm_player_diagnostic_key(k.UTF8String) || [launcher_keys containsObject:k] ||
                 ([launcher_keys containsObject:@"DM_METAL_HUD"] && [k isEqualToString:@"MTL_HUD_ENABLED"])) continue;
 #endif
-            if (!getenv(k.UTF8String)) { setenv(k.UTF8String, v.UTF8String, 0); [from_file addObject:k]; fprintf(stderr, "boot: env %s=%s (%s)\n", k.UTF8String, v.UTF8String, ef.lastPathComponent.UTF8String); }
+            if (!getenv(k.UTF8String)) {
+                setenv(k.UTF8String, v.UTF8String, 0); [from_file addObject:k];
+                const char *value=[k isEqualToString:@"DM_MII_DATABASE"] || [k isEqualToString:@"DM_MII_SEED"] ? "<private Mii path>" : v.UTF8String;
+                fprintf(stderr, "boot: env %s=%s (%s)\n", k.UTF8String, value, ef.lastPathComponent.UTF8String);
+            }
         }
     }
     setenv("DM_NETWORK", "auto", 0); // Also applies when the launcher is skipped.
@@ -176,6 +180,11 @@ static int boot_env(void) {
     fprintf(stderr, "boot: game files %s\n", romfs.fileSystemRepresentation);
     setenv("DM_ROMFS", romfs.fileSystemRepresentation, 0);
     setenv("DM_SAVE", [doc stringByAppendingPathComponent:@"save"].fileSystemRepresentation, 0);
+    // Apps without an App Group cannot access another port's private Documents.
+    // A build-time personal snapshot seeds this app once; later imports persist.
+    setenv("DM_MII_DATABASE", [doc stringByAppendingPathComponent:@"miis.dmii"].fileSystemRepresentation, 0);
+    NSString *miiSeed = [res stringByAppendingPathComponent:@"dm/mii_database.dmii"];
+    if ([fm fileExistsAtPath:miiSeed]) setenv("DM_MII_SEED", miiSeed.fileSystemRepresentation, 0);
     setenv("DM_TEMP", [doc stringByAppendingPathComponent:@"temp"].fileSystemRepresentation, 0);
     NSString *dm = [res stringByAppendingPathComponent:@"dm"];
     NSString *nextendoRoutes = [dm stringByAppendingPathComponent:@"nextendo/routes.tsv"];
