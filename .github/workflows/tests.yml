@@ -217,6 +217,10 @@ jobs:
       - name: Toolchain (Xcode and the Metal compiler of dmsh_chain.lock)
         run: |
           xcodebuild -version
+          # Hosted images may omit the selected Xcode's optional Metal component.
+          if ! xcrun metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
           xcrun metal --version
           python3 dm/gfx/tools/own_compilers.py --check-metal
       - name: Mac host for three profiles (Vulkan, NVN, OpenGL)
