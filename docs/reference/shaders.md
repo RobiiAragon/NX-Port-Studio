@@ -10,7 +10,7 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Cause:** the reader treated every SARC integer as little-endian, including archives whose byte-order mark specifies big-endian.
 - **Fix:** I select byte order from the mark and validate the SARC, SFAT and SFNT headers, declared extent, member ranges and terminated names before reading their bytes. Bounds remain mandatory for both orders; nested-archive overlap and expansion budgets are unchanged. The [primary format description](https://github.com/kinnay/Nintendo-File-Formats/blob/master/src/libs/sead/sarc.md) documents the byte-order and table fields; this is an independent implementation.
 - **Checks:** `test_sarc.py` covers both orders, nested and anonymous members, truncated headers, malformed tables, out-of-range data/names and missing terminators. `test_split_nesting.py` retains the compressed-member and overlap-budget checks with valid synthetic headers.
-- **Found on:** my experimental Splatoon 2 EUR 5.5.2 bring-up: two `System/GSys/gsys_resource_nvn*.szs` archives were valid big-endian SARC files. Their embedded BAHS variant remains a separate format question; recognizing the archive does not prove complete shader coverage.
+- **Found on:** my experimental Splatoon 2 EUR 5.5.2 bring-up: two `System/GSys/gsys_resource_nvn*.szs` archives were valid big-endian SARC files. Their embedded [GX2 BAHS variant](#gx2-programs-in-a-bahs-v9-archive) is handled separately; recognizing the archive does not prove complete shader coverage.
 
 ### Sumo Ninty_NX shaders and MuxFDMR streams
 
