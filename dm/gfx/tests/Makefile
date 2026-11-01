@@ -22,6 +22,7 @@ $(MSL_H): $(wildcard ../msl/*.metal) ../tools/host_msl.py host_msl_force
 .PHONY: host_msl_force
 host_msl_force:
 FW=-framework Metal -framework MetalFX -framework Foundation -framework QuartzCore -framework ImageIO -framework CoreGraphics -framework UniformTypeIdentifiers
+include ../../sanitizers/sanitizers.mk
 # Host crash.c is linked in as well: the write-protect unit tests go through the same page-fault hook as production
 # Tests that #include nvn_mtl.m link the rest of the NVN layer beside it (hle_nvn.c: memory pools, sparse pools, serials) and the host's large stack, with weak stubs of what they need of the host (t_host_stubs.c)
 MTL_T_DEP=../nvn/hle_nvn.c ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(GFX) $(GFX_H)
@@ -332,6 +333,8 @@ check_t_upload_budget: t_upload_budget
 .PHONY: check_t_upload_budget
 t_linear_readback: t_linear_readback.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_linear_readback.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+t_linear_readback_asan: t_linear_readback.m $(MTL_T_DEP) ../../sanitizers/ignorelist.txt
+	clang $(CFLAGS) $(ASAN_FLAGS) -fobjc-arc -o $@ t_linear_readback.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
 t_copy_alias: t_copy_alias.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_copy_alias.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
 .PHONY: check_t_copy_alias
@@ -341,6 +344,9 @@ check_t_copy_alias: t_copy_alias
 .PHONY: check_t_linear_readback
 check_t_linear_readback: t_linear_readback
 	MTL_DEBUG_LAYER=1 ./t_linear_readback
+.PHONY: check_t_linear_readback_asan
+check_t_linear_readback_asan: t_linear_readback_asan
+	$(ASAN_ENV) MTL_DEBUG_LAYER=1 ./t_linear_readback_asan
 t_pfv: t_pfv.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_pfv.m $(MTL_T_SRC) $(FW)
 check_t_pfv: RUN_ENV = MTL_DEBUG_LAYER=1
