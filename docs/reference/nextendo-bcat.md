@@ -112,11 +112,13 @@ My first native Splatoon 2 EUR 5.5.2 bootstrap reached `nnMain` with the real me
 RomFS, then encountered the SDK 3 system-gameplay-recording applet path. After I
 exposed the missing system-recorder capability correctly, a second headless
 bootstrap ran for its full 15-second limit, initialized audio and produced NVN
-frames without crashing. I intentionally used no translated game shaders in that
-bootstrap, so I have not verified the rendered image or title screen. Shader
-translation, matchmaking, a complete online match, local wireless and LAN still
-require separate game tests. I have not installed or qualified a playable
-Splatoon 2 port yet.
+frames without crashing. That first bootstrap intentionally used no translated
+game shaders. I then completed the real Mac shader build and created a private
+candidate with the primary-process renderer and calendar backend. Its offline
+control completed the pipeline prebuild without failures and rendered the 3D
+character-creation screen with Spanish text in fullscreen. I have not yet
+qualified matchmaking, a complete online match, local wireless or LAN for this
+candidate, or registered a public game profile.
 
 Other games can use the same downloader/store and SDK API. I only enable a
 resource recipe after verifying its provider layout, formats and identity policy;

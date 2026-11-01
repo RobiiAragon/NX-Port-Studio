@@ -3,6 +3,9 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #include <TargetConditionals.h>
+#if !TARGET_OS_IOS
+#import <LocalAuthentication/LocalAuthentication.h>
+#endif
 #include <CommonCrypto/CommonDigest.h>
 #include "nextendo_account.h"
 #import "nextendo_api_apple.h"
@@ -57,10 +60,11 @@ static BOOL unsigned_decimal(NSString *text, uint64_t *out) {
     if (!value) return NO; *out = value; return YES;
 }
 static BOOL number(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID(); }
-static NSData *read_credentials(void) {
+static NSData *read_credentials(BOOL allowInteraction) {
     dm_nextendo_credential_provider provider = atomic_load(&credentialProvider);
     if (provider) { NSMutableData *data = [NSMutableData dataWithLength:65536]; size_t size = 0; if (!data || !provider(data.mutableBytes, data.length, &size) || !size || size > data.length) return nil; data.length = size; return data; }
 #if TARGET_OS_IOS
+    (void)allowInteraction; // The existing provider/document path is unchanged.
     NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     NSString *path = [documents stringByAppendingPathComponent:@"nextendo-account.json"]; if (!path) return nil;
     int fd = open(path.fileSystemRepresentation, O_RDONLY | O_CLOEXEC | O_NOFOLLOW); if (fd < 0) return nil;
@@ -69,16 +73,24 @@ static NSData *read_credentials(void) {
     while (done < data.length) { ssize_t n = read(fd, (char *)data.mutableBytes + done, data.length - done); if (n <= 0) { close(fd); return nil; } done += (size_t)n; }
     close(fd); return data;
 #else
-    NSDictionary *query = @{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,
+    NSMutableDictionary *query = [@{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,
         (__bridge id)kSecAttrService:@"org.nxnative.nextendo.account", (__bridge id)kSecAttrAccount:@"active",
-        (__bridge id)kSecAttrSynchronizable:@NO, (__bridge id)kSecReturnData:@YES, (__bridge id)kSecMatchLimit:(__bridge id)kSecMatchLimitOne};
+        (__bridge id)kSecAttrSynchronizable:@NO, (__bridge id)kSecReturnData:@YES, (__bridge id)kSecMatchLimit:(__bridge id)kSecMatchLimitOne} mutableCopy];
+    if (!query) return nil;
+    if (!allowInteraction) {
+        // Availability is queried before the game menu. Do not stop local boot
+        // for a protected Keychain authorization; explicit access stays intact.
+        LAContext *context = [LAContext new]; if (!context) return nil;
+        context.interactionNotAllowed = YES;
+        query[(__bridge id)kSecUseAuthenticationContext] = context;
+    }
     CFTypeRef result = NULL; dm_guest_host_wait_begin(); OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result); dm_guest_host_wait_end();
     if (status || !result) { if (result) CFRelease(result); return nil; }
     id data = CFBridgingRelease(result); return [data isKindOfClass:NSData.class] && [data length] <= 65536 ? data : nil;
 #endif
 }
-static DmNextendoCredential *credential(void) {
-    if (!enabled()) return nil; NSData *data = read_credentials(); if (!data.length || data.length > 65536) return nil;
+static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) {
+    if (!enabled()) return nil; NSData *data = read_credentials(allowInteraction); if (!data.length || data.length > 65536) return nil;
     id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]; if (![decoded isKindOfClass:NSDictionary.class]) return nil; NSDictionary *json = decoded;
     if (!number(json[@"schema_version"]) || [json[@"schema_version"] doubleValue] != 1 || ![json[@"token_kind"] isEqual:@"nex"]) return nil;
     NSString *token = json[@"token"]; if (![token isKindOfClass:NSString.class] || !token.length || [token lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 16384) return nil;
@@ -97,6 +109,7 @@ static DmNextendoCredential *credential(void) {
     id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return nil; for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return nil;
     DmNextendoCredential *c = [DmNextendoCredential new]; c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
 }
+static DmNextendoCredential *credential(void) { return credential_with_interaction(YES); }
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) {
     atomic_store(&credentialProvider, provider); pthread_mutex_lock(&accountLock); cachedFingerprint = nil; cachedToken = nil; cachedVersion = nil; cachedExpiry = 0; pthread_mutex_unlock(&accountLock);
 }
@@ -104,7 +117,7 @@ void dm_nextendo_set_game_version(const char *version) {
     NSString *value = version ? [NSString stringWithUTF8String:version] : nil;
     pthread_mutex_lock(&accountLock); explicitVersion = value; cachedToken = nil; cachedVersion = nil; pthread_mutex_unlock(&accountLock);
 }
-uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool { if (!out) return DM_ACCOUNT_FAIL; *out = credential() != nil; return 0; } }
+uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool { if (!out) return DM_ACCOUNT_FAIL; *out = credential_with_interaction(NO) != nil; return 0; } }
 uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
     if (!out) return DM_ACCOUNT_FAIL; *out = 0; DmNextendoCredential *c = credential(); if (!c) return DM_ACCOUNT_FAIL;
     if (dm_nextendo_api_baas_namespace("account")) return dm_nextendo_api_baas_id(out);
