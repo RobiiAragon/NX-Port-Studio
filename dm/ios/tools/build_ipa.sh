@@ -87,6 +87,10 @@ import nextendo_services
 nextendo_services.stage(sys.argv[2], Path('Gen/dm/nextendo'), sys.argv[3])
 PY
 fi
+rm -f Gen/dm/mii_database.dmii
+if [ -n "${DM_MII_DATABASE_SOURCE:-}" ]; then
+  python3 "$DM/tools/mii_resources.py" "$DM_MII_DATABASE_SOURCE" --stage Gen/dm/mii_database.dmii || die "stage private personal Mii snapshot"
+fi
 python3 tools/gen_build.py "$DM/host" Gen > Gen/dm.xcconfig || die "gen_build"
 F=$(python3 tools/gen_embed.py "$PATCHED" Gen/embed.S $MODS) || die "gen_embed"
 echo "OTHER_LDFLAGS = \$(inherited) \$(DM_FRAMEWORKS) \$(DM_EXTRA_LIBRARIES) $F" >> Gen/dm.xcconfig

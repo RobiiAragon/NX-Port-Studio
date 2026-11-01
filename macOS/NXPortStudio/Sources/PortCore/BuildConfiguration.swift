@@ -19,17 +19,19 @@ public struct BuildConfiguration: Sendable {
     public var systemDataURL: URL?
     public var nextendoClientID: String?
     public var workDirectoryURL: URL?
+    public var miiDatabaseURL: URL?
 
     public init(repositoryURL: URL, gameDirectoryURL: URL, keysURL: URL, outputURL: URL,
                 destination: BuildDestination, appName: String = "", language: String = "",
                 showFPS: Bool = false, prepareXcode: Bool = false, teamID: String? = nil, systemDataURL: URL? = nil,
-                nextendoClientID: String? = nil, workDirectoryURL: URL? = nil) {
+                nextendoClientID: String? = nil, workDirectoryURL: URL? = nil, miiDatabaseURL: URL? = nil) {
         self.repositoryURL = repositoryURL; self.gameDirectoryURL = gameDirectoryURL
         self.keysURL = keysURL; self.outputURL = outputURL; self.destination = destination
         self.appName = appName; self.language = language; self.showFPS = showFPS
         self.prepareXcode = prepareXcode; self.teamID = teamID; self.systemDataURL = systemDataURL
         self.nextendoClientID = nextendoClientID
         self.workDirectoryURL = workDirectoryURL
+        self.miiDatabaseURL = miiDatabaseURL
     }
 }
 
@@ -107,6 +109,14 @@ public enum BuildCommand {
                     c.showFPS ? "--show-fps" : "--no-show-fps"]
         if !preparesXcode { args += ["-o", c.outputURL.path] }
         if let work = c.workDirectoryURL { args += ["--work-dir", work.path] }
+        if let miis = c.miiDatabaseURL {
+            guard let metadata = try? miis.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+                  metadata.isRegularFile == true, metadata.isSymbolicLink != true,
+                  (16...8816).contains(metadata.fileSize ?? 0) else {
+                throw PortError.invalidConfiguration("Personal Mii data is missing or invalid. Import it again in Firmware.")
+            }
+            args += ["--mii-database", miis.path]
+        }
         if let systemData = c.systemDataURL {
             var directory: ObjCBool = false
             guard fm.fileExists(atPath: systemData.path, isDirectory: &directory), directory.boolValue,

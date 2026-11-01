@@ -16,3 +16,12 @@ tools/dev-private/
 
 # Imported firmware signing material belongs only in private user resources.
 *.keyring
+
+# Personal Mii exports and private runtime libraries are local user data.
+*.charinfo
+*.storedata
+*.coredata
+*.dmii
+*.nfif
+NFDB
+NFIF

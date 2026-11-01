@@ -68,6 +68,7 @@ struct FirmwareView: View {
                     }
                 }
             }
+            PersonalMiisView(model: model)
             Text(t("The importer verifies the system version and selected data archives. Ports include the supported resources; console keys and system executables are not included."))
                 .font(.system(size: 12)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
         }.task { model.reloadFirmware() }

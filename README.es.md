@@ -31,6 +31,7 @@ Tomé estas capturas de la app funcionando en macOS, en español.
 - **Progreso real:** una carpeta por juego con su base, actualizaciones y DLC; etapas y errores del motor visibles.
 - **Exportación iOS firmada:** todos los IPA pasan por la firma de Xcode y la verificación del perfil. La instalación es opcional después de exportar correctamente.
 - **Recursos originales:** importa datos de tu propio firmware para modelos Mii, fuentes y certificados, con comprobación de versión y contenido.
+- **Miis personales:** añadí una biblioteca privada en **Firmware → Importar Miis**, separada de los modelos del firmware. Probé formatos, persistencia y empaquetado Mac/iOS con registros sintéticos; falta comprobar un Mii exportado de mi consola dentro del juego. Consulta [formatos y límites](docs/reference/services.md#personal-mii-imports-are-separate-from-firmware-model-archives).
 - **Controles nativos:** configuración por juego, movimiento y vibración cuando el sistema y el hardware conectado los exponen.
 - **Redes con alcance claro:** LAN, puente LDN e integración Nextendo son rutas distintas, con pruebas propias.
 

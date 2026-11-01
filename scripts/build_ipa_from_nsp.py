@@ -56,6 +56,7 @@ LANGUAGE = ''                           # game language, a code or a name: 'ja',
                                         #   DM_LANG=<code> in the app's Documents/env.txt changes it without a rebuild
 KEEP_EXTRACTED = True                   # keep the extracted game files after the IPA is built (saves extraction next time; as big as the game files); False deletes them
 SYSTEM_DATA_DIR = ''                    # optional extracted firmware resources: system_data/<title-id>/files
+MII_DATABASE = ''                       # optional private personal Mii library/export; independent of firmware
 DM_ENV_FILE = ''                        # optional: environment switches for a diagnostic build (one KEY=VALUE per line)
 PSO_GPUS = ''                           # NVN games: GPU architectures the app gets the shader pairs' pipeline bases for, made on this Mac (metal-tt, comma-separated: 'g18p' = A19 / A19 Pro of the iPhone 17 family;
                                         #   another device's name is in its log when the app has none for it), so the device does not build them on its first start; each adds about 650 MB to the app (Breath of the Wild) and minutes to a first build; 'none' = no archive;
@@ -2259,6 +2260,7 @@ def mac_run(work, game, patched, host, font, msl, aoc, gfx, lang, env, logs, g, 
     renv = {'DM_ROOT': work, 'DM_ROMFS': rfs.source(game), 'DM_SAVE': rd / 'save', 'DM_TEMP': rd / 'temp', 'DM_MSL_DIR': msl, 'DM_FONT_DIR': font}
     if aoc: renv['DM_AOC_DIR'] = aoc
     if env.get('DM_SYSTEM_DATA_DIR'): renv['DM_SYSTEM_DATA_DIR'] = env['DM_SYSTEM_DATA_DIR']
+    if env.get('DM_MII_DATABASE_SOURCE'): renv['DM_MII_DATABASE'] = env['DM_MII_DATABASE_SOURCE']
     if env.get('DM_NEXTENDO_ROUTES'): renv['DM_NEXTENDO_ROUTES'] = env['DM_NEXTENDO_ROUTES']
     if gfx == 'nvn': renv['DM_NVN_SHMAP'] = g.table('shader_map.tsv')
     renv.update(DM_LANG=lang, DM_WINDOW=1, DM_AUDIO=1)
@@ -2341,6 +2343,7 @@ def mac_app(py, repo, out, app, work, game, patched, host, font, msl, aoc, gfx, 
     for opt, v in (('--version', version), ('--category', g.get('app_category')), ('--marker', g.get('romfs_marker')), ('--aoc', aoc), ('--icon', icon),
                    ('--pso', pso), ('--pso-pairs', split_pairs if gfx == 'nvn' and not g.table('pso_pairs.tsv').is_file() and split_pairs.is_file() else None),
                    ('--system-data-dir', env.get('DM_SYSTEM_DATA_DIR')),
+                   ('--mii-database', env.get('DM_MII_DATABASE_SOURCE')),
                    ('--nextendo-services-dir', env.get('DM_NEXTENDO_SERVICES_DIR')),
                    ('--env-file', Path(os.path.expanduser(env_file)).resolve() if env_file else None), ('--settings', settings)):
         if v: cmd += [opt, v]
@@ -2385,6 +2388,7 @@ def parse_args(argv):
                     'it must be one the game supports, which the console lists')
     ap.add_argument('--keep-extracted', action=argparse.BooleanOptionalAction, help='keep the extracted game files after the IPA is built, for the next build (default: the KEEP_EXTRACTED setting, on)')
     ap.add_argument('--system-data-dir', help='extracted firmware resources (system_data/<title-id>/files)')
+    ap.add_argument('--mii-database', help='private personal Mii library/export snapshot to include in this port')
     ap.add_argument('--work-dir', help='the game\'s build folder, used as it is (default: the WORK_DIR setting, else <title ID>_build in the NSP folder); the extracted files, shader cache and temporary files live there, and the IPA or Mac app defaults to the folder holding it')
     ap.add_argument('--env-file', help='environment switches for a diagnostic build (one KEY=VALUE per line)')
     ap.add_argument('--gpu', help='NVN games: GPU architectures the app gets its pipeline archive for, made on this Mac with metal-tt, comma-separated: g18p (A19 / A19 Pro), or the name a device\'s log gives when the app has no archive for its GPU; '
@@ -2500,6 +2504,15 @@ def main(args=None):
     if not want_lang: raise BuildError(f'unknown game language {lang_in!r}; give one of {language_list([c for c, _ in nacp.LANGUAGES])}, by code or by name')
     env = dict(os.environ, PATH=os.pathsep.join(TOOL_PATHS + [os.environ.get('PATH', '/usr/bin:/bin:/usr/sbin:/sbin')]))
     configure_dotnet_environment(env)
+    mii_source = args.mii_database or MII_DATABASE or env.get('DM_MII_DATABASE_SOURCE')
+    if mii_source:
+        sys.path.insert(0, str(repo / 'dm/tools'))
+        import mii_resources
+        try: mii_count = mii_resources.inspect(Path(mii_source).expanduser())
+        except (OSError, ValueError, subprocess.SubprocessError) as error: raise BuildError('personal Mii snapshot could not be validated; check the imported library') from error
+        if not mii_count: raise BuildError('the selected personal Mii snapshot contains no records')
+        env['DM_MII_DATABASE_SOURCE'] = str(Path(mii_source).expanduser().resolve())
+        say(f'personal Mii snapshot: {mii_count} validated records')
     system_root = args.system_data_dir or SYSTEM_DATA_DIR or env.get('DM_SYSTEM_DATA_DIR')
     if system_root:
         sys.path.insert(0, str(repo / 'dm/tools'))

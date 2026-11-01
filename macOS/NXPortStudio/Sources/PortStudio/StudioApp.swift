@@ -12,7 +12,10 @@ struct StudioApp: App {
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 900, minHeight: 660)
                 .task { await model.initialize() }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in model.runner.cancelImmediately() }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    model.runner.cancelImmediately()
+                    model.miiRunner.cancelImmediately()
+                }
         }
         .defaultSize(width: 1160, height: 810)
         .windowStyle(.hiddenTitleBar)

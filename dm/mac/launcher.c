@@ -82,7 +82,11 @@ static void env_file(const char *path) {   // KEY=VALUE lines, # starts a commen
         char *eq = strchr(s, '=');
         if (*s == '#' || !eq || eq == s) continue;
         *eq = 0; char *k = s; for (char *t = eq - 1; t > k && (*t == ' ' || *t == '\t'); t--) *t = 0;
-        if (!getenv(k)) { setenv(k, eq + 1, 0); add_key(&g_file_keys, k); fprintf(stderr, "launcher: env %s=%s (%s)\n", k, eq + 1, path); }
+        if (!getenv(k)) {
+            setenv(k, eq + 1, 0); add_key(&g_file_keys, k);
+            const char *value=!strcmp(k,"DM_MII_DATABASE") || !strcmp(k,"DM_MII_SEED") ? "<private Mii path>" : eq+1;
+            fprintf(stderr, "launcher: env %s=%s (%s)\n", k, value, path);
+        }
     }
     fclose(f);
 }
@@ -184,6 +188,12 @@ int main(int argc, char **argv) {
     snprintf(p, sizeof p, "%s/env.txt", dm); env_file(p);
     setenv("DM_ENV_FILE_KEYS", g_file_keys ? g_file_keys : "", 1); setenv("DM_ENV_LAUNCH_KEYS", g_launch_keys ? g_launch_keys : "", 1);
     free(g_file_keys); free(g_launch_keys);
+    // Personal Miis are shared by native Mac ports, independently of game saves
+    // and read-only firmware model resources. An explicit launch override wins.
+    snprintf(p, sizeof p, "%s/Library/Application Support/NX Port Studio/Miis/library.dmii", home);
+    setenv("DM_MII_DATABASE", p, 0);
+    snprintf(p, sizeof p, "%s/mii_database.dmii", dm);
+    if (!stat(p, &st) && S_ISREG(st.st_mode)) setenv("DM_MII_SEED", p, 0);
     int window = !(getenv("DM_LAUNCHER") && !strcmp(getenv("DM_LAUNCHER"), "0"));
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--no-launcher")) window = 0;
     if (!window) fprintf(stderr, "launcher: no settings window (DM_LAUNCHER=0 or --no-launcher)\n");

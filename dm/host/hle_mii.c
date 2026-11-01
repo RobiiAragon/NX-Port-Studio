@@ -1,11 +1,14 @@
 // Mii service layer (nn::mii::Database, the Mii editor applet). On hardware Database talks to the mii:u service (an IDatabaseService the SDK keeps at Database +0) and AppendMii /
-// ShowMiiEdit start the MiiEdit library applet; the host has neither. It answers as a console with no Mii of its own: the six default Miis, an empty database, and the editor cancelled.
+// ShowMiiEdit start the MiiEdit library applet. The host supplies an imported personal database and the six independent defaults; its native editor remains a separate UI path.
 // Mario Kart 8 Deluxe (SDK 4.4.0) initializes a Database at boot (mii:e and mii:u were the first services it opened itself) and builds 12 random Miis for its title screen's demo race; their
 // heads are drawn by the SDK's Mii rendering code linked into main, from the MiiModel system data (the host's stand-in below, mounted by hle_fs.c MountSystemData).
 // The CharInfo the host builds (0x58 bytes) is the system's default Mii as the mii service's StoreData::BuildDefault makes it: the 3DS-era default parameters, with the colours converted to
 // the Switch's common colour indices (hair 1, eyes 8, mouth 19, glasses 8), a create ID of UUID version 4 (fixed for each default Mii, fresh for a random one) and the nickname "no name";
 // every field is within CharInfoRaw::Verify's ranges (SDK 4.4.0 sdk+0x1b68c8), so CharInfoAccessor::IsValid accepts it.
 #include "hle.h"
+#include "mii_database.h"
+#include <limits.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 uint64_t dm_entropy64(void);
@@ -14,20 +17,7 @@ uint64_t dm_entropy64(void);
 #define MII_RES_CANCELED 0xE7Eu         // description 7: the player closed the applet (the SDK's ShowMiiEdit treats it as success)
 #define MII_RES_TEST_MODE 0x1987Eu      // description 204: importing a database needs the system's test mode
 
-typedef struct __attribute__((packed)) {
-    uint8_t create_id[16]; uint16_t nickname[11];
-    uint8_t font_region, favorite_color, gender, height, build, type, region_move;
-    uint8_t faceline_type, faceline_color, faceline_wrinkle, faceline_make;
-    uint8_t hair_type, hair_color, hair_flip;
-    uint8_t eye_type, eye_color, eye_scale, eye_aspect, eye_rotate, eye_x, eye_y;
-    uint8_t eyebrow_type, eyebrow_color, eyebrow_scale, eyebrow_aspect, eyebrow_rotate, eyebrow_x, eyebrow_y;
-    uint8_t nose_type, nose_scale, nose_y;
-    uint8_t mouth_type, mouth_color, mouth_scale, mouth_aspect, mouth_y;
-    uint8_t beard_color, beard_type, mustache_type, mustache_scale, mustache_y;
-    uint8_t glass_type, glass_color, glass_scale, glass_y;
-    uint8_t mole_type, mole_scale, mole_x, mole_y, reserved;
-} mii_charinfo;
-_Static_assert(sizeof(mii_charinfo) == 0x58, "nn::mii::CharInfo is 0x58 bytes");
+typedef dm_mii_charinfo mii_charinfo;
 
 // index ≥ 0: default Mii <index> (a fixed create ID, so a game that saved one finds the same Mii again); < 0: a random Mii (a fresh one)
 static void mii_default(mii_charinfo *c, int gender, int index) {
@@ -49,38 +39,106 @@ static void mii_default(mii_charinfo *c, int gender, int index) {
     c->mole_scale = 4; c->mole_x = 2; c->mole_y = 20;
 }
 
-// The object keeps its service pointer at +0, which the constructor zeroes and the destructor releases through its vtable when set; the host never sets it
-HLE_FORCE("_ZN2nn3mii8Database10InitializeEv", "mii:u service; the host's database: the six default Miis, none of the console's own", Result, h_mii_Init, void *self) {
-    (void)self; LOG("mii: Database::Initialize (the six default Miis, none of the console's own)"); return RES_OK;
+// The SDK object owns no Nintendo IPC session: native state stays in a side
+// table so its original destructor can still see a null service pointer at +0.
+// Every filesystem/lock operation runs on the native wait stack; game stacks
+// can be smaller than one validated 100-record library.
+typedef struct mii_session { const void *self; uint64_t seen; struct mii_session *next; } mii_session;
+static pthread_mutex_t mii_mutex=PTHREAD_MUTEX_INITIALIZER;
+static mii_session *mii_sessions;
+static dm_mii_collection mii_library;
+static uint64_t mii_generation;
+static int mii_last_error;
+static void mii_unlock(int *locked) { (void)locked; pthread_mutex_unlock(&mii_mutex); dm_guest_host_wait_end(); }
+#define MII_LOCK() dm_guest_host_wait_begin(); pthread_mutex_lock(&mii_mutex); int mii_locked_ __attribute__((cleanup(mii_unlock)))=1
+static mii_session *mii_session_for(const void *self) {
+    for (mii_session *s=mii_sessions; s; s=s->next) if (s->self==self) return s;
+    return NULL;
 }
-HLE_FORCE("_ZN2nn3mii8Database8FinalizeEv", "mii:u service; nothing to release", void, h_mii_Fin, void *self) { (void)self; }
-HLE_FORCE("_ZNK2nn3mii8Database11IsAvailableEv", "mii:u service; always available", int, h_mii_Avail, const void *self) { (void)self; return 1; }
-HLE_FORCE("_ZN2nn3mii8Database9IsUpdatedEi", "mii:u service; the empty database never changes", int, h_mii_Updated, void *self, int src) { (void)self; (void)src; return 0; }
-HLE_FORCE("_ZNK2nn3mii8Database14IsFullDatabaseEv", "mii:u service; empty, so not full", int, h_mii_Full, const void *self) { (void)self; return 0; }
-// Source flags: 1 the console's database (empty here), 2 the six default Miis every console has. Mario Kart 8 Deluxe asks for the defaults with room for 6 and never reads the count
-// (main+0x81e954): its boot-time list of Mii icons (main+0x419dc8) builds a head for each of the six, and zeroed entries failed the model's CharInfo check
-enum { MII_SRC_DATABASE = 1, MII_SRC_DEFAULT = 2, MII_DEFAULTS = 6 };
+static int mii_refresh(void) { // mii_mutex held; invalid disk data never replaces a valid snapshot.
+    char path[PATH_MAX]; dm_mii_collection next;
+    int error=dm_mii_database_path(path,sizeof path);
+    const char *seed=getenv("DM_MII_SEED");
+    // The existence probe is only an optimization; the backend rechecks under
+    // its writer lock so a bundled seed never overwrites a concurrent import.
+    if (!error && seed && *seed && access(path,F_OK) && errno==ENOENT) error=dm_mii_seed_if_missing(path,seed);
+    if (!error) error=dm_mii_read(path,&next);
+    if (error!=mii_last_error) {
+        if (error) LOG("[RED] mii: personal database unavailable: %s",dm_mii_error(error));
+        mii_last_error=error;
+    }
+    if (error) return 0;
+    if (!mii_generation || next.count!=mii_library.count || memcmp(next.entries,mii_library.entries,next.count*sizeof(mii_charinfo))) {
+        mii_library=next; ++mii_generation;
+        LOG("mii: personal library loaded (%u records; normal database view excludes special records)",next.count);
+    }
+    return 1;
+}
+static int mii_ready(const void *self) { return mii_session_for(self) && mii_refresh(); }
+static int mii_normal_count(void) {
+    int count=0; for (uint32_t i=0; i<mii_library.count; ++i) count+=mii_library.entries[i].type==0; return count;
+}
+HLE_FORCE_WAIT("_ZN2nn3mii8Database10InitializeEv", "native personal database and independent default source", Result, h_mii_Init, void *self) {
+    MII_LOCK(); if (!self || !mii_refresh()) return RES_FAIL;
+    mii_session *s=mii_session_for(self);
+    if (!s) { s=calloc(1,sizeof *s); if (!s) return RES_FAIL; s->self=self; s->next=mii_sessions; mii_sessions=s; }
+    s->seen=mii_generation; return RES_OK;
+}
+HLE_FORCE_WAIT("_ZN2nn3mii8Database8FinalizeEv", "release only this native database session", void, h_mii_Fin, void *self) {
+    MII_LOCK(); mii_session **s=&mii_sessions;
+    while (*s && (*s)->self!=self) s=&(*s)->next;
+    if (*s) { mii_session *old=*s; *s=old->next; free(old); }
+}
+HLE_FORCE_WAIT("_ZNK2nn3mii8Database11IsAvailableEv", "native database availability", int, h_mii_Avail, const void *self) { MII_LOCK(); return mii_ready(self); }
+HLE_FORCE_WAIT("_ZN2nn3mii8Database9IsUpdatedEi", "session-local personal database change observation", int, h_mii_Updated, void *self, int src) {
+    MII_LOCK(); if ((src&~3) || !mii_ready(self) || !(src&DM_MII_SOURCE_DATABASE)) return 0;
+    mii_session *s=mii_session_for(self); int changed=s->seen!=mii_generation; s->seen=mii_generation; return changed;
+}
+HLE_FORCE_WAIT("_ZNK2nn3mii8Database14IsFullDatabaseEv", "personal database capacity independent of defaults", int, h_mii_Full, const void *self) { MII_LOCK(); return mii_ready(self) && mii_library.count==DM_MII_CAPACITY; }
+enum { MII_DEFAULTS=6 };
 static int mii_get(void *buf, int n, int src, size_t stride) {
-    int k = 0;
-    for (; (src & MII_SRC_DEFAULT) && buf && k < n && k < MII_DEFAULTS; k++) {
-        uint8_t *e = (uint8_t *)buf + (size_t)k * stride;
-        mii_default((mii_charinfo *)e, k >= 3, k);
-        if (stride > sizeof(mii_charinfo)) { uint32_t source = 1; memcpy(e + sizeof(mii_charinfo), &source, 4); }   // CharInfoElement: the CharInfo and its source (1 = default)
+    int k=0;
+    if (src&DM_MII_SOURCE_DATABASE) for (uint32_t i=0; i<mii_library.count && k<n; ++i) {
+        if (mii_library.entries[i].type) continue; // Normal mii:u view, not the special-key private database.
+        uint8_t *e=(uint8_t *)buf+(size_t)k++*stride; memcpy(e,&mii_library.entries[i],sizeof(mii_charinfo));
+        if (stride>sizeof(mii_charinfo)) { uint32_t source=0; memcpy(e+sizeof(mii_charinfo),&source,4); }
+    }
+    if (src&DM_MII_SOURCE_DEFAULT) for (int i=0; i<MII_DEFAULTS && k<n; ++i) {
+        uint8_t *e=(uint8_t *)buf+(size_t)k++*stride; mii_default((mii_charinfo *)e,i>=3,i);
+        if (stride>sizeof(mii_charinfo)) { uint32_t source=1; memcpy(e+sizeof(mii_charinfo),&source,4); }
     }
     return k;
 }
-HLE_FORCE("_ZNK2nn3mii8Database8GetCountEi", "mii:u service; the six default Miis", int, h_mii_Count, const void *self, int src) { (void)self; return src & MII_SRC_DEFAULT ? MII_DEFAULTS : 0; }
-HLE_FORCE("_ZN2nn3mii8Database3GetEPiPNS0_15CharInfoElementEii", "mii:u service; the six default Miis", Result, h_mii_GetE, void *self, int *out, void *buf, int n, int src) {
-    (void)self; *out = mii_get(buf, n, src, sizeof(mii_charinfo) + 4); return RES_OK;
+HLE_FORCE_WAIT("_ZNK2nn3mii8Database8GetCountEi", "count selected personal/default sources", int, h_mii_Count, const void *self, int src) {
+    MII_LOCK(); if ((src&~3) || !mii_ready(self)) return 0;
+    return (src&DM_MII_SOURCE_DATABASE ? mii_normal_count() : 0)+(src&DM_MII_SOURCE_DEFAULT ? MII_DEFAULTS : 0);
 }
-HLE_FORCE("_ZN2nn3mii8Database3GetEPiPNS0_8CharInfoEii", "mii:u service; the six default Miis", Result, h_mii_Get, void *self, int *out, void *buf, int n, int src) {
-    (void)self; *out = mii_get(buf, n, src, sizeof(mii_charinfo)); return RES_OK;
+static Result mii_get_checked(void *self,int *out,void *buf,int n,int src,size_t stride) {
+    if (!out || n<0 || (n && !buf) || (src&~3) || !mii_ready(self)) return RES_FAIL;
+    *out=mii_get(buf,n,src,stride); return RES_OK;
 }
-HLE_FORCE("_ZNK2nn3mii8Database8GetIndexEPiRKNS0_8CharInfoE", "mii:u service; no Mii is in the database", Result, h_mii_Index, const void *self, int *out, const void *info) {
-    (void)self; (void)info; *out = -1; return MII_RES_NOT_FOUND;
+HLE_FORCE_WAIT("_ZN2nn3mii8Database3GetEPiPNS0_15CharInfoElementEii", "personal/default CharInfo with actual Source enum", Result, h_mii_GetE, void *self, int *out, void *buf, int n, int src) { MII_LOCK(); return mii_get_checked(self,out,buf,n,src,sizeof(mii_charinfo)+4); }
+HLE_FORCE_WAIT("_ZN2nn3mii8Database3GetEPiPNS0_8CharInfoEii", "personal/default CharInfo", Result, h_mii_Get, void *self, int *out, void *buf, int n, int src) { MII_LOCK(); return mii_get_checked(self,out,buf,n,src,sizeof(mii_charinfo)); }
+HLE_FORCE_WAIT("_ZNK2nn3mii8Database8GetIndexEPiRKNS0_8CharInfoE", "resolve a personal CreateId without fabricating or rewriting it", Result, h_mii_Index, const void *self, int *out, const mii_charinfo *info) {
+    MII_LOCK(); if (!out || !info || !mii_ready(self)) return RES_FAIL;
+    *out=-1; int index=0;
+    for (uint32_t i=0; i<mii_library.count; ++i) {
+        const mii_charinfo *c=&mii_library.entries[i]; if (c->type) continue;
+        if (!memcmp(c->create_id,info->create_id,16)) { *out=index; return RES_OK; } ++index;
+    }
+    return MII_RES_NOT_FOUND;
 }
-HLE_FORCE("_ZNK2nn3mii8Database12UpdateLatestEPNS0_8CharInfoEi", "mii:u service; no Mii is in the database", Result, h_mii_Latest, const void *self, void *info, int src) {
-    (void)self; (void)info; (void)src; return MII_RES_NOT_FOUND;
+HLE_FORCE_WAIT("_ZNK2nn3mii8Database12UpdateLatestEPNS0_8CharInfoEi", "refresh an existing personal/default Mii by its CreateId", Result, h_mii_Latest, const void *self, mii_charinfo *info, int src) {
+    MII_LOCK(); if (!info || (src&~3) || !mii_ready(self)) return RES_FAIL;
+    if (src&DM_MII_SOURCE_DATABASE) for (uint32_t i=0; i<mii_library.count; ++i) {
+        const mii_charinfo *c=&mii_library.entries[i];
+        if (!c->type && !memcmp(c->create_id,info->create_id,16)) { *info=*c; return RES_OK; }
+    }
+    if (src&DM_MII_SOURCE_DEFAULT) for (int i=0; i<MII_DEFAULTS; ++i) {
+        mii_charinfo c; mii_default(&c,i>=3,i);
+        if (!memcmp(c.create_id,info->create_id,16)) { *info=c; return RES_OK; }
+    }
+    return MII_RES_NOT_FOUND;
 }
 // RandomDesc {age, gender, race}: gender 0 male, 1 female, 2 either. The host's "random" Mii is the default one of that gender
 HLE_FORCE("_ZN2nn3mii8Database11BuildRandomEPNS0_8CharInfoERKNS0_10RandomDescE", "mii:u service; the default Mii", Result, h_mii_Random, void *self, mii_charinfo *out, const int *desc) {
@@ -89,7 +147,7 @@ HLE_FORCE("_ZN2nn3mii8Database11BuildRandomEPNS0_8CharInfoERKNS0_10RandomDescE",
 HLE_FORCE("_ZNK2nn3mii8Database12BuildDefaultEPNS0_8CharInfoEi", "mii:u service; default Mii <index>", Result, h_mii_Default, const void *self, mii_charinfo *out, int index) {
     (void)self; mii_default(out, index >= 3, index < 0 || index >= MII_DEFAULTS ? 0 : index); return RES_OK;
 }
-HLE_FORCE("_ZN2nn3mii8Database6FormatEv", "mii:u service; the database is already empty", Result, h_mii_Format, void *self) { (void)self; return RES_OK; }
+HLE_FORCE("_ZN2nn3mii8Database6FormatEv", "normal game access cannot format the shared personal library", Result, h_mii_Format, void *self) { (void)self; return MII_RES_TEST_MODE; }
 HLE_FORCE("_ZN2nn3mii8Database6ImportEPKvm", "mii:u service; importing needs the system's test mode", Result, h_mii_Import, void *self, const void *p, size_t n) {
     (void)self; (void)p; LOG("[RED] mii: Database::Import of %zu bytes refused (the host has no test mode)", n); return MII_RES_TEST_MODE;
 }
