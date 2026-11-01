@@ -8,7 +8,7 @@ e=importlib.util.module_from_spec(spec);spec.loader.exec_module(e)
 
 class ExportGuards(unittest.TestCase):
     def test_inherited_art_and_private_data_are_denied(self):
-        for path in ['docs/images/game.png','docs/images/diagram.svg','a/prod.keys','a/title.nca','RomFS/file.dat','work/notes.md','macOS/NXPortStudio/.build/file']:
+        for path in ['docs/images/game.png','docs/images/diagram.svg','a/prod.keys','a/title.nca','RomFS/file.dat','work/notes.md','macOS/NXPortStudio/.build/file','.nx-archives/cache/manifest.json','.nx-identify/logs/build.log']:
             self.assertIsNotNone(e.filtered(path,set()),path)
         self.assertIsNone(e.filtered('dm/third_party/libvpx/build/make/Makefile',set()))
     def test_only_tracked_compiler_exception_and_no_debug_symbols(self):
@@ -27,6 +27,15 @@ class ExportGuards(unittest.TestCase):
         self.assertTrue(hits);self.assertNotIn(value.decode(),str(hits))
         self.assertEqual(e.scan('source.py',b'/Users/test/project/'),[])
         self.assertEqual(e.scan('source.py',b'/Users/'+b'someperson/project/')[0]['category'],'personal_home_path')
+    def test_reviewed_compiler_path_requires_exact_file_and_bytes(self):
+        from unittest.mock import patch
+        raw=b'/Users/'+b'synthetic-maintainer/compiler.pdb'
+        name='dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate.dll'
+        with patch.object(e,'REVIEWED_COMPILER_PATHS',{name:e.digest(raw)}):
+            self.assertFalse(e.scan(name,raw))
+            self.assertTrue(e.scan(name,raw+b' changed'))
+            self.assertTrue(e.scan('other.dll',raw))
+            self.assertTrue(e.scan(name,raw+b' ghp_'+b'A'*30))
     def test_images_removed_and_lost_root_anchor_redirects_to_upstream(self):
         text=b'![test](../docs/images/game.png)\n<img src="../docs/images/game.png">\n[Play](../README.md#play)\n'
         result,changes=e.sanitize_markdown('docs/guide.md',text,{'docs/images/game.png':'art'},{'get-started'},'https://example.test/commit')

@@ -7,7 +7,8 @@
 #include <sys/mman.h>
 #include <TargetConditionals.h>
 
-module_t g_mod[MAX_MOD];
+static module_t display_modules[1];
+module_t *g_mod = display_modules;
 int g_nmod;
 uint8_t *dm_fps_state;
 

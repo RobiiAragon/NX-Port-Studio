@@ -62,7 +62,7 @@ static void identity_tests(void) {
     CHECK(dm_nextendo_account_available(&available) == 0 && available && dm_nextendo_account_id(&pid) == 0 && pid == 1800000042ull, "real metadata PID is returned without a fabricated fallback");
     int calls = atomic_load(&providerCalls);
     for (unsigned i = 0; i < 3; i++) { mode = (dm_net_mode_t)i; available = 9; pid = 9; CHECK(dm_nextendo_account_available(&available) == 0 && !available && dm_nextendo_account_id(&pid) != 0 && !pid && dm_nextendo_account_ensure() != 0, "offline/LAN/LDN never load an online credential"); }
-    CHECK(atomic_load(&providerCalls) == calls, "disabled modes do not query credentials"); mode = DM_NET_NEXTENDO;
+    CHECK(atomic_load(&providerCalls) == calls, "disabled modes do not query credentials"); mode = DM_NET_AUTO;
     NSArray *bad = @[@{@"token_kind":@"oauth"}, @{@"schema_version":@1.5}, @{@"schema_version":@YES}, @{@"expires_at":@1}, @{@"expires_at":@1e20}, @{@"created_at":@1e20}, @{@"scopes":@"identity"}, @{@"identity":@{@"pid":@1800000043ull,@"username":@"synthetic_user"}}, @{@"identity":@{@"pid":@1800000042ull,@"username":@"someone_else"}}, @{@"token":@"nx2.invalid.invalid"}, @{@"token":@"oauth-access-token"}, @{@"token":@"nx2. .invalid"}];
     for (NSDictionary *changes in bad) { NSMutableDictionary *wrong = record.mutableCopy; [wrong addEntriesFromDictionary:changes]; set_record(wrong); available = 9; pid = 9; CHECK(dm_nextendo_account_available(&available) == 0 && !available && dm_nextendo_account_id(&pid) != 0 && !pid, "malformed/OAuth/expired/incoherent data never enables NSA"); }
     set_record(nil); CHECK(dm_nextendo_account_ensure() != 0, "missing credential fails honestly"); set_record(record);
@@ -100,6 +100,7 @@ static pthread_t pending(Worker *worker) {
     pthread_mutex_lock(&providerLock); while (!providerWaiting) pthread_cond_wait(&providerCondition, &providerLock); pthread_mutex_unlock(&providerLock); return thread;
 }
 static void release_provider(pthread_t thread) { pthread_mutex_lock(&providerLock); blockProvider = false; pthread_cond_broadcast(&providerCondition); pthread_mutex_unlock(&providerLock); CHECK(pthread_join(thread, NULL) == 0, "credential operation returned"); }
+static uint32_t service_operation(const void *value) { return *(const uint32_t *)value; }
 static void async_tests(void) {
     typedef void (*Ctor)(void *); typedef uint32_t (*Object)(void *); typedef uint32_t (*Event)(void *, void *);
     Ctor ctor = H(Ctor, "_ZN2nn7account12AsyncContextC1Ev"), dtor = H(Ctor, "_ZN2nn7account12AsyncContextD1Ev");
@@ -129,6 +130,10 @@ static void async_tests(void) {
     CHECK(completion.id == fresh && !completion.signaled && result(contextA) != 0, "late work cannot signal a reused event or publish into a reconstructed context"); close_event(&completion); dtor(contextA);
     void *heap_context = malloc(64); ctor(heap_context); H(Ctor, "_ZN2nn7account12AsyncContextD0Ev")(heap_context);
     CHECK(deletes == 1 && !dm_nextendo_async_valid(heap_context), "deleting destructor releases host state and calls the guest's allocator exactly once");
+    ctor(contextA); uint32_t service_result=0x1234;
+    CHECK(dm_nextendo_async_execute(contextA,service_operation,&service_result)==0 && result(contextA)==service_result && !dm_nextendo_async_done(contextA,&done) && done, "service operation preserves its real failure result and completed state");
+    service_result=0; CHECK(dm_nextendo_async_execute(contextA,service_operation,&service_result)==0 && !result(contextA), "a later service request has its own real completion");
+    mode=DM_NET_LAN; CHECK(dm_nextendo_async_execute(contextA,service_operation,&service_result)!=0, "local modes do not execute a provider service operation"); mode=DM_NET_NEXTENDO; dtor(contextA);
 }
 int main(void) { @autoreleasepool {
     dm_nextendo_set_credential_provider(provider); dm_nextendo_set_game_version("3.0.5"); identity_tests(); token_tests(); async_tests();

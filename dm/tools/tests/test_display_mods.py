@@ -2,7 +2,6 @@
 import importlib.util
 from pathlib import Path
 import platform
-import struct
 import subprocess
 import sys
 import tempfile
@@ -11,6 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'dm/tools'))
 spec = importlib.util.spec_from_file_location('mk8_display', ROOT / 'dm/games/0100152000022000/patches.py')
+assert spec is not None and spec.loader is not None
 profile = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(profile)
 
@@ -18,6 +18,7 @@ spec.loader.exec_module(profile)
 class Context:
     state = 0x20000
     render_scale = 0
+    display_aspect_version = 0
 
     def __init__(self):
         self.code, self.sites, self.puts = [], [], []

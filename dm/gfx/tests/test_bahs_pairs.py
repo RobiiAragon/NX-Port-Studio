@@ -1,9 +1,11 @@
 """BAHS pipeline pairs come from complete programs, without bypassing intermediate stages. No game data required."""
 from pathlib import Path
+import os
 import struct
 import sys
 import unittest
 
+os.environ.setdefault('DM_GAME', '010015100B514000')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import shader_split as split
 

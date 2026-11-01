@@ -53,6 +53,8 @@ final class StudioModel {
     var showingKeysSheet = false
     var gameFiles: [URL] = []
     var inputBytes: Int64 = 0
+    var estimatedInputSpace: Int64 = 10 * 1_073_741_824
+    var containsGameArchives = false
     var nextendoClientID: String {
         didSet { nextendoPreferences.set(nextendoClientID.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "nextendoClientID") }
     }
@@ -111,19 +113,22 @@ final class StudioModel {
             .components(separatedBy: CharacterSet(charactersIn: "/:\\").union(.controlCharacters)).joined(separator: "-")
         return (safe.isEmpty ? "My Port" : safe) + (destination == .macOS ? ".app" : ".ipa")
     }
-    var outputURL: URL { URL(fileURLWithPath: outputFolder).appendingPathComponent(outputName) }
+    var applicationsURL: URL { URL(fileURLWithPath: "/Applications", isDirectory: true) }
+    var outputURL: URL { (destination == .macOS ? applicationsURL : URL(fileURLWithPath: outputFolder)).appendingPathComponent(outputName) }
     var selectedDevice: AppleDevice? { devices.first { $0.id == selectedDeviceID } }
     var missingRequirements: [DependencyStatus] { dependencies.filter { $0.isRequired && !$0.isAvailable } }
     var hasSigningTeam: Bool { teamID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil }
     var signingReady: Bool { destination != .iOS || (hasSigningTeam && selectedDevice?.canAttemptConnection == true) }
     var canBuild: Bool { (selectedFirmwarePath.isEmpty || selectedFirmware != nil) && signingReady && !isBusy && !isPreparing && !isChecking && missingRequirements.isEmpty && !gameFiles.isEmpty && !keysPath.isEmpty && !repositoryPath.isEmpty }
-    var approximateSpace: String { ByteCountFormatter.string(fromByteCount: inputBytes * 2 + 10_000_000_000, countStyle: .file) }
+    var approximateSpace: String { ByteCountFormatter.string(fromByteCount: estimatedInputSpace, countStyle: .file) }
 
     func initialize() async {
         guard repositoryPath.isEmpty else { return }
         do {
             let fm = FileManager.default
             try fm.createDirectory(at: supportURL, withIntermediateDirectories: true)
+            let applications = applicationsURL
+            try await Task.detached { try MacPortBuildSession.removeAbandonedBuilds(in: applications) }.value
             // Managed snapshots follow the installed app's engine revision. A path
             // saved by an older release must not pin users to that release's fixes.
             let savedSource = UserDefaults.standard.string(forKey: "repositoryPath")
@@ -174,11 +179,13 @@ final class StudioModel {
         FileManager.default.fileExists(atPath: url.path, isDirectory: &directory)
         let folder = directory.boolValue ? url : url.deletingLastPathComponent()
         gamePath = folder.path
-        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey])) ?? []
-        gameFiles = files.filter { ["nsp", "xci", "nsz", "xcz"].contains($0.pathExtension.lowercased()) && (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }.sorted { $0.lastPathComponent < $1.lastPathComponent }
-        inputBytes = gameFiles.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        let summary = try? GameFolderSummary.inspect(folder)
+        gameFiles = summary?.files ?? []
+        inputBytes = summary?.byteCount ?? 0
+        estimatedInputSpace = summary?.estimatedFreeBytesNeeded ?? 10 * 1_073_741_824
+        containsGameArchives = summary?.containsArchives ?? false
         if appName.isEmpty { appName = folder.lastPathComponent }
-        failure = gameFiles.isEmpty ? t("This folder has no NSP, XCI, NSZ or XCZ files.") : nil
+        failure = gameFiles.isEmpty ? t("The game folder contains no supported game files or ZIP/7z archives.") : nil
         completedURL = nil; projectURL = nil
     }
     func chooseKeys() {
@@ -247,12 +254,25 @@ final class StudioModel {
         failure = nil; completedURL = nil; projectURL = nil
         progress = nil; stageIndex = 0; stageTotal = 0; stageName = ""; logs = []
         isBusy = true; status = "Building port"
-        let config = BuildConfiguration(repositoryURL: URL(fileURLWithPath: repositoryPath), gameDirectoryURL: URL(fileURLWithPath: gamePath), keysURL: URL(fileURLWithPath: keysPath), outputURL: outputURL, destination: destination, appName: appName, language: language, showFPS: showFPS, prepareXcode: destination == .iOS, teamID: teamID.isEmpty ? nil : teamID, systemDataURL: selectedSystemDataURL, nextendoClientID: nextendoClientID)
+        let requestedConfig = BuildConfiguration(repositoryURL: URL(fileURLWithPath: repositoryPath), gameDirectoryURL: URL(fileURLWithPath: gamePath), keysURL: URL(fileURLWithPath: keysPath), outputURL: outputURL, destination: destination, appName: appName, language: language, showFPS: showFPS, prepareXcode: destination == .iOS, teamID: teamID.isEmpty ? nil : teamID, systemDataURL: selectedSystemDataURL, nextendoClientID: nextendoClientID)
         let signingDevice = selectedDevice
         let installAfterBuild = installMode
         let runID = UUID(); operationID = runID
         currentTask = Task { [self] in
+            var config = requestedConfig
+            var macSession: MacPortBuildSession?
             do {
+                if config.destination == .macOS {
+                    try requireClosedPort(at: requestedConfig.outputURL)
+                    let session = try MacPortBuildSession(destinationURL: requestedConfig.outputURL)
+                    macSession = session
+                    status = "Preparing engine"
+                    try await session.prepareEngine(from: config.repositoryURL, using: runner)
+                    config.repositoryURL = session.engineURL
+                    config.outputURL = session.applicationURL
+                    config.workDirectoryURL = session.workURL
+                    status = "Building port"
+                }
                 let command = try BuildCommand.make(configuration: config, pythonURL: pythonURL)
                 let verifiedSigningDevice: AppleDevice?
                 if config.destination == .iOS {
@@ -269,7 +289,15 @@ final class StudioModel {
                     self.receive(line)
                 } }
                 try Task.checkCancellation()
-                guard result.exitCode == 0 else { throw PortError.processFailed(result.exitCode, t("Build failed. Review Activity and the game's build/logs folder.")) }
+                guard result.exitCode == 0 else {
+                    let guidance: String
+                    if let diagnosis = BuildFailureDiagnosis.classify(output: result.output) {
+                        guidance = t(diagnosis.title) + "\n\n" + t(diagnosis.recovery)
+                    } else {
+                        guidance = t(config.destination == .macOS ? "Build failed. Review Activity or export its log before trying again." : "Build failed. Review Activity and the game's build/logs folder.")
+                    }
+                    throw PortError.processFailed(result.exitCode, guidance)
+                }
                 if config.prepareXcode {
                     if projectURL == nil {
                         for line in result.output.split(separator: "\n") {
@@ -310,23 +338,41 @@ final class StudioModel {
                     }
                     NSWorkspace.shared.activateFileViewerSelecting([ipa])
                 } else {
-                    guard FileManager.default.fileExists(atPath: config.outputURL.path) else { throw PortError.invalidConfiguration(t("The build finished without the expected output.")) }
-                    completedURL = config.outputURL; status = "Port created"
-                    NSWorkspace.shared.activateFileViewerSelecting([config.outputURL])
+                    guard let macSession else { throw PortError.invalidConfiguration(t("The build finished without the expected output.")) }
+                    try requireClosedPort(at: requestedConfig.outputURL)
+                    status = "Installing in Applications"
+                    let installed = try await macSession.install(using: runner)
+                    completedURL = installed; status = "Installed in Applications"
+                    // Register the app so Spotlight and the app launcher discover it.
+                    let registration = ProcessCommand(executableURL: URL(fileURLWithPath: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"), arguments: ["-f", installed.path])
+                    let result = try await runner.run(registration)
+                    if result.exitCode != 0 { appendLog("Launch Services registration failed; the port is installed in Applications.") }
+                    NSWorkspace.shared.activateFileViewerSelecting([installed])
                 }
                 progress = 1
             } catch is CancellationError {
-                guard operationID == runID else { return }
                 status = completedURL != nil && config.destination == .iOS ? "Signed IPA saved; installation cancelled" : "Cancelled"
                 appendLog("Build cancelled.")
+                if completedURL != nil && config.destination == .macOS { status = "Installed in Applications" }
             } catch {
-                guard operationID == runID else { return }
                 failure = t(error.localizedDescription)
-                status = completedURL != nil && config.destination == .iOS ? "Signed IPA saved; installation failed" : "Build failed"
+                status = completedURL != nil ? (config.destination == .iOS ? "Signed IPA saved; installation failed" : "Installed in Applications") : "Build failed"
                 appendLog(error.localizedDescription)
+            }
+            if let macSession {
+                do { try await Task.detached { try macSession.cleanup() }.value }
+                catch {
+                    failure = t("Could not remove temporary build files.") + "\n" + error.localizedDescription
+                    appendLog(failure ?? error.localizedDescription)
+                }
             }
             guard operationID == runID else { return }
             operationID = UUID(); isBusy = false; currentTask = nil
+        }
+    }
+    private func requireClosedPort(at url: URL) throws {
+        guard !NSWorkspace.shared.runningApplications.contains(where: { $0.bundleURL?.resolvingSymlinksInPath().path == url.resolvingSymlinksInPath().path }) else {
+            throw PortError.invalidConfiguration(t("Quit the installed game before updating it."))
         }
     }
     func locateProject(in folder: URL) throws -> URL? {

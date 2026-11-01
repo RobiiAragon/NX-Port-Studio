@@ -33,6 +33,13 @@ int dm_mobile_nextendo_routes_state(void) {
     int state = dm_nextendo_routes_status();
     return state == DM_NEXTENDO_ROUTES_READY && !dm_nextendo_routes_count() ? DM_NEXTENDO_ROUTES_MISSING : state;
 }
+int dm_mobile_nextendo_apply_service_profile(const char *path) {
+    // Called before guest boot. A successful immutable table is never replaced.
+    if (dm_nextendo_routes_status() == DM_NEXTENDO_ROUTES_READY) return DM_NEXTENDO_ROUTES_READY;
+    if (!path || path[0] != '/' || !path[1] || setenv("DM_NEXTENDO_ROUTES", path, 1)) return DM_NEXTENDO_ROUTES_INVALID;
+    dm_nextendo_routes_retry_unconfigured();
+    return dm_nextendo_routes_initialize();
+}
 
 // One-time migration input only. Native game reads never fall back to this file.
 #include <fcntl.h>

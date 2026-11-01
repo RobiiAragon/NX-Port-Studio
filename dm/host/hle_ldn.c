@@ -413,7 +413,7 @@ static Result ldn_hook_info(dm_ldn_network *out, dm_ldn_update *updates, int cou
     }
     return ldn_hook_result("Info", result);
 }
-static int ldn_enabled(void) { const char *m = getenv("DM_NETWORK"); return m && !strcmp(m, "ldn"); }
+static int ldn_enabled(void) { const char *m = getenv("DM_NETWORK"); return m && (!strcmp(m, "ldn") || !strcmp(m, "auto")); }
 HLE_FORCE_WAIT("_ZN2nn3ldn10InitializeEv", "native ldn_mitm control transport", Result, h_ldn_Init, void) { LDN_WRITE();
     if (!ldn_enabled()) return ldn_hook_result("InitDisabled", LDN_ERROR(22)); if (g_ldn) return ldn_hook_result("InitExisting",0);
     dm_ldn_transport t = {.port=11452, .discovery_port=11452, .scan_ms=1000, .connect_ms=4000};

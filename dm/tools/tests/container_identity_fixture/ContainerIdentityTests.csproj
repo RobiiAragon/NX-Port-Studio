@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <StartupObject>IdentityTests</StartupObject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="LibHac" Version="0.19.0" />
+    <Compile Include="../../nx_extract/ContainerIdentity.cs" Link="ContainerIdentity.cs" />
+    <Compile Include="../../nx_extract/Program.cs" Link="ExtractorProgram.cs" />
+    <Compile Include="../../nx_extract/FirmwareResources.cs" Link="FirmwareResources.cs" />
+    <Compile Include="../../nx_extract/FriendsPlayHistoryResources.cs" Link="FriendsPlayHistoryResources.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>

@@ -39,6 +39,13 @@ SCANS = {
     'apple_device_id': re.compile(rb'\b0000[0-9A-Fa-f]{4}-[0-9A-Fa-f]{16}\b'),
 }
 
+# Unmodified upstream translator from 4a1f68301877. Its DLL contains the upstream
+# author's PDB path; optional PDB files are excluded. Changes invalidate this
+# exception. It never suppresses key, token, device or copyright findings.
+REVIEWED_COMPILER_PATHS = {
+    'dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate.dll': '3a91580c9bf158bdbd4cfb22584ae2a59cb6c91c29986602289dd81fa9090675',
+}
+
 def git(root, *args):
     return subprocess.check_output(['git', *args], cwd=root)
 
@@ -53,7 +60,7 @@ def binary_kind(data):
 
 def filtered(rel, tracked):
     p = PurePosixPath(rel); parts = p.parts; lower = {x.lower() for x in parts}
-    if any(x in {'.git','.build','.swiftpm','__pycache__','node_modules','obj','cmakefiles'} or x.endswith('_build') for x in lower): return 'generated directory'
+    if any(x in {'.git','.build','.swiftpm','.nx-archives','.nx-identify','__pycache__','node_modules','obj','cmakefiles'} or x.endswith('_build') for x in lower): return 'generated directory'
     if parts[0] in {'work','outputs','dist','build','.github','.vscode','.idea'}: return 'local/generated configuration'
     if rel in DOCS or rel == 'README.md': return 'presentation override'
     if rel.startswith('dm/host/gen/') or rel.startswith('dm/ios/Gen/') or '.app' in ''.join(parts[:-1]): return 'generated product'
@@ -77,7 +84,7 @@ def scan(rel, data):
                 continue
             hits.append({'path':rel,'line':data.count(b'\n',0,m.start())+1,'category':category})
     for m in HOME.finditer(data):
-        if m.group(1).lower() not in GENERIC_USERS:
+        if m.group(1).lower() not in GENERIC_USERS and REVIEWED_COMPILER_PATHS.get(rel) != digest(data):
             hits.append({'path':rel,'line':data.count(b'\n',0,m.start())+1,'category':'personal_home_path'})
     # Opaque OAuth sessions may have no recognizable token prefix. Detect the
     # serialized credential shape without retaining any matching value in reports.

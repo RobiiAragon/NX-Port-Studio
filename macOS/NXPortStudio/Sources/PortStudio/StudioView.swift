@@ -134,7 +134,7 @@ struct StudioView: View {
             }
             HStack(alignment: .center, spacing: 18) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(t(model.destination == .macOS ? "A Mac app, ready in Downloads." : "A signed IPA, ready for your selected device."))
+                    Text(t(model.destination == .macOS ? "A Mac app, installed in Applications." : "A signed IPA, ready for your selected device."))
                         .fontWeight(.medium)
                     Text(t(model.destination == .macOS ? "Self-contained .app with audio and controller support." : "iOS / iPadOS 26 · A17 Pro or M-series hardware.")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
                 }
@@ -159,7 +159,7 @@ struct StudioView: View {
                                 Text(t(model.gamePath.isEmpty ? "Choose a game folder" : "Change game folder")).fontWeight(.medium)
                                 Spacer(); Image(systemName: "folder.badge.plus")
                             }
-                            Text(model.gamePath.isEmpty ? t("NSP, XCI, NSZ or XCZ · Base game, updates and DLC together") : (model.gamePath as NSString).abbreviatingWithTildeInPath)
+                            Text(model.gamePath.isEmpty ? t("NSP, XCI, NSZ, XCZ or ZIP/7z · Base game, updates and DLC together") : (model.gamePath as NSString).abbreviatingWithTildeInPath)
                                 .font(.system(size: 12)).foregroundStyle(StudioStyle.muted).lineLimit(2).truncationMode(.middle)
                         }.padding(16).frame(maxWidth: .infinity, minHeight: 85, alignment: .leading)
                             .background(StudioStyle.raised, in: RoundedRectangle(cornerRadius: 10))
@@ -271,10 +271,20 @@ struct StudioView: View {
                     summaryRow("Source size", value: ByteCountFormatter.string(fromByteCount: model.inputBytes, countStyle: .file))
                     summaryRow("Free space estimate", value: model.gameFiles.isEmpty ? "—" : model.approximateSpace)
                 }
+                if model.containsGameArchives {
+                    Text(t("Archive size is compressed. Expanded space is checked during import."))
+                        .font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(t("Save to")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
-                    Text((model.outputFolder as NSString).abbreviatingWithTildeInPath).font(.system(size: 12)).lineLimit(3).truncationMode(.middle).textSelection(.enabled)
-                    Button(t("Change folder")) { model.chooseOutput() }.buttonStyle(.plain).font(.system(size: 12, weight: .medium)).disabled(model.isBusy)
+                    Text(t(model.destination == .macOS ? "Install in" : "Save to")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
+                    Text(((model.destination == .macOS ? model.applicationsURL.path : model.outputFolder) as NSString).abbreviatingWithTildeInPath).font(.system(size: 12)).lineLimit(3).truncationMode(.middle).textSelection(.enabled)
+                    if model.destination == .macOS {
+                        Text(t("The port is installed in Applications. Temporary build files are removed automatically."))
+                            .font(.system(size: 12)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Button(t("Change folder")) { model.chooseOutput() }.buttonStyle(.plain).font(.system(size: 12, weight: .medium)).disabled(model.isBusy)
+                    }
                 }
                 Text(t("Compatibility depends on the game and its version. The first build can take 30–60 minutes.")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
             }

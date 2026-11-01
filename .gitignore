@@ -9,6 +9,8 @@ dm/games/*/c1_full.tsv
 dm/games/*/cb_extent.tsv
 
 .local/
+.nx-archives/
+.nx-identify/
 
 tools/dev-private/
 

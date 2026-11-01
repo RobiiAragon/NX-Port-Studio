@@ -18,16 +18,18 @@ public struct BuildConfiguration: Sendable {
     public var teamID: String?
     public var systemDataURL: URL?
     public var nextendoClientID: String?
+    public var workDirectoryURL: URL?
 
     public init(repositoryURL: URL, gameDirectoryURL: URL, keysURL: URL, outputURL: URL,
                 destination: BuildDestination, appName: String = "", language: String = "",
                 showFPS: Bool = false, prepareXcode: Bool = false, teamID: String? = nil, systemDataURL: URL? = nil,
-                nextendoClientID: String? = nil) {
+                nextendoClientID: String? = nil, workDirectoryURL: URL? = nil) {
         self.repositoryURL = repositoryURL; self.gameDirectoryURL = gameDirectoryURL
         self.keysURL = keysURL; self.outputURL = outputURL; self.destination = destination
         self.appName = appName; self.language = language; self.showFPS = showFPS
         self.prepareXcode = prepareXcode; self.teamID = teamID; self.systemDataURL = systemDataURL
         self.nextendoClientID = nextendoClientID
+        self.workDirectoryURL = workDirectoryURL
     }
 }
 
@@ -72,7 +74,7 @@ public enum BuildCommand {
         }
         let files = try GameFolderSummary.inspect(c.gameDirectoryURL).files
         guard !files.isEmpty else {
-            throw PortError.invalidConfiguration("The game folder contains no NSP, XCI, NSZ or XCZ files.")
+            throw PortError.invalidConfiguration("The game folder contains no supported game files or ZIP/7z archives.")
         }
         guard fm.isReadableFile(atPath: c.keysURL.path),
               let keyMetadata = try? c.keysURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
@@ -104,6 +106,7 @@ public enum BuildCommand {
                     "--progress", "json", "--keep-extracted",
                     c.showFPS ? "--show-fps" : "--no-show-fps"]
         if !preparesXcode { args += ["-o", c.outputURL.path] }
+        if let work = c.workDirectoryURL { args += ["--work-dir", work.path] }
         if let systemData = c.systemDataURL {
             var directory: ObjCBool = false
             guard fm.fileExists(atPath: systemData.path, isDirectory: &directory), directory.boolValue,
@@ -120,6 +123,12 @@ public enum BuildCommand {
         }
         var env = ToolEnvironment.values
         env["PYTHONUNBUFFERED"] = "1"
+        if let work = c.workDirectoryURL {
+            // tempfile and compiler scratch files must share the session's
+            // lifetime, even when the build process is forcibly cancelled.
+            env["TMPDIR"] = work.path
+            env["CLANG_MODULE_CACHE_PATH"] = work.appendingPathComponent("clang-module-cache").path
+        }
         // The public OAuth client belongs to the port's creator. Account tokens
         // never enter this configuration, command line or build log.
         env.removeValue(forKey: "DM_NEXTENDO_CLIENT_ID")

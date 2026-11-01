@@ -78,7 +78,7 @@
 "Refresh signed catalog" = "Actualizar catálogo firmado";
 "Refresh the signed catalog to check this game." = "Actualiza el catálogo firmado para comprobar este juego.";
 "Refreshing signed catalog…" = "Actualizando catálogo firmado…";
-"Register the callback nxnative-nextendo://callback for a public application using PKCE. Never enter a client secret or account token here." = "Registra nxnative-nextendo://callback como retorno de una aplicación pública con PKCE. No introduzcas aquí secretos de cliente ni tokens de cuenta.";
+"Use the public application ID registered in Nextendo. Sign-in returns to this device automatically." = "Usa el ID público de la aplicación registrada en Nextendo. El inicio de sesión regresa automáticamente a este dispositivo.";
 "Registered application ID" = "ID de aplicación registrada";
 "Render scale" = "Escala de renderizado";
 "Reset to tested defaults" = "Restaurar ajustes probados";
@@ -138,3 +138,13 @@
 "No camera and HUD mod has been verified for this game build on iPhone." = "Aún no se ha verificado un mod de cámara e interfaz para esta versión en iPhone.";
 "No 120 FPS game-timing mod has been verified for this game build." = "Aún no se ha verificado un mod de temporización a 120 FPS para esta versión.";
 "The connected display does not report 120 Hz support." = "La pantalla conectada no indica soporte de 120 Hz.";
+
+// Automatic public Nextendo service preparation.
+"Prepare game services" = "Preparar servicios del juego";
+"Preparing game services…" = "Preparando servicios del juego…";
+"Service preparation failed. Check your connection and try again." = "No se pudieron preparar los servicios. Revisa tu conexión y vuelve a intentarlo.";
+"Service configuration is prepared automatically for this game. Certificate verification stays enabled; a connection profile does not certify online gameplay." = "La configuración de servicios se prepara automáticamente para este juego. La verificación de certificados sigue activa; un perfil de conexión no demuestra que el juego online funcione.";
+"Automatic connection" = "Conexión automática";
+"Disable network services" = "Desactivar servicios de red";
+"Back to game settings" = "Volver a los ajustes del juego";
+"Choose Online, Local wireless or LAN inside the game. Nextendo, LDN and LAN are available together; no restart is needed to switch between them." = "Elige En línea, Inalámbrico o LAN dentro del juego. Nextendo, LDN y LAN están disponibles a la vez; puedes cambiar entre ellos sin reiniciar.";

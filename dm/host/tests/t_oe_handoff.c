@@ -24,7 +24,7 @@ static void *notification_worker(void *arg) {
     assert(r[0] == 0);
     atomic_store(&received, h_oe_PopMsg());
     pthread_mutex_lock(&G);
-    assert(worker.host_wait == 0 && worker.nhand == 0);
+    assert(worker.native_wait == 0 && worker.nhand == 0);
     pthread_mutex_unlock(&G);
     thread_exit(&worker);
     return NULL;
@@ -38,9 +38,9 @@ int main(void) {
     thr_t *parent = cur();
     parent->prio = 44; parent->core = 0; parent->mask = 1;
     dm_guest_host_wait_begin(); dm_guest_host_wait_begin();
-    assert(parent->host_wait == 2 && !thr_runnable(parent));
-    dm_guest_host_wait_end(); assert(parent->host_wait == 1 && !thr_runnable(parent));
-    dm_guest_host_wait_end(); assert(parent->host_wait == 0 && thr_runnable(parent));
+    assert(parent->native_wait == 2 && !thr_runnable(parent));
+    dm_guest_host_wait_end(); assert(parent->native_wait == 1 && !thr_runnable(parent));
+    dm_guest_host_wait_end(); assert(parent->native_wait == 0 && thr_runnable(parent));
 
     uint64_t r[32] = {0};
     svc_thread(0x45, r); assert(r[0] == 0);
@@ -58,7 +58,7 @@ int main(void) {
     }
     r[0] = event_write; svc_thread(0x11, r);
     pthread_mutex_lock(&G);
-    assert(worker.host_wait == 1 && worker.nhand == 0 && !thr_runnable(&worker));
+    assert(worker.native_wait == 1 && worker.nhand == 0 && !thr_runnable(&worker));
     pthread_mutex_unlock(&G);
     assert(atomic_load(&received) == 0 && g_mqn == 0);
     // No fabricated startup message and no timeout: only the real producer releases the pop.

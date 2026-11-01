@@ -12,7 +12,11 @@
 
 Es un proyecto independiente basado en [seedds/nxnative](https://github.com/seedds/nxnative). Se conservan el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
+> **Candidata 1.6.0:** motor sincronizado con nxnative `4a1f68301877` (349 commits desde la base compartida). Pasan las pruebas automáticas de host, gráficos e iOS; falta repetir la validación de juegos con este motor. [Notas de versión](docs/releases/1.6.0-rc.1.md).
+
 ## Capturas de Studio
+
+La importación reconoce ZIP/7z, subcarpetas y extensiones en mayúsculas, con extracción limitada y verificación de integridad. Los errores conocidos muestran pasos para resolverlos en los cinco idiomas de la interfaz.
 
 Capturas de la app funcionando en macOS, en español.
 
@@ -39,7 +43,7 @@ El proyecto también amplía el runtime y las rutas de integración:
 - [Sockets Horizon](dm/host/hle_net_backend.c): traducción de direcciones/errores/flags, TCP/UDP reales y cierre/reutilización de descriptores seguros.
 - [Entrada HLE bloqueante](dm/host/entry.S): publicación de registros del juego, pilas nativas y esperas que respetan pausa/reanudación.
 - [TLS de Apple](dm/host/hle_ssl_apple.m): verificación de certificados/hostname y confianza por contexto; el [importador de firmware](dm/tools/nx_extract/FirmwareResources.cs) aporta CertStore original.
-- [Puente LDN original](dm/host/hle_ldn.c): descubrimiento, sesiones, participantes y sincronización reales; falta la comprobación física.
+- [Puente LDN original](dm/host/hle_ldn.c): descubrimiento, sesiones, participantes y sincronización reales; el usuario confirmó partidas LAN y LDN entre ports nativos Mac/iOS y una Switch física.
 - [Puente nativo de cuenta](dm/host/hle_nextendo_apple.m) y [rutas del servicio](dm/host/hle_nextendo_routes.c): manejo explícito de credenciales/identidad; OAuth limitado no se convierte en una credencial de juego.
 - [Mapeo de controles](dm/host/controls_map.h) y [ruta Joy-Con de Mac](dm/host/joycon_mac.inc): layouts Nintendo/Xbox, API públicas de Apple y acceso raw calibrado en Mac. En iOS se respetan las capacidades expuestas por sus API públicas.
 
@@ -51,8 +55,8 @@ Cada mecanismo tiene pruebas y alcances distintos. Esto no demuestra que todos l
 | --- | --- | --- |
 | Studio en macOS | Pasan las pruebas de compilación, configuración, procesos, recursos y firma Xcode. | Apple silicon; Studio requiere macOS 14+. Algunos juegos necesitan funciones más recientes de macOS/Metal. |
 | LAN Mac ↔ Switch | Un build anterior probado **completó una carrera de Mario Kart 8 Deluxe 3.0.5** con una Switch física. | Es una referencia histórica con versiones coincidentes y modo LAN. El candidato actual no ha repetido esa carrera. |
-| Puente LDN | Las pruebas de protocolo y participantes pasan. Mario Kart 3.0.5 en Mac ya crea el lobby tras corregir la identidad del historial local. | Los intentos físicos anteriores de entrar y crear fallaron; falta repetirlos con la versión corregida y una Switch. Es una ruta diferente de la LAN IP del juego. |
-| Nextendo | Están verificados OAuth con aplicación propia, la obtención de NEX ligada a identidad, su lectura desde el Llavero y el catálogo firmado. | OAuth limitado y la credencial NEX son estados distintos. **No se ha validado una partida NEX online nativa.** |
+| Puente LDN | El usuario confirmó juego LAN y LDN de Mario Kart 3.0.5 entre ports nativos Mac/iOS y una Switch física el 31 de octubre. También pasan las pruebas de protocolo. | Corresponde a los ports anteriores a esta sincronización; falta repetir la prueba con el nuevo motor. El puente LDN IP necesita un módulo compatible en la consola. |
+| Nextendo | Se verificaron la cuenta y **una ronda real de arena de Smash 13.0.5 en Mac**. | Conexión automática y certificado exacto autorizado para ese servicio. Este resultado no valida partida rápida, otros juegos ni online en iOS. |
 | iPhone/iPad | El usuario confirmó que el build firmado de Mario Kart 3.0.5 entra a salas LAN con una Switch física, con ambos dispositivos como anfitrión. | Está comprobada la entrada a la sala; falta validar una carrera completa. Siguen aplicando restricciones de dispositivo, firma y plataforma. |
 | Android/Windows | Planeados después de estabilizar la base Apple. | Aún no hay builds ni compatibilidad anunciada; ARM y x86 requieren trabajo propio. |
 
@@ -90,9 +94,11 @@ El script no sobrescribe un destino existente. Su firma ad-hoc predeterminada co
 4. Elige **Mac** o **iPhone/iPad**. En iOS, selecciona un dispositivo apto emparejado e introduce tu Team ID de Xcode.
 5. Crea el port. En iOS, la operación sólo termina correctamente después de firmar y verificar el IPA. **Instalar al terminar** controla la instalación, no la firma.
 
-La interfaz inicia en español y permite elegir inglés, francés, japonés y chino simplificado en la barra lateral o en el menú Idioma. El idioma de la interfaz y el del juego se configuran por separado. La salida técnica mantiene su idioma original. Los productos de compilación y datos extraídos permanecen junto al juego seleccionado. Las exportaciones se guardan en Descargas de forma predeterminada.
+La interfaz inicia en español y permite elegir inglés, francés, japonés y chino simplificado en la barra lateral o en el menú Idioma. El idioma de la interfaz y el del juego se configuran por separado. La salida técnica mantiene su idioma original. Los ports de Mac se instalan directamente en **Aplicaciones** y eliminan automáticamente el motor temporal, la extracción y los archivos de compilación. Las actualizaciones verifican la nueva app antes de reemplazar un port del mismo juego. Las partidas y los ajustes permanecen en Application Support. Los proyectos de iOS y sus archivos extraídos se conservan junto al juego para la firma con Xcode; las exportaciones IPA se guardan en Descargas de forma predeterminada.
 
 ## Cada modo de red tiene requisitos distintos
+
+Los ports arrancan con los servicios de conexión automáticos. Elige En línea, Inalámbrico o LAN dentro del juego, sin seleccionar otro modo ni reiniciar. Configurar Nextendo es una acción independiente: la falta de credenciales online no bloquea el juego local. La desconexión y la dirección de descubrimiento opcional quedan como ajustes avanzados.
 
 **LAN:** utiliza el modo LAN propio del juego y sockets IP reales. Requiere versiones coincidentes y la misma red. La carrera del build anterior es la referencia física; no certifica un candidato posterior del runtime. El candidato actual 3.0.5 para Mac ya [crea una sala LAN local](dm/games/0100152000022000/README.md#local-network-validation) y llega al lobby y a las reglas del anfitrión. La incorporación de otro dispositivo y una nueva carrera siguen pendientes para ese candidato.
 
@@ -110,7 +116,7 @@ Para las salas creadas en el iPhone/iPad, **Juego local → Activar puente** hab
 
 ### Bloqueos actuales de servicios de juego
 
-Las rutas nativas Nextendo probadas siguen bloqueadas por certificados: cinco certificados de servidor con diez años de validez fallan la política nativa de Apple, y el endpoint de autenticación configurado para Mario Kart carece de un certificado validado para su hostname. La verificación sigue activa. El build disponible de Mario Kart 8 Deluxe **3.0.5** también queda fuera del requisito actual **4.0.1** del catálogo firmado. Estos bloqueos son independientes del paso de credenciales de cuenta que sí funcionó. La comprobación corresponde al 2026-10-28; actualiza el catálogo para consultar la política vigente.
+Al 2026-10-31, cinco servicios de cuenta, BAAS y datos completan el handshake TLS nativo con la CA del proveedor, incluidos sus certificados de larga duración. El servidor NEX de MK8 probado aún presenta un certificado autofirmado sin el hostname requerido, y la cadena de autenticación de dispositivo/aplicación no coincide con la CA publicada. Esas comprobaciones siguen fallando. Mario Kart 8 Deluxe **3.0.5** también queda fuera del requisito **4.0.1**. El [inventario completo](docs/nextendo-coverage.md) incluye los 58 títulos, 62 perfiles regionales y 22 planes de parches por build; las partidas online nativas siguen pendientes de validación.
 
 ## Contenido del repositorio
 

@@ -289,3 +289,41 @@
 "Homebrew" = "Homebrew";
 "Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation." = "桥接仅转发房间发现信息。游戏设备直接互连。已验证 iPhone 和实体 Switch 分别作为房主时均可加入 LAN 房间；比赛和 LDN 仍需验证。";
 "Enter a valid registered Nextendo application client ID." = "请输入已注册 Nextendo 应用的有效客户端 ID。";
+"Xcode has no Apple account configured. Sign in under Xcode → Settings → Apple Accounts with the account for your selected team, then try signing again." = "Xcode 尚未配置 Apple 账户。请在 Xcode → Settings → Apple Accounts 中登录所选团队的账户，然后重试签名。";
+
+/* Game input discovery */
+"The game folder contains no supported game files or ZIP/7z archives." = "游戏文件夹中没有受支持的游戏文件或 ZIP/7z 压缩包。";
+"NSP, XCI, NSZ, XCZ or ZIP/7z · Base game, updates and DLC together" = "NSP、XCI、NSZ、XCZ 或 ZIP/7z · 本体、更新和 DLC 放在一起";
+
+/* Build failure recovery */
+"The base game is missing." = "缺少游戏本体。";
+"Add the complete base game dump alongside its update or DLC. ZIP and 7z archives are unpacked automatically." = "请将完整的游戏本体转储与更新或 DLC 放在一起。ZIP 和 7z 压缩包会自动解压。";
+"The game files could not be identified." = "无法识别游戏文件。";
+"Select a complete NSP, XCI, NSZ or XCZ dump, or a ZIP or 7z archive containing one. Check Activity for the exact file." = "请选择完整的 NSP、XCI、NSZ 或 XCZ 转储，或包含此类文件的 ZIP、7z 压缩包。具体文件请查看“活动”。";
+"The folder contains conflicting games." = "文件夹中的游戏存在冲突。";
+"Keep one base dump and only that game's updates and DLC in the selected folder. Move other games or duplicate bases to another folder." = "所选文件夹中只保留一个本体转储及其对应的更新和 DLC。请将其他游戏或重复的本体移至别处。";
+"The game archive could not be prepared." = "无法准备游戏压缩包。";
+"Check that the archive finished copying. Extract encrypted, nested or unsupported archives beside the update, then select that folder again. The original archive is retained." = "请确认压缩包已复制完成。请将加密、嵌套或不受支持的压缩包手动解压至更新文件旁，然后重新选择文件夹。原始压缩包会被保留。";
+"The console keys file is unavailable." = "无法访问主机密钥文件。";
+"Select a readable, nonempty prod.keys file dumped from your own console." = "请选择从自己的主机转储的非空、可读的 prod.keys 文件。";
+"Required console keys are missing." = "缺少所需的主机密钥。";
+"Select updated prod.keys dumped from your own console that support this game and its update. Key values must stay private." = "请选择从自己的主机转储、支持该游戏及其更新的最新 prod.keys。密钥值必须保密。";
+"The game dump is incomplete or damaged." = "游戏转储不完整或已损坏。";
+"Copy a complete dump from your own console again, then retry. Check Activity for the failed file or integrity check." = "请从自己的主机重新复制完整转储后重试。失败的文件或完整性检查请查看“活动”。";
+"There is not enough free disk space." = "磁盘可用空间不足。";
+"Free space on the volume containing the game and build folder, then retry. Check Activity for the required amount." = "请释放游戏及构建文件夹所在卷的空间后重试。所需容量请查看“活动”。";
+"This program cannot run on the selected platform." = "此程序无法在所选平台上运行。";
+"Native ports require a 64-bit ARM game and an Apple silicon Mac. Check Activity for the unsupported program or host." = "原生移植需要 64 位 ARM 游戏及 Apple 芯片 Mac。不受支持的程序或主机请查看“活动”。";
+"A required build tool is unavailable." = "所需的构建工具不可用。";
+"Open Environment, check the selected destination's requirements and prepare the missing tools. Check Activity for the exact dependency." = "请打开“环境”，检查所选目标的要求并准备缺失的工具。具体依赖项请查看“活动”。";
+"Archive size is compressed. Expanded space is checked during import." = "压缩包显示的是压缩后的大小。导入时会检查解压所需的空间。";
+
+/* Direct macOS installation */
+"Install in" = "安装位置";
+"The port is installed in Applications. Temporary build files are removed automatically." = "移植应用将安装到“应用程序”。构建临时文件会自动删除。";
+"Installing in Applications" = "正在安装到“应用程序”";
+"Installed in Applications" = "已安装到“应用程序”";
+"Could not remove temporary build files." = "无法删除构建临时文件。";
+"Quit the installed game before updating it." = "更新前请退出已安装的游戏。";
+"Build failed. Review Activity or export its log before trying again." = "构建失败。重试前请查看“活动”或导出日志。";
+"A Mac app, installed in Applications." = "Mac 应用，直接安装到“应用程序”。";

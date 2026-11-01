@@ -118,18 +118,42 @@ public enum EnvironmentSetup {
 }
 
 public struct GameFolderSummary: Sendable {
+    public static let supportedInputExtensions: Set<String> = ["nsp", "xci", "nsz", "xcz", "zip", "7z"]
+    public static let archiveExtensions: Set<String> = ["zip", "7z"]
     public let files: [URL]
     public let byteCount: Int64
-    public var estimatedFreeBytesNeeded: Int64 { byteCount * 2 + 10 * 1_073_741_824 }
+    public var containsArchives: Bool { files.contains { Self.archiveExtensions.contains($0.pathExtension.lowercased()) } }
+    /// A planning heuristic. Archive expansion is checked against actual member sizes by the builder.
+    public var estimatedFreeBytesNeeded: Int64 {
+        let (doubled, multiplicationOverflow) = byteCount.multipliedReportingOverflow(by: 2)
+        let (estimate, additionOverflow) = doubled.addingReportingOverflow(10 * 1_073_741_824)
+        return multiplicationOverflow || additionOverflow ? Int64.max : estimate
+    }
     public static func inspect(_ folderURL: URL) throws -> Self {
-        let files = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey])
-            .filter { ["nsp", "xci", "nsz", "xcz"].contains($0.pathExtension.lowercased()) &&
-                (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
+        let fm = FileManager.default
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .isPackageKey, .isHiddenKey]
+        var files: [URL] = []
         var bytes: Int64 = 0
-        for file in files {
-            let values = try file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-            if values.isRegularFile == true { bytes += Int64(values.fileSize ?? 0) }
+        func visit(_ folder: URL, depth: Int) throws {
+            let contents = try fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
+            for file in contents {
+                let values = try file.resourceValues(forKeys: keys)
+                guard values.isSymbolicLink != true, values.isHidden != true, !file.lastPathComponent.hasPrefix(".") else { continue }
+                if values.isDirectory == true {
+                    let name = file.lastPathComponent.lowercased()
+                    guard depth < 4, values.isPackage != true,
+                          !["app", "bundle", "framework", "xcassets", "xcodeproj", "xcworkspace", "appex"].contains(file.pathExtension.lowercased()),
+                          !name.hasSuffix("_build"), !name.hasSuffix("-work"), !name.hasSuffix("_survey") else { continue }
+                    try visit(file, depth: depth + 1)
+                } else if values.isRegularFile == true, supportedInputExtensions.contains(file.pathExtension.lowercased()) {
+                    files.append(file)
+                    let (total, overflow) = bytes.addingReportingOverflow(Int64(values.fileSize ?? 0))
+                    bytes = overflow ? Int64.max : total
+                }
+            }
         }
-        return Self(files: files.sorted { $0.lastPathComponent < $1.lastPathComponent }, byteCount: bytes)
+        let root = try folderURL.resourceValues(forKeys: keys)
+        if root.isDirectory == true, root.isSymbolicLink != true, root.isPackage != true { try visit(folderURL, depth: 0) }
+        return Self(files: files.sorted { $0.path < $1.path }, byteCount: bytes)
     }
 }

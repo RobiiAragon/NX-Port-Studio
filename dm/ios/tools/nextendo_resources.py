@@ -8,17 +8,20 @@ import re
 import shutil
 
 
-SHARED_NAMES = ('NextendoAccount.swift', 'NextendoCatalog.swift')
+SHARED_NAMES = ('NextendoAccount.swift', 'NextendoCatalog.swift', 'NextendoLoopback.swift', 'NextendoServiceProfiles.swift')
 SHARED_DIRECTORY = Path('macOS/NXPortStudio/Sources/PortCore')
 
 
 def stage_engine(repository, engine):
-    """Keep the same two source codecs available in a packaged Studio engine."""
+    """Keep portable account, policy and service codecs in the Studio engine."""
     source = Path(repository) / SHARED_DIRECTORY
     target = Path(engine) / SHARED_DIRECTORY
     target.mkdir(parents=True, exist_ok=True)
     for name in SHARED_NAMES:
         shutil.copyfile(source / name, target / name)
+    contract = Path(engine) / 'dm/net/nextendo-services.json'
+    contract.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(Path(repository) / 'dm/net/nextendo-services.json', contract)
 
 
 def prepare(repository, generated, client_id=''):
@@ -30,6 +33,9 @@ def prepare(repository, generated, client_id=''):
     target.mkdir(parents=True, exist_ok=True)
     for name in SHARED_NAMES:
         shutil.copyfile(source / name, target / name)
+    contract = Path(generated) / 'dm/nextendo-services.json'
+    contract.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(Path(repository) / 'dm/net/nextendo-services.json', contract)
     return client_id
 
 
@@ -41,7 +47,7 @@ if __name__ == '__main__':
             stage_engine(sys.argv[2], sys.argv[3])
         else:
             prepare(sys.argv[1], sys.argv[2], os.environ.get('DM_NEXTENDO_CLIENT_ID', ''))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError):
         # Never print supplied values or any account material.
         print('Nextendo mobile build metadata could not be prepared.', file=sys.stderr)
         raise SystemExit(1) from None

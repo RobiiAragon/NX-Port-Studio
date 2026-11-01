@@ -14,7 +14,7 @@ class NextendoResourcesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             generated = Path(directory)
             self.assertEqual(module.prepare(REPO, generated), '')
-            names = {'NextendoAccount.swift','NextendoCatalog.swift'}
+            names = {'NextendoAccount.swift','NextendoCatalog.swift','NextendoLoopback.swift','NextendoServiceProfiles.swift'}
             self.assertEqual({p.name for p in (generated/'NextendoShared').iterdir()}, names)
             for name in names:
                 self.assertEqual((generated/'NextendoShared'/name).read_bytes(), (REPO/'macOS/NXPortStudio/Sources/PortCore'/name).read_bytes())
@@ -23,7 +23,7 @@ class NextendoResourcesTests(unittest.TestCase):
             engine, generated = Path(directory)/'Engine', Path(directory)/'Gen'
             module.stage_engine(REPO, engine)
             module.prepare(engine, generated)
-            self.assertEqual(len(list(engine.rglob('*.swift'))), 2)
+            self.assertEqual(len(list(engine.rglob('*.swift'))), 4)
             self.assertEqual((generated/'NextendoShared/NextendoAccount.swift').read_bytes(),
                              (REPO/'macOS/NXPortStudio/Sources/PortCore/NextendoAccount.swift').read_bytes())
 

@@ -50,17 +50,17 @@ done
 # Generated compilers, game data, test fixtures and the GUI itself are omitted.
 for SOURCE in dm scripts docs; do
     /usr/bin/rsync -a \
-        --exclude='.git/' --exclude='.build/' --exclude='build/' --exclude='.swiftpm/' \
+        --exclude='.git/' --exclude='.build/' --exclude='.nx-archives/' --exclude='.nx-identify/' --exclude='build/' --exclude='.swiftpm/' \
         --exclude='__pycache__/' --exclude='*.pyc' --exclude='.DS_Store' \
         --exclude='tests/' --exclude='test/' --exclude='obj/' --exclude='bin/' \
         --exclude='*.dSYM/' --exclude='*.partial' --exclude='*_build/' \
-        --exclude='host/gen/' --exclude='ios/Gen/' --exclude='ios/DmIOS.xcodeproj/' \
+        --exclude='fuzz/' --exclude='*.pdb' --exclude='host/gen/' --exclude='ios/Gen/' --exclude='ios/DmIOS.xcodeproj/' \
         --exclude='host/dmhost' --exclude='host/dmhost_*' \
         "$REPO_DIR/$SOURCE" "$ENGINE/"
 done
 cp "$REPO_DIR/LICENSE" "$REPO_DIR"/README*.md "$REPO_DIR/CREDITS.md" \
     "$REPO_DIR/ROADMAP.md" "$REPO_DIR/CONTRIBUTING.md" "$ENGINE/"
-# iOS account setup shares these two portable contracts with Studio. Include
+# iOS account setup shares account, catalog, loopback and service contracts. Include
 # only those sources; the desktop UI and process/build services stay outside.
 python3 "$REPO_DIR/dm/ios/tools/nextendo_resources.py" --stage-engine "$REPO_DIR" "$ENGINE"
 
@@ -106,8 +106,9 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key><string>NXPortStudio</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleShortVersionString</key><string>1.4.2</string>
-    <key>CFBundleVersion</key><string>11</string>
+    <key>CFBundleShortVersionString</key><string>1.6.0</string>
+    <key>CFBundleVersion</key><string>18</string>
+    <key>CFBundleGetInfoString</key><string>1.6.0 Release Candidate 1</string>
     <key>CFBundleDevelopmentRegion</key><string>es</string>
     <key>CFBundleLocalizations</key><array><string>es</string><string>en</string><string>fr</string><string>ja</string><string>zh-Hans</string></array>
     <key>CFBundleIconFile</key><string>AppIcon</string>

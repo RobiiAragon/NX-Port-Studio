@@ -33,6 +33,70 @@ final class BuildCoreTests: XCTestCase {
         XCTAssertThrowsError(try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL))
     }
 
+    func testArchiveOnlyGameFolderCanStartBuildPreparation() throws {
+        let (root, config) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: config.gameDirectoryURL.appendingPathComponent("Test.nsp"))
+        let archive = config.gameDirectoryURL.appendingPathComponent("Base Game.7Z")
+        try Data("synthetic archive input".utf8).write(to: archive)
+        let summary = try GameFolderSummary.inspect(config.gameDirectoryURL)
+        XCTAssertEqual(summary.files.map(\.lastPathComponent), [archive.lastPathComponent])
+        XCTAssertTrue(summary.containsArchives)
+        XCTAssertEqual(summary.byteCount, 23)
+        XCTAssertNoThrow(try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL))
+    }
+
+    func testNestedGameInputsUseCaseInsensitiveExtensionsAndStableOrder() throws {
+        let (root, config) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: config.gameDirectoryURL.appendingPathComponent("Test.nsp"))
+        let paths = ["Updates/Update.NSP", "Base/Game.XCI", "Extras/DLC.NsZ", "Extras/Other.XcZ", "Packed/Bundle.ZIP", "Packed/Base.7z"]
+        for path in paths {
+            let file = config.gameDirectoryURL.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: file)
+        }
+        let summary = try GameFolderSummary.inspect(config.gameDirectoryURL)
+        XCTAssertEqual(summary.files.map { $0.pathComponents.suffix(2).joined(separator: "/") }, paths.sorted())
+        XCTAssertEqual(summary.byteCount, Int64(paths.count * 7))
+        XCTAssertTrue(summary.containsArchives)
+    }
+
+    func testSummaryExcludesHiddenGeneratedPackagesAndDirectoriesBeyondDepthLimit() throws {
+        let (root, config) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: config.gameDirectoryURL.appendingPathComponent("Test.nsp"))
+        let kept = "One/Two/Three/Four/Depth Four.nsp"
+        let excluded = [".nx-archives/cache.nsp", ".hidden.nsp", "Title_build/extracted.nsp", "Title-WORK/extracted.nsp", "Title_SURVEY/extracted.nsp",
+                        "Title.app/Contents/Resources/game.nsp", "Images.xcassets/game.zip", "Build.xcodeproj/game.xci", "One/Two/Three/Four/Five/Too Deep.nsp"]
+        for path in [kept] + excluded {
+            let file = config.gameDirectoryURL.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: file)
+        }
+        let summary = try GameFolderSummary.inspect(config.gameDirectoryURL)
+        XCTAssertEqual(summary.files.map(\.lastPathComponent), ["Depth Four.nsp"])
+        XCTAssertEqual(summary.byteCount, 7)
+        XCTAssertFalse(summary.containsArchives)
+    }
+
+    func testSummaryDoesNotFollowFileDirectoryOrRootSymlinks() throws {
+        let (root, config) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: config.gameDirectoryURL.appendingPathComponent("Test.nsp"))
+        let outside = root.appendingPathComponent("Outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: false)
+        let source = outside.appendingPathComponent("Actual.nsp")
+        try Data("fixture".utf8).write(to: source)
+        try FileManager.default.createSymbolicLink(at: config.gameDirectoryURL.appendingPathComponent("Linked.nsp"), withDestinationURL: source)
+        try FileManager.default.createSymbolicLink(at: config.gameDirectoryURL.appendingPathComponent("Linked Folder"), withDestinationURL: outside)
+        try FileManager.default.createSymbolicLink(at: config.gameDirectoryURL.appendingPathComponent("Dangling.zip"), withDestinationURL: outside.appendingPathComponent("Missing.zip"))
+        XCTAssertTrue(try GameFolderSummary.inspect(config.gameDirectoryURL).files.isEmpty)
+        let linkedRoot = root.appendingPathComponent("Linked Root")
+        try FileManager.default.createSymbolicLink(at: linkedRoot, withDestinationURL: outside)
+        XCTAssertTrue(try GameFolderSummary.inspect(linkedRoot).files.isEmpty)
+    }
+
     func testDirectoryMasqueradingAsGameAndEmptyKeysAreRejected() throws {
         let (root, original) = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }

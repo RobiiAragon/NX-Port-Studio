@@ -289,3 +289,41 @@
 "Homebrew" = "Homebrew";
 "Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation." = "Seule la découverte des salons est relayée. Les appareils se connectent directement pour jouer. L'accès aux salons LAN a été vérifié entre un iPhone et une Switch physique, chacun pouvant héberger ; les courses et LDN restent à valider.";
 "Enter a valid registered Nextendo application client ID." = "Saisissez un identifiant client valide pour une application Nextendo enregistrée.";
+"Xcode has no Apple account configured. Sign in under Xcode → Settings → Apple Accounts with the account for your selected team, then try signing again." = "Aucun compte Apple n’est configuré dans Xcode. Connectez-vous dans Xcode → Settings → Apple Accounts avec le compte de votre équipe, puis réessayez la signature.";
+
+/* Game input discovery */
+"The game folder contains no supported game files or ZIP/7z archives." = "Le dossier ne contient aucun fichier de jeu compatible ni archive ZIP/7z.";
+"NSP, XCI, NSZ, XCZ or ZIP/7z · Base game, updates and DLC together" = "NSP, XCI, NSZ, XCZ ou ZIP/7z · Jeu de base, mises à jour et DLC ensemble";
+
+/* Build failure recovery */
+"The base game is missing." = "Le jeu de base est manquant.";
+"Add the complete base game dump alongside its update or DLC. ZIP and 7z archives are unpacked automatically." = "Ajoutez une copie complète du jeu de base à côté de sa mise à jour ou de ses DLC. Les archives ZIP et 7z sont décompressées automatiquement.";
+"The game files could not be identified." = "Les fichiers du jeu n’ont pas pu être identifiés.";
+"Select a complete NSP, XCI, NSZ or XCZ dump, or a ZIP or 7z archive containing one. Check Activity for the exact file." = "Sélectionnez une copie complète NSP, XCI, NSZ ou XCZ, ou une archive ZIP ou 7z qui en contient une. Consultez Activité pour identifier le fichier.";
+"The folder contains conflicting games." = "Le dossier contient des jeux en conflit.";
+"Keep one base dump and only that game's updates and DLC in the selected folder. Move other games or duplicate bases to another folder." = "Gardez une seule copie du jeu de base et uniquement ses mises à jour et DLC dans le dossier sélectionné. Déplacez les autres jeux ou copies en double ailleurs.";
+"The game archive could not be prepared." = "L’archive du jeu n’a pas pu être préparée.";
+"Check that the archive finished copying. Extract encrypted, nested or unsupported archives beside the update, then select that folder again. The original archive is retained." = "Vérifiez que la copie de l’archive est terminée. Décompressez les archives chiffrées, imbriquées ou non prises en charge à côté de la mise à jour, puis sélectionnez à nouveau le dossier. L’archive originale est conservée.";
+"The console keys file is unavailable." = "Le fichier de clés de la console est inaccessible.";
+"Select a readable, nonempty prod.keys file dumped from your own console." = "Sélectionnez un fichier prod.keys lisible et non vide extrait de votre propre console.";
+"Required console keys are missing." = "Des clés nécessaires de la console sont manquantes.";
+"Select updated prod.keys dumped from your own console that support this game and its update. Key values must stay private." = "Sélectionnez un fichier prod.keys à jour extrait de votre propre console et compatible avec ce jeu et sa mise à jour. Les valeurs des clés doivent rester privées.";
+"The game dump is incomplete or damaged." = "La copie du jeu est incomplète ou endommagée.";
+"Copy a complete dump from your own console again, then retry. Check Activity for the failed file or integrity check." = "Copiez à nouveau une copie complète depuis votre propre console, puis réessayez. Consultez Activité pour le fichier ou le contrôle d’intégrité en échec.";
+"There is not enough free disk space." = "L’espace disque disponible est insuffisant.";
+"Free space on the volume containing the game and build folder, then retry. Check Activity for the required amount." = "Libérez de l’espace sur le volume contenant le jeu et le dossier de compilation, puis réessayez. Consultez Activité pour l’espace requis.";
+"This program cannot run on the selected platform." = "Ce programme ne peut pas fonctionner sur la plateforme sélectionnée.";
+"Native ports require a 64-bit ARM game and an Apple silicon Mac. Check Activity for the unsupported program or host." = "Les ports natifs nécessitent un jeu ARM 64 bits et un Mac Apple silicon. Consultez Activité pour identifier le programme ou l’ordinateur non pris en charge.";
+"A required build tool is unavailable." = "Un outil de compilation requis est indisponible.";
+"Open Environment, check the selected destination's requirements and prepare the missing tools. Check Activity for the exact dependency." = "Ouvrez Environnement, vérifiez les exigences de la destination choisie et installez les outils manquants. Consultez Activité pour la dépendance exacte.";
+"Archive size is compressed. Expanded space is checked during import." = "La taille de l’archive est compressée. L’espace après décompression est vérifié lors de l’importation.";
+
+/* Direct macOS installation */
+"Install in" = "Installer dans";
+"The port is installed in Applications. Temporary build files are removed automatically." = "Le port est installé dans Applications. Les fichiers temporaires de compilation sont supprimés automatiquement.";
+"Installing in Applications" = "Installation dans Applications";
+"Installed in Applications" = "Installé dans Applications";
+"Could not remove temporary build files." = "Impossible de supprimer les fichiers temporaires de compilation.";
+"Quit the installed game before updating it." = "Quittez le jeu installé avant de le mettre à jour.";
+"Build failed. Review Activity or export its log before trying again." = "La compilation a échoué. Consultez Activité ou exportez son journal avant de réessayer.";
+"A Mac app, installed in Applications." = "Une app Mac, installée dans Applications.";

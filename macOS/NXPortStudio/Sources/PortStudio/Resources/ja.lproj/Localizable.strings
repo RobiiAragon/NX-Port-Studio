@@ -289,3 +289,41 @@
 "Homebrew" = "Homebrew";
 "Only room discovery is relayed. Gameplay connects the devices directly. LAN lobby joins are verified with an iPhone and a physical Switch in either host role; racing and LDN still need validation." = "中継するのはルームの検出のみです。対戦時はデバイス同士が直接接続します。iPhoneと実機のSwitchのどちらをホストにしてもLANルームに参加できることを確認済みです。レースとLDNは引き続き検証が必要です。";
 "Enter a valid registered Nextendo application client ID." = "登録済みNextendoアプリケーションの有効なクライアントIDを入力してください。";
+"Xcode has no Apple account configured. Sign in under Xcode → Settings → Apple Accounts with the account for your selected team, then try signing again." = "Xcode に Apple アカウントが設定されていません。Xcode → Settings → Apple Accounts で選択したチームのアカウントにサインインし、署名を再試行してください。";
+
+/* Game input discovery */
+"The game folder contains no supported game files or ZIP/7z archives." = "このフォルダには対応するゲームファイルやZIP/7zアーカイブがありません。";
+"NSP, XCI, NSZ, XCZ or ZIP/7z · Base game, updates and DLC together" = "NSP、XCI、NSZ、XCZ、ZIP/7z · 本編、更新データ、DLCを同じフォルダに";
+
+/* Build failure recovery */
+"The base game is missing." = "ゲーム本編が見つかりません。";
+"Add the complete base game dump alongside its update or DLC. ZIP and 7z archives are unpacked automatically." = "本編の完全なダンプを更新データやDLCと同じフォルダに置いてください。ZIPと7zは自動的に展開されます。";
+"The game files could not be identified." = "ゲームファイルを識別できませんでした。";
+"Select a complete NSP, XCI, NSZ or XCZ dump, or a ZIP or 7z archive containing one. Check Activity for the exact file." = "完全なNSP、XCI、NSZ、XCZダンプ、またはそれを含むZIP・7zを選択してください。該当ファイルは「アクティビティ」で確認できます。";
+"The folder contains conflicting games." = "フォルダ内のゲームが競合しています。";
+"Keep one base dump and only that game's updates and DLC in the selected folder. Move other games or duplicate bases to another folder." = "選択したフォルダには本編のダンプを1つと、そのゲームの更新データ・DLCだけを置いてください。他のゲームや重複した本編は別のフォルダへ移動してください。";
+"The game archive could not be prepared." = "ゲームのアーカイブを準備できませんでした。";
+"Check that the archive finished copying. Extract encrypted, nested or unsupported archives beside the update, then select that folder again. The original archive is retained." = "アーカイブのコピーが完了しているか確認してください。暗号化・入れ子・未対応形式のアーカイブは更新データの隣に手動で展開し、フォルダを選び直してください。元のアーカイブは保持されます。";
+"The console keys file is unavailable." = "本体の鍵ファイルを使用できません。";
+"Select a readable, nonempty prod.keys file dumped from your own console." = "自分の本体から取得した、空でない読み取り可能なprod.keysを選択してください。";
+"Required console keys are missing." = "必要な本体の鍵が不足しています。";
+"Select updated prod.keys dumped from your own console that support this game and its update. Key values must stay private." = "このゲームと更新データに対応した最新のprod.keysを自分の本体から取得して選択してください。鍵の値は公開しないでください。";
+"The game dump is incomplete or damaged." = "ゲームのダンプが不完全、または破損しています。";
+"Copy a complete dump from your own console again, then retry. Check Activity for the failed file or integrity check." = "自分の本体から完全なダンプをコピーし直して再試行してください。失敗したファイルや整合性検証は「アクティビティ」で確認できます。";
+"There is not enough free disk space." = "ディスクの空き容量が不足しています。";
+"Free space on the volume containing the game and build folder, then retry. Check Activity for the required amount." = "ゲームとビルドフォルダがあるボリュームの空き容量を増やして再試行してください。必要な容量は「アクティビティ」で確認できます。";
+"This program cannot run on the selected platform." = "このプログラムは選択したプラットフォームで実行できません。";
+"Native ports require a 64-bit ARM game and an Apple silicon Mac. Check Activity for the unsupported program or host." = "ネイティブポートには64ビットARMのゲームとApple silicon搭載Macが必要です。未対応のプログラムやホストは「アクティビティ」で確認できます。";
+"A required build tool is unavailable." = "必要なビルドツールを使用できません。";
+"Open Environment, check the selected destination's requirements and prepare the missing tools. Check Activity for the exact dependency." = "「環境」で選択した出力先の要件を確認し、不足しているツールを準備してください。該当する依存関係は「アクティビティ」で確認できます。";
+"Archive size is compressed. Expanded space is checked during import." = "アーカイブは圧縮後のサイズです。展開に必要な空き容量はインポート時に確認します。";
+
+/* Direct macOS installation */
+"Install in" = "インストール先";
+"The port is installed in Applications. Temporary build files are removed automatically." = "ポートはアプリケーションにインストールされます。ビルドの一時ファイルは自動的に削除されます。";
+"Installing in Applications" = "アプリケーションにインストール中";
+"Installed in Applications" = "アプリケーションにインストール済み";
+"Could not remove temporary build files." = "ビルドの一時ファイルを削除できませんでした。";
+"Quit the installed game before updating it." = "更新する前にインストール済みのゲームを終了してください。";
+"Build failed. Review Activity or export its log before trying again." = "ビルドに失敗しました。再試行する前にアクティビティを確認するか、ログを書き出してください。";
+"A Mac app, installed in Applications." = "アプリケーションにインストールされるMacアプリ。";

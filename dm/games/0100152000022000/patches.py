@@ -5,7 +5,7 @@
 # they do not reuse the mod's code caves or change the game's frame interval.
 from nso_asm import ADRP, ADDI, LDRX, CMPR, B, STP_PRE, LDP_POST
 
-ASPECT_BUILD = 'fe941ed5ba14be5d505698da1bbf4fe7'
+aspect_build = 'fe941ed5ba14be5d505698da1bbf4fe7'
 
 
 def race_factor(ctx, scalar):
@@ -134,4 +134,10 @@ def display_aspect(ctx):
 
 # Exact-build rewrite; runtime UI qualification is platform-specific.
 # Mac admits active local one-player GP; other modes keep native output.
-DISPLAY_ASPECT = {ASPECT_BUILD: display_aspect}
+DISPLAY_ASPECT = {aspect_build: display_aspect}
+
+# Exact scene/mode/layout addresses keep this candidate bound to its reviewed build.
+BINDING = [
+    {'what': 'race camera aspect and temporary UI matrices', 'now': 'build', 'goal': 'unreviewed', 'purpose': 'rendering',
+     'why': 'the original-byte guarded projection sites, scene vtable and race layout have only been reviewed for 3.0.5'},
+]

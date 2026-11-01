@@ -11,6 +11,7 @@ typedef struct { uint64_t v[3]; } UserHandle;          // nn::account::UserHandl
 _Static_assert(sizeof(Uid) == 16, "Uid");
 static const Uid k_uid = {{0x78626c0000000001ull, 0x53574e4154495645ull}};   // Non-zero means valid
 int dm_account_uid_exists(const void *uid) { return uid && !memcmp(uid, &k_uid, sizeof k_uid); }
+int dm_account_copy_uid(void *output) { if (!output) return 0; memcpy(output,&k_uid,sizeof k_uid); return 1; }
 #define HANDLE_MAGIC 0x55534552484e444cull                                    // "USERHNDL"
 static int online_user(const UserHandle *h) { return h && h->v[2] == HANDLE_MAGIC && h->v[0] == k_uid.v[0] && h->v[1] == k_uid.v[1]; }
 
@@ -26,7 +27,7 @@ HLE_FORCE("_ZN2nn7account12ListAllUsersEPiPNS0_3UidEi", "list of all users; alwa
     if (max > 0) { out[0] = k_uid; *n = 1; }
     return RES_OK;
 }
-HLE_FORCE("_ZN2nn7account16ShowUserSelectorEPNS0_3UidERKNS0_21UserSelectionSettingsE", "user selection applet; the host picks the local user directly", Result, h_acc_ShowSel, Uid *out, const void *settings) {
+HLE_FORCE("_ZN2nn7account16ShowUserSelectorEPNS0_3UidERKNS0_21UserSelectionSettingsE", "user selection applet; the host picks the local user directly", Result, h_acc_ShowSel, Uid *out, const void *settings) { DM_APPLET("user selector");
     (void)settings; *out = k_uid; return RES_OK;
 }
 // Take the users the system opened on the application's behalf (Mario 1.2.1 asks this first and falls back to TryOpenPreselectedUser on 0; the game only reads the count, not the return value):
@@ -61,7 +62,7 @@ HLE_FORCE("_ZN2nn7account11GetNicknameEPNS0_8NicknameERKNS0_3UidE", "user nickna
 
 // ---------- Online accounts: a real Nextendo credential, scoped to the local user ----------
 HLE_FORCE_WAIT("_ZN2nn7account36EnsureNetworkServiceAccountAvailableERKNS0_10UserHandleE", "network service account requires the user's actual unexpired Nextendo NEX proof", Result, h_acc_EnsureNsa, const UserHandle *h) { return online_user(h) ? dm_nextendo_account_ensure() : RES_FAIL; }
-HLE_FORCE_WAIT("_ZN2nn7account26GetNetworkServiceAccountIdEPNS0_23NetworkServiceAccountIdERKNS0_10UserHandleE", "network service account uses the credential's actual PID", Result, h_acc_GetNsaId, uint64_t *id, const UserHandle *h) { if (id) *id = 0; return online_user(h) ? dm_nextendo_account_id(id) : RES_FAIL; }
+HLE_FORCE_WAIT("_ZN2nn7account26GetNetworkServiceAccountIdEPNS0_23NetworkServiceAccountIdERKNS0_10UserHandleE", "real provider PID or required server-reported BAAS identity", Result, h_acc_GetNsaId, uint64_t *id, const UserHandle *h) { if (id) *id = 0; return online_user(h) ? dm_nextendo_account_id(id) : RES_FAIL; }
 HLE_FORCE_WAIT("_ZN2nn7account37LoadNetworkServiceAccountIdTokenCacheEPmPcmRKNS0_10UserHandleE", "real NEX proof in the native game's cached account token", Result, h_acc_LoadTok, uint64_t *n, char *buf, uint64_t sz, const UserHandle *h) {
     if (n) *n = 0; return online_user(h) ? dm_nextendo_account_load_token(n, buf, sz) : RES_FAIL;
 }
@@ -109,7 +110,7 @@ HLE_FORCE("_ZN2nn7account18ListQualifiedUsersEPiPNS0_3UidEi", "list of qualified
 HLE_FORCE("_ZN2nn7account16GetUserExistenceEPbRKNS0_3UidE", "whether a user exists; true for the local user", Result, h_acc_Exists, uint8_t *out, const Uid *uid) {
     *out = dm_account_uid_exists(uid); return RES_OK;
 }
-HLE_FORCE("_ZN2nn7account15ShowUserCreatorEv", "user creation applet; the host already has its local user", Result, h_acc_ShowCreator, void) { return RES_OK; }
+HLE_FORCE("_ZN2nn7account15ShowUserCreatorEv", "user creation applet; the host already has its local user", Result, h_acc_ShowCreator, void) { DM_APPLET("user creator"); return RES_OK; }
 HLE_FORCE("_ZN2nn7account16LoadProfileImageEPmPvmRKNS0_3UidE", "user profile image; the host has none (fails)", Result, h_acc_LoadImage, uint64_t *n, void *buf, uint64_t sz, const Uid *uid) {
     (void)buf; (void)sz; (void)uid; if (n) *n = 0; return RES_FAIL;
 }

@@ -47,6 +47,13 @@ jobs:
         run: >-
           python -m unittest
           dm.tools.tests.test_docs
+          dm.tools.tests.test_patches
+          dm.tools.tests.test_nsp_heap_check
+          dm.tools.tests.test_game_inputs
+          dm.tools.tests.test_nextendo_services
+          dm.tools.tests.test_nextendo_patches
+          dm.tools.tests.test_dotnet_environment
+          dm.tools.tests.test_nsp_nsz
           dm.tools.tests.test_nso_syms
           dm.tools.tests.test_system_data
           dm.tools.tests.test_launcher_settings
@@ -54,6 +61,7 @@ jobs:
           dm.ios.tests.test_launcher_storage
           dm.ios.tests.test_mobile_nextendo
           dm.ios.tests.test_nextendo_resources
+          dm.ios.tests.test_nextendo_embed
           tools.maintainers.test_prepare_export
       - name: Display geometry and build policy / synthetic modules
         run: make -C dm/host/tests display display-sanitize
@@ -71,6 +79,18 @@ jobs:
         run: python3 tools/maintainers/ci_network_checks.py relay
       - name: Local play-history service and sanitizers
         run: python3 tools/maintainers/ci_network_checks.py friends-history
+      - name: Native account, social API and signed-code fixtures
+        run: >-
+          make -C dm/host/tests GAME=0100152000022000
+          nextendo-account nextendo-account-sanitize
+          nextendo-api nextendo-api-sanitize nextendo-social nextendo-social-sanitize nro
+          nsd nsd-sanitize
+      - name: Install private-PKI fixture command
+        run: brew install openssl@4
+      - name: Scoped routing and strict private-PKI verification
+        run: >-
+          make -C dm/host/tests
+          nextendo-routes nextendo-routes-sanitize nextendo-x509 nextendo-x509-sanitize
   firmware-tools:
     name: Firmware parser / synthetic data
     runs-on: ubuntu-latest
@@ -84,3 +104,5 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Bounded firmware resource extraction
         run: dotnet run --project dm/tools/tests/friends_firmware_fixture/FriendsFirmwareTests.csproj --configuration Release
+      - name: Read-only game container identification
+        run: dotnet run --project dm/tools/tests/container_identity_fixture/ContainerIdentityTests.csproj --configuration Release
