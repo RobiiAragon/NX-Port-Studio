@@ -8958,7 +8958,10 @@ static void fb_prepare(NvProg *pr) {
             if (t.mipmapLevelCount != 1 || tn != 1) {   // mip-chain and layer passes (render level or layer n while the view covers the chain, sampling another): not snapshotted
                 static int once; if (!once++) MLOG("same-pass feedback sampling: shader %s renders level %d layer %d while its view covers levels %lu+%lu, layers %lu+%lu; left as is (mip-chain or layer pass)", fs->key, lv, sl, (unsigned long)tl, (unsigned long)t.mipmapLevelCount, (unsigned long)ts, (unsigned long)tn);
                 continue; }
-            if (t.textureType != MTLTextureType2D || t.sampleCount != 1 || ts != (NSUInteger)sl || b->dtt != MTLTextureType2D || base.parentTexture) {
+            // encode_args adapts the snapshot through tex_fit, just as it adapts
+            // the original 2D attachment for a shader declaring a one-slice array.
+            if (t.textureType != MTLTextureType2D || t.sampleCount != 1 || ts != (NSUInteger)sl ||
+                (b->dtt != MTLTextureType2D && b->dtt != MTLTextureType2DArray) || base.parentTexture) {
                 RED_ONCE(80, "same-pass feedback sampling: the sampled view is not a single-level 2D view of the attachment's level and layer (type %lu levels %lu+%lu layer %lu, attachment level %d layer %d, shader %s); left as is", (unsigned long)t.textureType, (unsigned long)tl, (unsigned long)t.mipmapLevelCount, (unsigned long)ts, lv, sl, fs->key);
                 continue; }
             NSUInteger w = MAX(base.width >> lv, 1ul), h = MAX(base.height >> lv, 1ul); int fresh;
