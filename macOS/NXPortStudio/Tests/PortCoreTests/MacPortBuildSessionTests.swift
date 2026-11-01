@@ -10,14 +10,20 @@ final class MacPortBuildSessionTests: XCTestCase, @unchecked Sendable {
         return root
     }
 
-    private func app(at url: URL, title: String = "0100000000000000", signed: Bool = true) async throws {
+    private func app(at url: URL, title: String = "0100000000000000", signed: Bool = true, primary: Bool = false) async throws {
         let fm = FileManager.default
         let mac = url.appendingPathComponent("Contents/MacOS")
         try fm.createDirectory(at: mac, withIntermediateDirectories: true)
         // A synthetic, unrelated system executable; no game or console files.
-        for name in ["dmhost", "launcher"] { try fm.copyItem(atPath: "/usr/bin/true", toPath: mac.appendingPathComponent(name).path) }
-        let info = ["CFBundleIdentifier": "org.nxnative.tests.game", "CFBundleExecutable": "launcher",
-                    "CFBundlePackageType": "APPL", "DMTitleID": title]
+        let paths = primary ? ["MacOS/nxnative", "Frameworks/DMMacBootstrap.dylib", "Helpers/dm-save-supervisor"] : ["MacOS/dmhost", "MacOS/launcher"]
+        for path in paths {
+            let file = url.appendingPathComponent("Contents/" + path)
+            try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.copyItem(atPath: "/usr/bin/true", toPath: file.path)
+        }
+        var info: [String: Any] = ["CFBundleIdentifier": "org.nxnative.tests.game", "CFBundleExecutable": primary ? "nxnative" : "launcher",
+                                  "CFBundlePackageType": "APPL", "DMTitleID": title]
+        if primary { info["DMPrimaryHost"] = true }
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
             .write(to: url.appendingPathComponent("Contents/Info.plist"))
         if signed {
@@ -39,6 +45,30 @@ final class MacPortBuildSessionTests: XCTestCase, @unchecked Sendable {
             XCTAssertFalse(FileManager.default.fileExists(atPath: session.rootURL.path))
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: parent.path), ["Game.app"])
         }
+    }
+
+    func testPrimaryHostCanAtomicallyReplaceLegacyPort() async throws {
+        let parent = try fixture(), target = parent.appendingPathComponent("Game.app")
+        try await app(at: target)
+        let session = try MacPortBuildSession(destinationURL: target)
+        defer { try? session.cleanup() }
+        try await app(at: session.applicationURL, primary: true)
+        _ = try await session.install(using: ProcessRunner())
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: target.appendingPathComponent("Contents/MacOS/nxnative").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.appendingPathComponent("Contents/MacOS/dmhost").path))
+    }
+
+    func testIncompletePrimaryHostPreservesExistingPort() async throws {
+        let parent = try fixture(), target = parent.appendingPathComponent("Game.app")
+        try await app(at: target)
+        let original = try Data(contentsOf: target.appendingPathComponent("Contents/Info.plist"))
+        let session = try MacPortBuildSession(destinationURL: target)
+        defer { try? session.cleanup() }
+        try await app(at: session.applicationURL, primary: true)
+        try FileManager.default.removeItem(at: session.applicationURL.appendingPathComponent("Contents/Helpers/dm-save-supervisor"))
+        do { _ = try await session.install(using: ProcessRunner()); XCTFail("Incomplete primary host was accepted") }
+        catch { /* No installed file may change. */ }
+        XCTAssertEqual(try Data(contentsOf: target.appendingPathComponent("Contents/Info.plist")), original)
     }
 
     func testEngineGenerationCannotLeaveFilesInSourceCheckout() async throws {

@@ -4,6 +4,7 @@
 #include "dm.h"
 #include <fcntl.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
@@ -32,7 +33,9 @@ static void *fdstat_main(void *arg) {
     }
     return NULL;
 }
-__attribute__((constructor)) static void fdstat_init(void) {
+void dm_fdstat_start(void) {
     const char *e = getenv("DM_FD_LOG"); int every = e ? atoi(e) : 0; if (every <= 0) return;
+    static _Atomic int started; if (atomic_exchange(&started, 1)) return;
     pthread_t t; if (!pthread_create(&t, NULL, fdstat_main, (void *)(intptr_t)every)) pthread_detach(t);
 }
+__attribute__((constructor)) static void fdstat_init(void) { dm_fdstat_start(); }

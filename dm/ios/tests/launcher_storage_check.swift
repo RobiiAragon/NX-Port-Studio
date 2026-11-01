@@ -5,6 +5,8 @@ import Foundation
     static func main() {
         var failed = 0
         func expect(_ c: Bool, _ what: String) { print((c ? "PASS " : "FAIL ") + what); if !c { failed += 1 } }
+        let hudNotices = LauncherUILanguage.allCases.map(MacHUDNotice.text)
+        expect(hudNotices.count == 5 && Set(hudNotices).count == 5 && hudNotices.allSatisfy { !$0.isEmpty }, "Mac HUD reopening notice is available in all five interface languages")
         let file = try! JSONDecoder().decode(SettingsFile.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
         let suite = "nxnative.launcher-test." + UUID().uuidString
         let d = UserDefaults(suiteName: suite)!

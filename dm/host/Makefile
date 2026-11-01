@@ -24,7 +24,7 @@ DM_OPENSSL_ROOT ?= $(shell python3 ../tools/apple_crypto.py macos)
 NEXTENDO_CRYPTO_FLAGS = -DDM_OPENSSL_X509 "-I$(DM_OPENSSL_ROOT)/include"
 NEXTENDO_CRYPTO_LIB = "$(DM_OPENSSL_ROOT)/lib/libcrypto.a"
 # Service-layer takeovers include their C ABI and native Apple implementations.
-SRC=main.c loader.c hle.c crash.c probe.c thread.c save_sync.c memstat.m haptics_apple.m $(sort $(wildcard hle_*.c hle_*.m)) front_mac.m entry.S
+SRC=main.c loader.c hle.c crash.c probe.c thread.c save_sync.c memstat.m haptics_apple.m $(sort $(wildcard hle_*.c hle_*.m)) bundle_mac.c front_mac.m entry.S
 # NVN null device + nn::vi + the Vulkan layer (dm/gfx/)
 # Sources under dm/gfx, dm/gfx/nvn, dm/gfx/tex, dm/gfx/vk and dm/gfx/gl are included by wildcard (tests/ and metal/ do not go into the host): adding a file does not touch this line
 GFX=$(sort $(wildcard ../gfx/*.c ../gfx/nvn/*.c ../gfx/nvn/*.m ../gfx/nvn/*.S ../gfx/tex/*.c ../gfx/tex/*.m ../gfx/vk/*.m ../gfx/gl/*.m))

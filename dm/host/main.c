@@ -3,6 +3,10 @@
 #include "front.h"
 #include "../gfx/nvn/dmsh_chain.h"
 #include <CoreFoundation/CoreFoundation.h>
+#include <TargetConditionals.h>
+#if TARGET_OS_OSX
+#include "bundle_mac.h"
+#endif
 #include <stdatomic.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
@@ -132,6 +136,14 @@ void dm_host_preload_start(int argc, char **argv) {
 }
 int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--validate-hle")) { void dm_validate_hle_registry(void); dm_validate_hle_registry(); return 0; }
+#if TARGET_OS_OSX
+    { int result = dm_mac_bundle_prepare(&argc, &argv); if (result >= 0) return result; }
+    // A primary app can acquire diagnostic options from env.txt or settings
+    // after dyld's constructors. Retrying these idempotent starts preserves
+    // those options; plain CLI and iOS constructor behavior is unchanged.
+    { void dm_fdstat_start(void); void dm_memstat_start(void); void dm_thrcpu_start(void);
+      front_hud_env(); dm_fdstat_start(); dm_memstat_start(); dm_thrcpu_start(); }
+#endif
     front_prepare_network();
     { int mtl_pso_prebuild_tool(void); if (mtl_pso_prebuild_tool()) return 0; }   // DM_PSO_PREBUILD=tool: the pipeline archive's prebuild alone, no game (nvn_mtl.m)
     if (getenv("DM_PRELOAD")) dm_host_preload_start(argc, argv);   // Exercise the early-start path on Mac (on iOS it is called from the App's main())
