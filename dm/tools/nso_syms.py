@@ -60,9 +60,24 @@ def host_hooks(host, forced=True):
     forced=False leaves out the HLE_FORCE hooks: some wrap the module's own function (glslcCompile), so the module that defines it is still needed"""
     hooks = set()
     for f in glob.glob(os.path.join(host, '*.c')) + glob.glob(os.path.join(host, '../gfx/*.c')) + glob.glob(os.path.join(host, '../gfx/nvn/*.c')):
-        t = open(f, encoding='utf-8', errors='replace').read()
-        hooks |= set(re.findall(r'\bHLE\(\s*"([^"]+)"', t))
-        if forced: hooks |= set(re.findall(r'\bHLE_FORCE(?:_BIG|_WAIT)?\(\s*"([^"]+)"', t))
+        with open(f, encoding='utf-8', errors='replace') as source: t = source.read()
+        # Local wrappers such as SKF / SKW forward their first argument to an
+        # HLE declaration. They register the same symbols as direct calls;
+        # missing them made the network survey report working socket hooks as
+        # absent. Track the declaration kind so forced=False still omits them.
+        kinds = {'HLE': False, 'HLE_FORCE': True, 'HLE_FORCE_BIG': True, 'HLE_FORCE_WAIT': True}
+        definitions = re.findall(r'^\s*#\s*define\s+(\w+)\(([^)]*)\)\s+([^\n]+)', t.replace('\\\n', ''), re.M)
+        for _ in range(len(definitions)):
+            added = False
+            for name, params, body in definitions:
+                first = params.split(',')[0].strip()
+                call = re.match(r'(\w+)\(\s*(\w+)\s*,', body)
+                if name not in kinds and call and call[1] in kinds and call[2] == first:
+                    kinds[name] = kinds[call[1]]; added = True
+            if not added: break
+        for name, takeover in kinds.items():
+            if forced or not takeover:
+                hooks |= set(re.findall(r'\b' + re.escape(name) + r'\(\s*"([^"]+)"', t))
         if os.path.basename(f) == 'hle_table.c': hooks |= set(re.findall(r'\bL\((\w+)\)', t))
     for f in glob.glob(os.path.join(host, '../gfx/vk/*.m')):
         hooks |= set(re.findall(r'^VKB?\((vk\w+),', open(f, encoding='utf-8', errors='replace').read(), re.M))
