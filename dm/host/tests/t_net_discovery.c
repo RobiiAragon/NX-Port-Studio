@@ -58,6 +58,9 @@ static void ranges(void) {
     CHECK(dm_net_discovery_subnet(&p,htonl(0xc0a808ff),htonl(0xffffff00))<0);
 }
 static void traffic(void) {
+    // Hold completed one-peer jobs in the queue: a second identical datagram
+    // must still be sent. This reproduces the worker scheduling race exactly.
+    dm_net_test_pause_discovery_worker(1);
     dm_net_test_interface a=adapter(0xfffffffc); CHECK(a.index); dm_net_test_set_interface(&a);
     unsigned port; int native=receiver(&port),guest=dm_net_socket(2,2,0); CHECK(guest>=0);
     address own=endpoint(INADDR_LOOPBACK,0); CHECK(!dm_net_bind(guest,&own,sizeof own)); unsigned n=sizeof own; CHECK(!dm_net_name(guest,&own,&n,0));
@@ -72,6 +75,10 @@ static void traffic(void) {
     dm_net_pollfd ready={guest,1,0}; CHECK(dm_net_poll(&ready,1,1000)==1);
     address peer; n=sizeof peer; CHECK(dm_net_recv(guest,bytes,sizeof bytes,0,&peer,&n)==6 && !memcmp(bytes,"answer",6));
     CHECK(peer.ip==htonl(INADDR_LOOPBACK) && peer.port==htons(port));
+    // Repeating the exact completed one-peer query must send again even while
+    // the paused worker has not yet retired the first job.
+    CHECK(dm_net_send(guest,query,sizeof query,0,&destination,sizeof destination)==sizeof query);
+    CHECK(read_packet(native,bytes,sizeof bytes,&from)==sizeof query && !memcmp(bytes,query,sizeof query));
     // Directed subnet broadcast enters exactly the same unicast route.
     destination.ip=htonl(0x7f000003);
     // A distinct nonce tests this route independently: an identical outstanding
@@ -85,6 +92,7 @@ static void traffic(void) {
     CHECK(read_packet(native,bytes,sizeof bytes,&from)==8 && !memcmp(bytes,"ordinary",8));
     destination.ip=htonl(UINT32_MAX); CHECK(dm_net_send(guest,query,sizeof query,0,&destination,sizeof destination)<0 && dm_net_errno()==22);
     unsetenv("DM_NET_DISCOVERY_PEER"); CHECK(!dm_net_close(guest)); close(native);
+    dm_net_test_pause_discovery_worker(0);
 }
 static void bounds_and_lifetime(void) {
     dm_net_test_interface a=adapter(0xfffff000); dm_net_test_set_interface(&a);
