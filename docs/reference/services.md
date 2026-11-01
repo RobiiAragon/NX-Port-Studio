@@ -1056,3 +1056,20 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Checks:** 40 configurations and 605 checks pass normally and under ASan/UBSan, including a real encrypted numeric-handoff exchange, changed certificate rejection before application data, unchanged service identity, unknown numeric denial and six invalid pairing cases. The observed live secure endpoint independently presented the exact previously enrolled certificate. A native handshake-only probe sent no account or application data; actual matchmaking remains separate validation.
 - **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) 13.0.5, after the original service reached its HTTP 101 and binary traffic stage.
 - **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) 13.0.5, SDK 8.2.1. Diagnostics read no account data.
+
+
+## Native calendar delivery
+
+### BCAT data unavailable after account authorization
+
+- **Symptom:** the game has an account but cannot read its delivery calendar; the old delivery mount always fails, or original SDK delivery-file calls reach an unavailable service.
+- **Cause:** account credentials, game-version eligibility and delivered resources are different requirements. Public resource downloads were not staged, and only BCAT initialization had a host implementation.
+- **Fix:** I prepare and revalidate a complete provider resource snapshot, mount actual read-only files and implement SDK file/directory/progress operations. A failed refresh retains the validated cache and never becomes an empty successful delivery. I document the supported recipes, integrity boundary and startup publication behavior in [Native delivery calendars](nextendo-bcat.md).
+- **Found on:** my private provisional Splatoon 2 EUR 5.5.2 bring-up (SDK 3.4.1); [validation and remaining qualification](nextendo-bcat.md#validation-and-remaining-bring-up). I have not established online gameplay for that port.
+
+### System gameplay recording dereferences an unavailable applet proxy
+
+- **Symptom:** startup crashes in `nn::oe::EnableGamePlayRecording` after `CreateTransferMemory`, while the recording applet proxy is null.
+- **Cause:** I have no host system-recorder service. The original SDK proceeds through the console's applet proxy even when the host can render the game independently.
+- **Fix:** I report `IsGamePlayRecordingSupported=false` and handle its void enable/pause/restart controls without claiming a recording or consuming the supplied buffer. This is an explicit platform capability limit, separate from game rendering or a memory allocation fix.
+- **Found on:** Splatoon 2 EUR 5.5.2, SDK 3.4.1; after this change my bounded headless bootstrap reached its frame loop for 15 seconds. Rendering with translated game shaders remains unqualified; [bring-up evidence](nextendo-bcat.md#validation-and-remaining-bring-up).

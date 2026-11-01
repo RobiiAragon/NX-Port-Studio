@@ -135,6 +135,14 @@ HLE_FORCE("_ZN2nn2oe30InitializeCopyrightFrameBufferEPvm", "copyright overlay bu
 HLE_FORCE("_ZN2nn2oe17SetCopyrightImageEPKvmiiiiNS0_16WindowOriginModeE", "copyright overlay image; the host has no system screenshot", void, h_oe_CopyrightImage, const void *p, size_t n, int x, int y, int w, int h, int origin) { (void)p; (void)n; (void)x; (void)y; (void)w; (void)h; (void)origin; }
 HLE_FORCE("_ZN2nn2oe22SetCopyrightVisibilityEb", "copyright overlay visibility; the host has no system screenshot", void, h_oe_CopyrightVisible, int on) { (void)on; }
 
+// Splatoon 2 (SDK 3.4.1): EnableGamePlayRecording dereferences am's
+// unavailable applet proxy after allocating transfer memory. The host has no
+// system recorder; expose that capability honestly and leave its buffers alone.
+HLE_FORCE("_ZN2nn2oe28IsGamePlayRecordingSupportedEv", "system gameplay recording is unavailable on this host", unsigned, h_oe_RecordingSupported, void) { return 0; }
+HLE_FORCE("_ZN2nn2oe23EnableGamePlayRecordingEPvm", "no system recorder: do not claim or consume the guest buffer", void, h_oe_RecordingEnable, void *buffer, size_t size) { (void)buffer; (void)size; LOG("oe: system gameplay recording unavailable"); }
+HLE_FORCE("_ZN2nn2oe22PauseGamePlayRecordingEv", "no system recorder to pause", void, h_oe_RecordingPause, void) {}
+HLE_FORCE("_ZN2nn2oe24RestartGamePlayRecordingEv", "no system recorder to restart", void, h_oe_RecordingRestart, void) {}
+
 // OperationMode: 0 Handheld, 1 Console; PerformanceMode: 0 Normal, 1 Boost (one-to-one with the operation mode)
 HLE_FORCE("_ZN2nn2oe16GetOperationModeEv", "operation mode query; a fixed value from DM_OPMODE", int, h_oe_GetOpMode, void) { return opmode(); }
 // Profile perf_mode boost: Boost whatever the operation mode, a combination a Switch 1 never reports, so a profile choice and not a default. Rhythm Heaven Groove keeps one flag per mode

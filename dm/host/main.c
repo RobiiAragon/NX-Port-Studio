@@ -12,6 +12,7 @@
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include "net_socket.h"
 void probe_install(void); void hid_keys_init(void); void stubs_report(void); void crash_install(void); void guest_thread_init(void); void guest_gate_stack(int own_stack); uint32_t svc_thread_main_init(void);
 typedef void (*fn0)(void); typedef void (*fn2)(uint64_t, uint64_t); typedef void (*fnp)(void *);
 static void *req(const char *n){ void *p=guest_sym(n); if(!p) die("missing symbol %s", n); return p; }
@@ -156,6 +157,8 @@ int main(int argc, char **argv) {
     } else host_preload(argc, argv);
     { void dm_fps_state_apply(void); dm_fps_state_apply(); }   // frame rate and render scale into the frame step state page (loader.c): the iOS launcher sets them after the loading began
     { void dm_display_apply(void); dm_display_apply(); }
+    { void dm_bcat_start(const char *, const char *, int);
+      dm_bcat_start(argc > 1 ? argv[1] : NULL, DM_GAME_ID, dm_net_nextendo_enabled()); }
     front_run(guest_main);
     return 0;
 }
