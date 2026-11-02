@@ -20,7 +20,10 @@
 // the loader's module table (loader.c allocates it from the NSO list and the NRO manifest), here a fixed array: "main"
 // and the second modules "sdk" and "sdk2"
 static module_t mods[3]; module_t *g_mod = mods; int g_nmod;
-uint64_t now_ns(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec; }
+// This VM fixture drives passes itself. A controlled presentation timestamp keeps
+// the real idle worker in its normal stand-down branch, independent of CI load.
+static const uint64_t test_now = 1000000000ull;
+uint64_t now_ns(void) { return test_now; }
 void dm_guest_write_prepare(void *addr, size_t len) { (void)addr; (void)len; }   // no dirty-page tracking in the test
 static uint8_t *heap; static size_t heap_open;   // the guest heap (hle_svc.c): a plain buffer, opened in full
 void dm_guest_heap_range(uint64_t *base, size_t *open_len) { *base = (uint64_t)(uintptr_t)heap; *open_len = heap_open; }
@@ -106,6 +109,7 @@ static cheat_t *entry(const char *name) {
 static void on_and_pass(int i) { if (!dm_cheat_on_at(i)) dm_cheat_toggle(i); cheats_pass(); }
 
 int main(void) {
+    atomic_store(&g_present_ns, test_now);
     const char *tmp = getenv("TMPDIR");
     snprintf(root, sizeof root, "%s/t_cheats.XXXXXX", tmp && *tmp ? tmp : "/tmp");
     if (!mkdtemp(root)) { perror("mkdtemp"); return 1; }
@@ -215,6 +219,9 @@ int main(void) {
     CHECK(entry("far")[0].fails == 3 && strstr(dm_cheat_why_at(at("far", 0)), "2 accesses"), "the note is rewritten sparingly (powers of two, or once a second): 3 still reads 2");
     cheats_pass();
     CHECK(entry("far")[0].fails == 4 && strstr(dm_cheat_why_at(at("far", 0)), "4 accesses"), "and reads 4 at the fourth");
+    entry("far")[0].note_ns = 0; // One second old, without racing a wall-clock boundary.
+    cheats_pass();
+    CHECK(entry("far")[0].fails == 5 && strstr(dm_cheat_why_at(at("far", 0)), "5 accesses"), "a non-power-of-two count refreshes after one second");
     entry("far")[0].fails = 1;   // back to the count the dry-run check below expects
     char dry[512]; dm_cheat_preview(at("far", 0), dry, sizeof dry);
     CHECK(strstr(dry, "write at guest address") && strstr(dry, "fails") && entry("far")[0].fails == 1, "the dry run describes the failure and counts nothing");
@@ -511,6 +518,7 @@ int main(void) {
     for (int i = 0; i < g_ncheat; i++) if (!dm_cheat_on_at(i) && dm_cheat_kind_at(i) == 0) dm_cheat_toggle(i);
     cheats_pass();
     int fl = at("Fail", 0), ptr = at("Ptr", 0), farw = at("FarW", 0), stk = at("Stack", 0), mod = at("Module", 0);
+    if (fl < 0 || ptr < 0 || farw < 0 || stk < 0 || mod < 0) { fprintf(stderr, "missing synthetic access-failure entry\n"); return 1; }
     CHECK(rd32(0x43A0) == 0x10 && rd32(0x43A4) == 0 && dm_cheat_kind_at(fl) == 0 && dm_cheat_on_at(fl) && g_cheat[fl].fails == 1, "a failed load leaves the register as it was; the cheat stays on, the failure counted");
     CHECK(rd32(0x43B8) == 0 && entry("Ptr")[0].fails == 1 && strstr(dm_cheat_why_at(ptr), "no effect"), "a pointer the game has not set yet: the chase fails, the cheat waits with a note");
     CHECK(rd32(0x43C0) == 1 && g_cheat[farw].fails == 1 && dm_cheat_on_at(farw), "a failed write is a no-op; the next store of the cheat runs");
