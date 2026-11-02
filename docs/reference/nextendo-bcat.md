@@ -1,7 +1,7 @@
 # Native delivery calendars
 
-I prepare public Nextendo calendars during a port build and check for updates in
-an independent background task at game startup. I use the same original importer
+I prepare public Nextendo calendars during a port build and check for updates
+before the guest starts on every online launch. I use the same original importer
 on macOS and iOS. A download, catalog entry or successful bootstrap does not prove
 an online match.
 
@@ -54,8 +54,10 @@ a 304 response still requires revalidation of the retained data.
 
 Build cache: `~/Library/Application Support/NX Port Studio/Nextendo/BCAT/`.
 Runtime cache: the app's Application Support directory under
-`nxnative/BCAT/<titleID>/<version>/`. I keep refresh work off the guest thread and
-do not require an account token for these public resources. A network outage
+`nxnative/BCAT/<titleID>/<version>/`. HTTP callbacks run on their own delegate
+queue. The pre-guest boot thread waits within a shared 12-second network budget;
+the front end's event loop stays available and rendering has not started. I do
+not require an account token for these public resources. A network outage
 leaves local play and the previous verified snapshot available.
 Disabling online services still selects a valid local snapshot; it prevents the
 downloader and synchronization requests, rather than disabling delivery-file
@@ -63,11 +65,24 @@ reads. The recipe must match this port's exact title, version and format.
 
 ## Runtime behavior
 
-I fix the RomFS overlay for the session so background publication cannot change
-paths underneath the game's open resources. New delivery opens can select the
-new validated snapshot; an already-open delivery file keeps its original native
-file descriptor. The updated RomFS overlay becomes available at the next game
-launch. This deliberately avoids replacing files during a match.
+I check the signed eligibility catalog and the provider calendar on every online
+launch, including a second process started immediately after the first. A cache's
+age never skips this launch check. The existing ETag path can return 304 only for
+a valid retained snapshot and a compatible tag. I select and publish validated
+data before SDK initializers or the game's first calendar open, then fix that
+RomFS overlay for the session. All startup requests share the network deadline;
+the bounded container/hash checks still run before publication. When a check
+takes more than half a second, the existing prepare screen shows “Checking game
+calendar”. Logs distinguish updated/unchanged checks, offline selection and
+fallback with freshness unconfirmed. A successful provider response does not
+establish that the game's schedule managers accepted its event periods.
+
+Offline mode makes no request. A timeout, provider error, corrupt ZIP or invalid
+eligibility retains the last validated snapshot; without one, no calendar is
+invented. Later guest synchronization remains asynchronous and limited to one
+request per 300 seconds within that process. New delivery opens may then use a
+new validated snapshot; already-open descriptors and the live RomFS overlay keep
+their original files. This intra-session limit does not suppress a new launch.
 
 The delivery mount is real and read-only. Missing data returns failure. Directory
 listing merges overlay and base resources. Unmount hides new `bcat:` path opens;
@@ -86,6 +101,14 @@ unopened size, digest and directory-count getters retain the SDK's abort
 precondition. A successful repeated synchronization request replaces its old
 observer; a failed request preserves it. Startup accepts its identity only once.
 The tests use original synthetic resources and keys, never Nintendo files.
+`test_bcat_launch.py` runs new processes through the production startup selector,
+HTTPS downloader and atomic publisher with an isolated `NSURLProtocol` transport.
+Its temporary runtime copy substitutes only the fixture signing pin and original
+fixture XML digest; production has no runtime trust override. The first calendar
+open must see changed data, 304 must retain validated bytes, every online process
+must requery, and timeout/error/corrupt/ineligible responses must preserve the
+entire last-valid cache. A delayed catalog followed by a stalled archive checks
+the shared network budget. Offline cases make zero requests.
 
 ## Validation and remaining bring-up
 
@@ -94,8 +117,8 @@ including AddressSanitizer/UndefinedBehaviorSanitizer checks. I compiled the new
 backend for the iPhone SDK. These checks establish mechanisms, not multiplayer
 compatibility.
 
-I also tested a real cold startup with only the USA 5.5.2 recipe and no runtime
-cache. Its initial delivery mount failed. The background HTTPS task downloaded
+Before the pre-guest launch barrier, I also tested a real cold startup with only
+the USA 5.5.2 recipe and no runtime cache. Its initial delivery mount failed. The background HTTPS task downloaded
 and validated the public resources, after which the actual filesystem HLE mounted
 the delivery cache, opened and read a BYAML calendar and hid the mount again on
 unmount. A second process selected that validated cache at startup and read the
@@ -116,9 +139,11 @@ frames without crashing. That first bootstrap intentionally used no translated
 game shaders. I then completed the real Mac shader build and created a private
 candidate with the primary-process renderer and calendar backend. Its offline
 control completed the pipeline prebuild without failures and rendered the 3D
-character-creation screen with Spanish text in fullscreen. I have not yet
-qualified matchmaking, a complete online match, local wireless or LAN for this
-candidate, or registered a public game profile.
+character-creation screen with Spanish text in fullscreen. My automatic-mode
+retest also reached the 3D tutorial's first motion instruction. I registered the
+[experimental European 5.5.2 profile](../../dm/games/0100F8F0000A2000/README.md)
+with its exact shader-input identity; I have not qualified matchmaking, a
+complete online match, local wireless or LAN for this profile.
 
 Other games can use the same downloader/store and SDK API. I only enable a
 resource recipe after verifying its provider layout, formats and identity policy;

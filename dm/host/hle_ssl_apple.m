@@ -8,6 +8,7 @@
 #import <Security/SecureTransport.h>
 #include "ssl_backend.h"
 #include "net_socket.h"
+#include "ssl_trace.h"
 #include <stdatomic.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -54,6 +55,7 @@ void dm_guest_host_wait_end(void);
 @property(nonatomic) BOOL policyPinned;
 @property(nonatomic) unsigned ioMode, verifyOptions, sessionCache, timeout;
 @property(nonatomic) BOOL certificateChain, enableAlpn, handshaking, established, verified, rejected;
+@property(nonatomic) BOOL tracedRead, tracedWrite;
 @property(atomic) BOOL doNotClose;
 @property(atomic) uint32_t lastError, verifyError;
 @property(nonatomic) NSMutableData *lookahead;
@@ -92,6 +94,12 @@ static DmTlsConnection *get_connection(void *object) {
     DmTlsConnection *c = connections[key(object)]; pthread_mutex_unlock(&registry); return c;
 }
 static uint32_t error(DmTlsConnection *c, uint32_t value) { c.lastError = value; return value; }
+static void trace(DmTlsConnection *c, dm_tls_stage stage, uint32_t result, OSStatus native, uint64_t detail) {
+    unsigned flags = (c.handshaking ? 1u : 0u) | (c.established ? 2u : 0u) |
+        (c.verified ? 4u : 0u) | (c.rejected ? 8u : 0u) |
+        (c.policyPinned ? 16u : 0u) | (c.policyAnchor ? 32u : 0u);
+    dm_tls_trace(stage, c.identifier, result, native, detail, flags);
+}
 static uint32_t status_result(DmTlsConnection *c, OSStatus status) {
     if (!status) return error(c, 0);
     if (status == errSSLWouldBlock) return error(c, DM_SSL_WOULD_BLOCK);
@@ -284,17 +292,20 @@ uint32_t dm_ssl_set_socket(void *object, int guest) { @autoreleasepool {
     [c.lock lock]; if (atomic_load(&c->closed) || atomic_load(&c->descriptor) >= 0) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
     uint64_t generation; int fd = dm_net_dup_native_generation(guest, &generation);
     struct sockaddr_storage address; socklen_t size = sizeof address; int type = 0; socklen_t type_size = sizeof type;
-    if (fd < 0 || getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &type_size) || type != SOCK_STREAM || getpeername(fd, (struct sockaddr *)&address, &size)) { if (fd >= 0) close(fd); [c.lock unlock]; return error(c, DM_SSL_BAD_SOCKET); }
+    if (fd < 0 || getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &type_size) || type != SOCK_STREAM || getpeername(fd, (struct sockaddr *)&address, &size)) { if (fd >= 0) close(fd); trace(c, DM_TLS_SOCKET, DM_SSL_BAD_SOCKET, 0, 0); [c.lock unlock]; return error(c, DM_SSL_BAD_SOCKET); }
     c.guestDescriptor = guest; c.socketGeneration = generation; atomic_store(&c->descriptor, fd);
     if (atomic_load(&c->closed)) { if (!c.doNotClose) dm_net_close_generation(guest, generation); [c.lock unlock]; return error(c, DM_SSL_BAD_SOCKET); }
-    [c.lock unlock]; return 0;
+    trace(c, DM_TLS_SOCKET, 0, 0, 0); [c.lock unlock]; return 0;
 } }
 uint32_t dm_ssl_get_socket(void *object, int *out) { @autoreleasepool { if (!object || !out) return DM_SSL_BAD_POINTER; DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL; if (atomic_load(&c->descriptor) < 0) return error(c, DM_SSL_NO_SOCKET); *out = c.guestDescriptor; return 0; } }
 uint32_t dm_ssl_set_hostname(void *object, const char *name, unsigned size) { @autoreleasepool {
     if (!object || !name) return DM_SSL_BAD_POINTER; if (!size || size > 255) return DM_SSL_FAIL;
     if (!name[size - 1]) size--; if (!size || memchr(name, 0, size)) return DM_SSL_FAIL;
     NSString *host = [[NSString alloc] initWithBytes:name length:size encoding:NSASCIIStringEncoding]; if (!host) return DM_SSL_FAIL;
-    bool (*guard)(const char *) = atomic_load(&peerGuard); if (guard && !guard(host.UTF8String)) return DM_SSL_FAIL;
+    struct in6_addr literal;
+    unsigned name_kind = (inet_pton(AF_INET, host.UTF8String, &literal) == 1 ||
+                          inet_pton(AF_INET6, host.UTF8String, &literal) == 1) ? 2u : 0u;
+    bool (*guard)(const char *) = atomic_load(&peerGuard); if (guard && !guard(host.UTF8String)) { dm_tls_trace(DM_TLS_HOSTNAME, 0, DM_SSL_FAIL, 0, name_kind, 0); return DM_SSL_FAIL; }
     DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL;
     [c.lock lock]; if (c.handshaking) { [c.lock unlock]; return error(c, DM_SSL_FAIL); }
     NSString *peer = host; NSData *anchor = nil; BOOL pinned = NO;
@@ -309,7 +320,8 @@ uint32_t dm_ssl_set_hostname(void *object, const char *name, unsigned size) { @a
             if (length) { anchor = [NSData dataWithBytes:der length:length]; if (!parse_certificates(anchor.bytes, (unsigned)anchor.length, 2)) { [c.lock unlock]; return error(c, DM_SSL_FAIL); } }
         }
     }
-    c.hostname = host; c.peerName = peer; c.policyAnchor = anchor; c.policyPinned = pinned; [c.lock unlock]; return 0;
+    c.hostname = host; c.peerName = peer; c.policyAnchor = anchor; c.policyPinned = pinned;
+    trace(c, DM_TLS_HOSTNAME, 0, 0, 1u | name_kind); [c.lock unlock]; return 0;
 } }
 uint32_t dm_ssl_get_hostname(void *object, char *out, unsigned *size, unsigned capacity) { @autoreleasepool {
     if (!object || !out || !size) return DM_SSL_BAD_POINTER; DmTlsConnection *c = get_connection(object); if (!c) return DM_SSL_FAIL;
@@ -324,6 +336,7 @@ uint32_t dm_ssl_set_value(void *object, int property, unsigned value) { @autorel
     else if (property == DM_SSL_SESSION_CACHE && !c.handshaking && value <= 2) c.sessionCache = value;
     else if (property == DM_SSL_IO_TIMEOUT && value) c.timeout = value;
     else result = error(c, DM_SSL_FAIL);
+    trace(c, DM_TLS_VALUE, result, 0, ((uint64_t)(uint32_t)property << 32) | value);
     [c.lock unlock]; return result;
 } }
 uint32_t dm_ssl_get_value(void *object, int property, unsigned *out) { @autoreleasepool {
@@ -340,6 +353,7 @@ uint32_t dm_ssl_set_option(void *object, int option, unsigned value) { @autorele
     else if (option == 2 && !value) { /* Verification stays enabled. */ }
     else if (option == 3 && !c.handshaking) c.enableAlpn = value;
     else result = DM_SSL_FAIL;
+    trace(c, DM_TLS_OPTION, result, 0, ((uint64_t)(uint32_t)option << 32) | value);
     [c.lock unlock]; return result;
 } }
 uint32_t dm_ssl_get_option(void *object, void *out, int option) { @autoreleasepool {
@@ -369,7 +383,8 @@ static uint32_t prepare(DmTlsConnection *c) {
     if (!s && c.enableAlpn && c.alpn.count) s = SSLSetALPNProtocols(c->tls, (__bridge CFArrayRef)c.alpn);
     [c.context.lock lock]; NSArray *identity = c.context.clientIdentity; [c.context.lock unlock];
     if (!s && identity.count) s = SSLSetCertificate(c->tls, (__bridge CFArrayRef)identity);
-    c.handshaking = YES; return status_result(c, s);
+    c.handshaking = YES; uint32_t result = status_result(c, s);
+    trace(c, DM_TLS_PREPARE, result, s, v); return result;
 }
 static BOOL verify_peer(DmTlsConnection *c) {
     SecTrustRef trust = NULL; if (SSLCopyPeerTrust(c->tls, &trust) || !trust) return NO;
@@ -435,15 +450,19 @@ static uint32_t handshake_locked(DmTlsConnection *c) {
         if (atomic_load(&c->closed)) return error(c, DM_SSL_BAD_SOCKET);
         c->wanted = POLLIN; OSStatus status = SSLHandshake(c->tls);
         if (status == errSSLServerAuthCompleted) {
-            if (!verify_peer(c)) { c.rejected = YES; c.verifyError = DM_SSL_FAIL; SSLSetError(c->tls, errSSLXCertChainInvalid); return error(c, DM_SSL_FAIL); }
+            BOOL valid = verify_peer(c); trace(c, DM_TLS_VERIFY, valid ? 0 : DM_SSL_FAIL, status, 0);
+            if (!valid) { c.rejected = YES; c.verifyError = DM_SSL_FAIL; SSLSetError(c->tls, errSSLXCertChainInvalid); return error(c, DM_SSL_FAIL); }
             c.verified = YES;
             continue;
         }
         if (!status) {
-            if (!c.verified && !verify_peer(c)) { c.rejected = YES; c.verifyError = DM_SSL_FAIL; SSLSetError(c->tls, errSSLXCertChainInvalid); return error(c, DM_SSL_FAIL); }
-            c.verified = YES; c.established = YES; return error(c, 0);
+            if (!c.verified) {
+                BOOL valid = verify_peer(c); trace(c, DM_TLS_VERIFY, valid ? 0 : DM_SSL_FAIL, status, 0);
+                if (!valid) { c.rejected = YES; c.verifyError = DM_SSL_FAIL; SSLSetError(c->tls, errSSLXCertChainInvalid); return error(c, DM_SSL_FAIL); }
+            }
+            c.verified = YES; c.established = YES; trace(c, DM_TLS_HANDSHAKE, 0, 0, 0); return error(c, 0);
         }
-        if (status != errSSLWouldBlock || c.ioMode == 2) return status_result(c, status);
+        if (status != errSSLWouldBlock || c.ioMode == 2) { uint32_t r = status_result(c, status); trace(c, DM_TLS_HANDSHAKE, r, status, 0); return r; }
         result = wait_socket(c, c->wanted, deadline); if (result) return result;
     }
 }
@@ -485,6 +504,7 @@ uint32_t dm_ssl_handshake_certs(void *object, unsigned *size, unsigned *count, v
     // certificate buffer or its capacity is zero. Export is optional; peer
     // verification in handshake_locked remains mandatory in both branches.
     if (!result && output && available) result = copy_certificates(c, size, count, output, available);
+    trace(c, DM_TLS_CERTIFICATES, result, 0, output && available ? 1 : 0);
     [c.lock unlock]; return error(c, result);
 } }
 uint32_t dm_ssl_set_cert_buffer(void *object, void *buffer, unsigned capacity) { @autoreleasepool {
@@ -522,6 +542,9 @@ uint32_t dm_ssl_read(void *object, void *buffer, int *out, unsigned capacity, bo
             result = wait_socket(c, c->wanted, deadline); if (result) break;
         }
     }
+    if ((!result && *out > 0 && !c.tracedRead) || (result && result != DM_SSL_WOULD_BLOCK)) {
+        trace(c, DM_TLS_READ, result, 0, (unsigned)*out); if (!result) c.tracedRead = YES;
+    }
     error(c, result); [c.lock unlock]; return result;
 } }
 uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size) { @autoreleasepool {
@@ -542,6 +565,9 @@ uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size)
         if (!flushing) { c.pendingWrite = [NSData dataWithBytes:buffer length:request]; if (!c.pendingWrite) { result = DM_SSL_FAIL; break; } }
         if (c.ioMode == 2) { result = DM_SSL_WOULD_BLOCK; break; }
         result = wait_socket(c, c->wanted, deadline);
+    }
+    if ((!result && *out > 0 && !c.tracedWrite) || (result && result != DM_SSL_WOULD_BLOCK)) {
+        trace(c, DM_TLS_WRITE, result, 0, (unsigned)*out); if (!result) c.tracedWrite = YES;
     }
     error(c, result); [c.lock unlock]; return result;
 } }

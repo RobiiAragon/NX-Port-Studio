@@ -18,6 +18,9 @@
 #include <time.h>
 #include <unistd.h>
 _Static_assert(sizeof(dm_nextendo_preflight_reply) == 32, "preflight wire size");
+static _Thread_local dm_nextendo_preflight_status diagnostic;
+dm_nextendo_preflight_status dm_nextendo_preflight_last_status(void) { return diagnostic; }
+static int preflight_failed(int stage, int error) { diagnostic.stage=stage; diagnostic.error=error; return 0; }
 static uint64_t preflight_now(void) {
     struct timespec now; if (clock_gettime(CLOCK_MONOTONIC, &now)) return 0;
     return (uint64_t)now.tv_sec * 1000000000 + (uint64_t)now.tv_nsec;
@@ -38,17 +41,19 @@ static void preflight_cancel(pid_t child) {
     dispatch_async_f(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), (void *)(intptr_t)child, preflight_reap_cancelled);
 }
 int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeout_ms) {
-    if (!out) return 0; memset(out, 0, sizeof *out);
-    if (!timeout_ms || timeout_ms > 5000) return 0;
+    diagnostic=(dm_nextendo_preflight_status){DM_PREFLIGHT_ARGUMENT,0,-1,-1,0};
+    if (!out) return preflight_failed(DM_PREFLIGHT_ARGUMENT,EINVAL); memset(out, 0, sizeof *out);
+    if (!timeout_ms || timeout_ms > 5000) return preflight_failed(DM_PREFLIGHT_ARGUMENT,EINVAL);
     char raw[PATH_MAX], executable[PATH_MAX]; uint32_t size = sizeof raw;
-    if (_NSGetExecutablePath(raw, &size) || !realpath(raw, executable)) return 0;
-    int pair[2]; if (pipe(pair)) return 0;
+    if (_NSGetExecutablePath(raw, &size)) return preflight_failed(DM_PREFLIGHT_EXECUTABLE,ENAMETOOLONG);
+    if (!realpath(raw, executable)) return preflight_failed(DM_PREFLIGHT_EXECUTABLE,errno);
+    int pair[2]; if (pipe(pair)) return preflight_failed(DM_PREFLIGHT_PIPE,errno);
     int writer = fcntl(pair[1], F_DUPFD_CLOEXEC, 8); close(pair[1]);
-    if (writer < 0) { close(pair[0]); return 0; }
-    if (fcntl(pair[0], F_SETFD, FD_CLOEXEC) || fcntl(pair[0], F_SETFL, O_NONBLOCK)) { close(pair[0]); close(writer); return 0; }
-    int queue = kqueue(); if (queue < 0) { close(pair[0]); close(writer); return 0; }
+    if (writer < 0) { int saved=errno; close(pair[0]); return preflight_failed(DM_PREFLIGHT_PIPE,saved); }
+    if (fcntl(pair[0], F_SETFD, FD_CLOEXEC) || fcntl(pair[0], F_SETFL, O_NONBLOCK)) { int saved=errno; close(pair[0]); close(writer); return preflight_failed(DM_PREFLIGHT_PIPE,saved); }
+    int queue = kqueue(); if (queue < 0) { int saved=errno; close(pair[0]); close(writer); return preflight_failed(DM_PREFLIGHT_QUEUE,saved); }
     posix_spawn_file_actions_t actions; int error = posix_spawn_file_actions_init(&actions);
-    if (error) { close(queue); close(pair[0]); close(writer); return 0; }
+    if (error) { close(queue); close(pair[0]); close(writer); return preflight_failed(DM_PREFLIGHT_SPAWN,error); }
     error = posix_spawn_file_actions_addclose(&actions, pair[0]);
     if (!error) error = posix_spawn_file_actions_adddup2(&actions, writer, DM_NEXTENDO_PREFLIGHT_FD);
     if (!error) error = posix_spawn_file_actions_addclose(&actions, writer);
@@ -68,17 +73,21 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
         if (value && asprintf(&environment[variables], "%s=%s", keys[i], value) < 0) error = ENOMEM;
         else if (value) variables++;
     }
-    // The caller has already gated enabled account services. The child needs
-    // no game settings, route files, account values or other DM_* switches.
-    if (!error && !(environment[variables++] = strdup("DM_NETWORK=auto"))) error = ENOMEM;
+    // The caller has already gated enabled account services. Give this bounded,
+    // credential-only child the explicit capability: AUTO would disable it
+    // without the parent's deliberately omitted route profile. No routes, game
+    // settings, account values or other DM_* switches enter the child.
+    if (!error && !(environment[variables++] = strdup("DM_NETWORK=nextendo"))) error = ENOMEM;
     if (!error) error = posix_spawn(&child, executable, &actions, &attributes, arguments, environment);
     for (size_t i = 0; i < variables; i++) free(environment[i]);
     if (initialized) posix_spawnattr_destroy(&attributes);
     posix_spawn_file_actions_destroy(&actions); close(writer);
-    if (error) { close(queue); close(pair[0]); return 0; }
+    if (error) { close(queue); close(pair[0]); return preflight_failed(DM_PREFLIGHT_SPAWN,error); }
     struct kevent change;
     EV_SET(&change, (uintptr_t)pair[0], EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
     int registered = kevent(queue, &change, 1, NULL, 0, NULL) == 0;
+    diagnostic.stage=registered ? DM_PREFLIGHT_TIMEOUT : DM_PREFLIGHT_REGISTER;
+    diagnostic.error=registered ? 0 : errno;
     EV_SET(&change, (uintptr_t)child, EVFILT_PROC, EV_ADD | EV_ONESHOT, NOTE_EXIT, 0, NULL);
     // An already-exited child may reject registration. waitpid and pipe EOF
     // still establish completion; no PID is signalled merely for this error.
@@ -87,14 +96,15 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
     while (registered) {
         ssize_t n;
         do { n = read(pair[0], bytes + count, sizeof bytes - count); if (n > 0) count += (size_t)n; } while (n > 0 && count < sizeof bytes);
-        if (count == sizeof bytes || (n < 0 && errno != EAGAIN && errno != EINTR)) break;
+        if (count == sizeof bytes) { diagnostic.stage=DM_PREFLIGHT_PACKET; break; }
+        if (n < 0 && errno != EAGAIN && errno != EINTR) { diagnostic.stage=DM_PREFLIGHT_READ; diagnostic.error=errno; break; }
         pid_t got = preflight_reap(child, &status);
         if (got == child) { reaped = 1; owned = 0; break; }
-        if (got < 0 && errno != EINTR) { owned = errno != ECHILD; break; }
+        if (got < 0 && errno != EINTR) { diagnostic.stage=DM_PREFLIGHT_REAP; diagnostic.error=errno; owned = errno != ECHILD; break; }
         now = preflight_now(); if (!now || now >= deadline) break;
         uint64_t left = deadline - now; struct timespec timeout = {(time_t)(left / 1000000000), (long)(left % 1000000000)};
         struct kevent events[2]; int ready = kevent(queue, NULL, 0, events, 2, &timeout);
-        if (ready < 0 && errno != EINTR) break;
+        if (ready < 0 && errno != EINTR) { diagnostic.stage=DM_PREFLIGHT_WAIT; diagnostic.error=errno; break; }
     }
     if (owned) preflight_cancel(child);
     // A child may exit between the first drain and waitpid; take its final
@@ -103,9 +113,14 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
         ssize_t n; do { n = read(pair[0], bytes + count, sizeof bytes - count); if (n > 0) count += (size_t)n; } while (n > 0 && count < sizeof bytes);
     }
     close(queue); close(pair[0]);
-    if (!reaped || !WIFEXITED(status) || WEXITSTATUS(status) || count != sizeof *out) return 0;
+    diagnostic.bytes=(int)count;
+    if (!reaped) return 0;
+    diagnostic.exit_code=WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    diagnostic.signal=WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+    if (!WIFEXITED(status) || WEXITSTATUS(status)) return preflight_failed(DM_PREFLIGHT_EXIT,0);
+    if (count != sizeof *out) return preflight_failed(DM_PREFLIGHT_PACKET,0);
     dm_nextendo_preflight_reply reply; memcpy(&reply, bytes, sizeof reply);
-    if (reply.magic != DM_NEXTENDO_PREFLIGHT_MAGIC || reply.version != 1 || reply.pid != (uint32_t)child || reply.available > 1 || reply.reserved || (!reply.available && reply.expires_ms) || (reply.available && !reply.expires_ms)) return 0;
-    *out = reply; return 1;
+    if (reply.magic != DM_NEXTENDO_PREFLIGHT_MAGIC || reply.version != 1 || reply.pid != (uint32_t)child || reply.available > 1 || reply.reserved || (!reply.available && reply.expires_ms) || (reply.available && !reply.expires_ms)) return preflight_failed(DM_PREFLIGHT_PROTOCOL,0);
+    diagnostic.stage=DM_PREFLIGHT_DONE; diagnostic.error=0; *out = reply; return 1;
 }
 #endif

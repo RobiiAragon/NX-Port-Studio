@@ -5,6 +5,7 @@ No game files, keys or Xcode needed: a stand-in host compiled here records what 
 import contextlib
 import importlib.util
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -163,6 +164,92 @@ class PackReuse(unittest.TestCase):
                       mock.patch.object(pack_app, 'can_clone', return_value=False), mock.patch.object(shutil, 'which', which)):
             patch.start(); self.addCleanup(patch.stop)
         self.clone = pack_app.can_clone
+
+    def nextendo_fixture(self):
+        certificate = self.tmp / 'synthetic.pem'
+        subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes',
+                        '-keyout',str(self.tmp/'synthetic.key'),'-out',str(certificate),'-days','1','-subj','/CN=original.invalid'],check=True,capture_output=True)
+        der = subprocess.run(['openssl','x509','-in',str(certificate),'-outform','DER'],check=True,capture_output=True).stdout
+        value = pack_app.nextendo_services.contract(REPO); value['provider']['caSHA256'] = hashlib.sha256(der).hexdigest()
+        contract = mock.patch.object(pack_app.nextendo_services,'contract',return_value=value); contract.start(); self.addCleanup(contract.stop)
+        public = pack_app.nextendo_services.prepare(REPO,TID,self.tmp/'public-services',ca=der)
+        collection = self.tmp/'peers'; collection.mkdir(mode=0o700)
+        digest = hashlib.sha256(der).hexdigest(); (collection/(digest+'.der')).write_bytes(der); (collection/(digest+'.der')).chmod(0o600)
+        entry = {'role':'approved-service-leaf','file':digest+'.der','approval':'Explicit synthetic test approval',
+                 'bindings':[{'titleID':TID,'host':'service.nintendo.net','ip':'192.0.2.99'}]}
+        index = {'formatVersion':1,'certificates':{digest:entry}}
+        (collection/'index.json').write_text(json.dumps(index)); (collection/'index.json').chmod(0o600)
+        self.args.nextendo_services_dir = str(public); self.args.nextendo_peer_collection = str(collection)
+        return public,collection,index,value,der
+
+    def test_nextendo_snapshot_reuses_and_keeps_public_variant_and_private_pair(self):
+        public,collection,index,value,der = self.nextendo_fixture()
+        variant = self.tmp/'patched/nextendo'; variant.mkdir(); (variant/'main.fixups.tsv').write_text('variant fixups'); (variant/'main.patched.bin').write_bytes(b'variant')
+        self.pack(); self.assert_reused()
+        dm=Path(self.args.out)/'Contents/Resources/dm'
+        for path in public.iterdir():self.assertEqual((dm/'nextendo'/path.name).read_bytes(),path.read_bytes())
+        self.assertEqual((dm/'nextendo/main.patched.bin').read_bytes(),b'variant')
+        self.assertEqual((dm/'nextendo/main.fixups.tsv').read_text(),'variant fixups')
+        self.assertTrue((dm/'nextendo-private/routes.tsv').read_bytes().startswith((public/'routes.tsv').read_bytes()))
+        self.assertIn(b'pinned-address\t',(dm/'nextendo-private/routes.tsv').read_bytes())
+        self.assertEqual((dm/'nextendo-private'/(hashlib.sha256(der).hexdigest()+'.der')).read_bytes(),der)
+        with self.assertRaises(ValueError):pack_app.nextendo_services.stage(dm/'nextendo-private',self.tmp/'not-ios',TID)
+
+    def test_nextendo_changes_in_approval_pin_and_public_routes_invalidate_reuse(self):
+        public,collection,index,value,der=self.nextendo_fixture();self.pack();self.assert_reused()
+        entry=next(iter(index['certificates'].values()));entry['approval']='Another explicit synthetic approval'
+        (collection/'index.json').write_text(json.dumps(index));self.assert_repacked();self.assert_reused()
+        other=subprocess.run(['openssl','req','-new','-x509','-key',str(self.tmp/'synthetic.key'),'-outform','DER','-days','1',
+                              '-set_serial','42','-subj','/CN=original.invalid'],check=True,capture_output=True).stdout
+        digest=hashlib.sha256(other).hexdigest();entry['file']=digest+'.der';index['certificates']={digest:entry}
+        (collection/(digest+'.der')).write_bytes(other);(collection/(digest+'.der')).chmod(0o600)
+        (collection/'index.json').write_text(json.dumps(index));self.assert_repacked();self.assert_reused()
+        value['provider']['server']='198.51.100.7';pack_app.nextendo_services.prepare(REPO,TID,public,ca=der)
+        self.assert_repacked();self.assert_reused()
+        self.assertIn(b'pinned-address\t198.51.100.7\t',(Path(self.args.out)/'Contents/Resources/dm/nextendo-private/routes.tsv').read_bytes())
+
+    def test_nextendo_copies_the_once_captured_snapshot_even_if_input_changes(self):
+        public,collection,index,value,der=self.nextendo_fixture()
+        original=(collection/'index.json').read_bytes();selected=pack_app.selected_inputs
+        def change_after_snapshot(args):
+            result=selected(args)
+            next(iter(index['certificates'].values()))['approval']='Changed after capture'
+            (collection/'index.json').write_text(json.dumps(index))
+            return result
+        with mock.patch.object(pack_app,'selected_inputs',side_effect=change_after_snapshot):self.pack()
+        manifest=json.loads((Path(self.args.out)/'Contents/Resources/dm/nextendo-private/manifest.json').read_text())
+        self.assertEqual(manifest['localPeers']['collectionSHA256'],hashlib.sha256(original).hexdigest())
+        self.assert_repacked();self.assert_reused()
+
+    def test_nextendo_malformed_collection_and_public_profile_keep_existing_app(self):
+        public,collection,index,value,der=self.nextendo_fixture();self.pack()
+        before=pack_app.inventory(Path(self.args.out));routes=(public/'routes.tsv').read_bytes()
+        for broken in ('collection','public'):
+            with self.subTest(broken=broken):
+                if broken=='collection':(collection/'index.json').write_text('{}')
+                else:(public/'routes.tsv').write_bytes(b'invalid')
+                with self.assertRaises(ValueError):self.pack()
+                self.assertEqual(pack_app.inventory(Path(self.args.out)),before)
+                (collection/'index.json').write_text(json.dumps(index));(public/'routes.tsv').write_bytes(routes)
+
+    def test_nextendo_missing_collection_keeps_public_only_and_default_is_local(self):
+        public,collection,index,value,der=self.nextendo_fixture();self.args.nextendo_peer_collection=str(self.tmp/'absent')
+        self.pack();self.assert_reused();dm=Path(self.args.out)/'Contents/Resources/dm'
+        self.assertFalse((dm/'nextendo-private').exists())
+        self.assertEqual((dm/'nextendo/routes.tsv').read_bytes(),(public/'routes.tsv').read_bytes())
+        self.args.nextendo_peer_collection=None
+        with mock.patch.object(pack_app.Path,'home',return_value=self.tmp/'home'),mock.patch.object(pack_app.nextendo_local_peers,'prepare',wraps=pack_app.nextendo_local_peers.prepare) as prepare:
+            self.pack()
+            self.assertEqual(prepare.call_args.args[3],self.tmp/'home/Library/Application Support/NX Port Studio/Nextendo/PeerCertificates')
+        self.assertFalse((dm/'nextendo-private').exists())
+
+    def test_nextendo_helper_and_services_sources_participate_in_reuse(self):
+        self.nextendo_fixture();self.pack();real=pack_app.digest
+        for module in (pack_app.nextendo_services,pack_app.nextendo_local_peers):
+            target=Path(module.__file__).resolve()
+            with mock.patch.object(pack_app,'digest',side_effect=lambda path,target=target:'0'*64 if Path(path)==target else real(path)):
+                self.assert_repacked();self.assert_reused()
+            self.assert_repacked()
 
     def test_personal_mii_snapshot_participates_in_reuse_and_validated_packaging(self):
         # Original synthetic personal data: changing appearance must repack even
@@ -478,6 +565,21 @@ class App(unittest.TestCase):
             self.assertEqual((self.tmp / 'Split.app/Contents/Resources/dm/pso_pairs.tsv').read_text(), 'split-vertex\tsplit-pixel\n')
             a.out = str(self.tmp / 'Own.app'); a.tables = self.args.tables; pack_app.pack(a)
             self.assertEqual((self.tmp / 'Own.app/Contents/Resources/dm/pso_pairs.tsv').read_text(), 'other-vertex\tother-pixel\n')
+
+    def test_nextendo_runtime_prefers_private_then_public_but_explicit_override_wins(self):
+        app=self.tmp/'Route precedence.app';shutil.copytree(self.app,app)
+        dm=app/'Contents/Resources/dm'
+        public=dm/'nextendo/routes.tsv';public.parent.mkdir();public.write_text('synthetic public marker')
+        private=dm/'nextendo-private/routes.tsv';private.parent.mkdir()
+        def run(**env):
+            process=self.launch(app=app,**env);output=process.communicate(timeout=30)[0].decode()
+            self.assertEqual(process.returncode,7,output)
+            return self.host_run()['DM_NEXTENDO_ROUTES']
+        self.assertEqual(run(),str(public))
+        private.write_text('synthetic private marker')
+        self.assertEqual(run(),str(private))
+        explicit=str(self.tmp/'explicit-routes.tsv')
+        self.assertEqual(run(DM_NEXTENDO_ROUTES=explicit),explicit)
 
     def test_info_plist(self):
         p = plistlib.loads((self.app / 'Contents/Info.plist').read_bytes())

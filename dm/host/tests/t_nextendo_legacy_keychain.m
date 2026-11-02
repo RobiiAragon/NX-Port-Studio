@@ -21,7 +21,7 @@ static int inheritedDiagnostics;
 __attribute__((constructor)) static void inspectEarlyEnvironment(void) {
     const char *keys[]={"DM_FDSTAT","DM_MEMSTAT","DM_THRCPU","DM_NVN_TSV","DM_LINK_PROBE_LOG","DM_NEXTENDO_ROUTES","DM_NEXTENDO_BCAT_DIR","DYLD_INSERT_LIBRARIES","NX_FIXTURE_STRIP_ME"};
     for (unsigned i=0;i<sizeof keys/sizeof *keys;i++) if (getenv(keys[i])) inheritedDiagnostics=1;
-    const char *mode=getenv("DM_NETWORK"); if (mode && strcmp(mode,"auto")) inheritedDiagnostics=1;
+    const char *mode=getenv("DM_NETWORK"); if (mode && strcmp(mode,"nextendo")) inheritedDiagnostics=1;
 }
 static void option(NSString *key, NSString *value) {
     if (!fixtureConfig || !fixtureOptions || !key) abort();
@@ -52,7 +52,12 @@ static OSStatus fixtureCopy(CFDictionaryRef query, CFTypeRef *out) {
 #define SecItemCopyMatching fixtureCopy
 #include "../hle_nextendo_apple.m"
 #undef SecItemCopyMatching
-dm_net_mode_t dm_net_mode(void) { return DM_NET_AUTO; }
+dm_net_mode_t dm_net_mode(void) {
+    // The parent supplies a controlled embedding mode. The actual child must
+    // honor its serialized capability and the production header's profile gate.
+    const char *mode=getenv("DM_NETWORK");
+    return childProcess && mode && !strcmp(mode,"nextendo") ? DM_NET_NEXTENDO : DM_NET_AUTO;
+}
 void dm_guest_host_wait_begin(void) { if (childProcess) abort(); }
 void dm_guest_host_wait_end(void) { if (childProcess) abort(); }
 int hle_signal_system_event_binding(uint64_t binding) { (void)binding; abort(); }

@@ -45,6 +45,7 @@ static bool transport(const char *url,const char *method,const char *auth,const 
     if(data.length>capacity)return false;memcpy(output,data.bytes,data.length);*size=data.length;*status=response_status;return true;
 }
 int main(void){@autoreleasepool{
+    setenv("DM_NEXTENDO_ROUTES","/nonexistent/synthetic-social-profile",1);
     reply=@"{\"friends\":[{\"pid\":501,\"nsa\":\"abcdef0000000501\",\"name\":\"Alpha\",\"favorite\":true,\"presence\":{\"status\":2,\"app_id\":\"0100152000022000\",\"app_field\":\"AQID\"}},{\"pid\":502,\"name\":\"Beta\",\"presence\":{\"status\":1,\"app_id\":\"0100000000001000\"}},{\"pid\":503,\"name\":\"Gamma\",\"presence\":null}]}";
     dm_nextendo_api_test_transport(transport);
     uint8_t available=9;
@@ -68,7 +69,7 @@ int main(void){@autoreleasepool{
     CHECK(dm_nextendo_api_baas_namespace("friends")&&dm_nextendo_api_baas_namespace("account"));
     CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,1,filter,true)&&count==1&&ids[0]==0xabcdef0000000501ull);
     chmod(manifest.fileSystemRepresentation,0666);CHECK(!dm_nextendo_api_baas_namespace("friends"));
-    unlink(manifest.fileSystemRepresentation);rmdir(profile);unsetenv("DM_NEXTENDO_ROUTES");
+    unlink(manifest.fileSystemRepresentation);rmdir(profile);setenv("DM_NEXTENDO_ROUTES","/nonexistent/synthetic-social-profile",1);
     filter[4]=1;CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,3,filter,true)&&count==1&&ids[0]==501);filter[4]=0;
     filter[0]=3;CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,3,filter,true)&&count==2);filter[0]=0;
     filter[5]=1;CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,3,filter,true)&&count==1);filter[5]=0;
@@ -94,5 +95,6 @@ int main(void){@autoreleasepool{
     presence_constructor[0]=0;CHECK(dm_nextendo_presence_initialize(own,uid)!=0);presence_constructor[0]=0x52801c02;
     mode=DM_NET_OFFLINE;CHECK(dm_nextendo_presence_commit(own)!=0);mode=DM_NET_AUTO;
     linked=NO;CHECK(dm_nextendo_api_baas_id(&nsa)!=0&&!nsa);CHECK(dm_nextendo_presence_initialize(own,uid)!=0);
+    unsetenv("DM_NEXTENDO_ROUTES");available=9;CHECK(!dm_nextendo_friends_available(&available,uid)&&!available);
     printf("Nextendo social: %d checks, %d failed; real parsers and SDK adapters, synthetic HTTP only\n",checks,failures);return failures?1:0;
 }}

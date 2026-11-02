@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC5:** I moved Mac rendering into the main app process and measured 59.8–60 FPS in a Mario Kart 4.0.1 fullscreen sample. I added Splatoon 2 calendar delivery and a private Mii import library; online qualification and the original firmware editor remain unfinished. See [release notes](docs/releases/1.6.0-rc.5.md).
+> **1.6.0 RC6:** I reached Splatoon 2’s online lobby and Territorial matchmaking queue on Mac, and checked continued frame progression when the game loses focus or is covered. I distinguish this from a completed match, my verified Smash arena round and historical Mario Kart LAN tests. Splatoon character colors and the original firmware Mii editor remain open. [Candidate notes](docs/releases/1.6.0-rc.6.md).
 
 ## Inside Studio
 
@@ -57,7 +57,9 @@ These mechanisms have different validation milestones. They do not establish tha
 | macOS Studio | I ran the build, configuration, process handling, resource import and Xcode signing tests successfully. | Apple silicon; the Studio interface requires macOS 14+. Individual games can require newer macOS/Metal features. |
 | Mac ↔ Switch LAN | I **completed a full Mario Kart 8 Deluxe 3.0.5 race** between an earlier Mac build and my physical Switch. | Historical baseline for matching versions and the game's LAN mode. I have not repeated that race with the current candidate. |
 | LDN bridge | On October 31, I tested Mario Kart 3.0.5 LAN and LDN play across native macOS/iOS ports and my physical Switch. I also ran the protocol and peer fixtures successfully. | Hardware result from the pre-sync ports; I still need a fresh game test with the new engine. IP LDN requires a compatible console module; built-in LAN is a separate path. |
-| Nextendo | I verified account integration and one real **Smash 13.0.5 arena round on Mac**. | Automatic connection mode; I explicitly approved the per-service leaf enrollment. I have not established Quickplay, other titles or iOS online through this result. |
+| Mario Kart 8 Deluxe 4.0.1 | I have a current private Mac candidate and measured its primary-process fullscreen pacing. | My 3.0.5 LAN/LDN results above remain historical. I have not completed a Nextendo race or requalified physical LAN/LDN with the 4.0.1 candidate. |
+| Smash 13.0.5 — Nextendo | I verified account integration and **one real arena round on Mac**. | I explicitly approved the service's exact certificate. Quickplay's unstable-network rejection and a later spectator disconnect remain open; iOS online is unqualified. |
+| Splatoon 2 EUR 5.5.2 — Nextendo | On November 2, I entered the **online lobby and Territorial matchmaking queue on Mac**, after completing the tutorial and reaching the plaza. | I postponed the match test because too few players were available. I have not qualified a completed match, peer-to-peer gameplay, LAN/LDN or iOS for this title. |
 | iPhone/iPad | I checked that a signed Mario Kart 3.0.5 build joins LAN lobbies with my physical Switch, with each device as host. | I verified lobby entry; I have not verified a completed race on iPhone. Device, signing and platform restrictions still apply. |
 | Android / Windows | I plan these after the Apple baseline is stable. | I have no builds or compatibility results yet; ARM and x86 need separate architecture work. |
 
@@ -101,7 +103,7 @@ The interface starts in Spanish. Choose English, French, Japanese or Simplified 
 
 Ports start with automatic connection services. Choose Online, Local wireless or LAN inside the game. Nextendo setup is available independently; missing online credentials do not block local play. Network disabling and a discovery peer override remain optional advanced settings.
 
-**LAN** uses a game's own LAN mode and real IP sockets. Use matching game versions and the same network. The earlier completed Mario Kart race above is the physical interoperability baseline; it does not certify a later runtime candidate. I checked that the current 3.0.5 Mac candidate can [create a local LAN room](dm/games/0100152000022000/README.md#local-network-validation), reaching the host lobby and rules. I have not validated an external peer joining or a new completed race with that candidate.
+**LAN** uses a game's own LAN mode and real IP sockets. Use matching game versions and the same network. My completed Mario Kart 3.0.5 race and the earlier candidate's [local room creation](dm/games/0100152000022000/README.md#local-network-validation) are historical results. I now have a private 4.0.1 Mac candidate; I have not repeated the physical LAN/LDN qualification with it.
 
 **LDN** bridges local-wireless service discovery and membership over IP. It needs a compatible peer/module and a matching game. Passing peer fixtures is not a substitute for testing a physical console.
 
@@ -117,7 +119,7 @@ For rooms hosted on iPhone/iPad, Studio's **Local play → Start bridge** enable
 
 ### Current game-service blockers
 
-On 2026-10-31, I checked five production account/BAAS/data endpoints that passed the native scoped-CA handshake, including the provider’s long-lived certificates. The MK8 NEX endpoint I probed still presents a self-signed certificate without its required hostname, and the device/application-auth chain does not match the published provider CA. These checks remain failures. The Mario Kart 8 Deluxe **3.0.5** build I tested also falls outside the catalog’s **4.0.1** requirement. The [full coverage inventory](docs/nextendo-coverage.md) lists all 58 catalog entries, 62 regional service profiles and 22 exact-build patch plans, separately from unverified native online gameplay.
+My October 31 TLS probes recorded both successful scoped-CA handshakes and unresolved NEX hostname/device-authentication chain failures. I preserve that evidence and keep unresolved trust checks failing. My current private Mario Kart candidate is **4.0.1**, matching the catalog's version requirement; I have not qualified its remaining TLS/authentication, NAT or online-race paths. For Smash, Quickplay and later-session stability remain open. For Splatoon 2, two verified TLS connections reached the lobby and queue, but I deferred the match test; that does not qualify peer-to-peer play. The [coverage inventory](docs/nextendo-coverage.md) separates these three titles' actual results from all 58 catalog entries, 62 regional service profiles and 22 exact-build patch plans.
 
 ## What belongs in this repository
 

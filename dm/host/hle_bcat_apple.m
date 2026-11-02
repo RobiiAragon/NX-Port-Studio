@@ -13,6 +13,20 @@
 #include <pthread.h>
 #include <errno.h>
 #include <math.h>
+#include <time.h>
+
+// Only the pre-guest launch check shares this total network budget across its
+// catalog, archive and optional static-resource requests. Tool/runtime refreshes
+// retain their existing per-request limits. No wall-clock or cache-age shortcut.
+static _Thread_local uint64_t launchDeadline,launchStarted;
+static _Thread_local int launchProgress;
+__attribute__((weak)) void front_progress(const char *title,long done,long total){(void)title;(void)done;(void)total;}
+static uint64_t monotonicTime(void){return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);}
+static void launchProgressMaybe(void){
+    if(launchDeadline&&!launchProgress&&monotonicTime()-launchStarted>=NSEC_PER_SEC/2){
+        launchProgress=1;front_progress("Checking game calendar",0,1);
+    }
+}
 
 static NSString *const provider = @"https://nextendo.network";
 static NSString *const catalogURL = @"https://nextendo.network/service-catalog/v1/game-catalog";
@@ -25,6 +39,7 @@ int dm_bcat_supported(const char *title) { if(!title)return 0;NSString *value=[N
 static NSString *digest(NSData *data) { uint8_t h[32]; CC_SHA256(data.bytes, (CC_LONG)data.length, h); NSMutableString *s = [NSMutableString new]; for (int i=0;i<32;i++) [s appendFormat:@"%02x",h[i]]; return s; }
 static BOOL fail(NSString **error, NSString *message) { if (error) *error = message; return NO; }
 static BOOL integer(id n) { if(![n isKindOfClass:NSNumber.class]||CFGetTypeID((__bridge CFTypeRef)n)==CFBooleanGetTypeID())return NO;int64_t value;return CFNumberGetValue((__bridge CFNumberRef)n,kCFNumberSInt64Type,&value)&&[n compare:@(value)]==NSOrderedSame; }
+static BOOL validETag(id tag){return [tag isKindOfClass:NSString.class]&&[tag length]&&[tag length]<=256&&[tag rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location==NSNotFound;}
 static BOOL safePath(NSString *path) {
     if (![path isKindOfClass:NSString.class] || !path.length || path.length > 240 || [path hasPrefix:@"/"] || [path containsString:@"\\"] || [path containsString:@":"]) return NO;
     for (NSString *p in [path componentsSeparatedByString:@"/"]) {
@@ -127,22 +142,30 @@ static NSDictionary *catalog(NSData *data, NSString *title, NSString *version, B
     if(![r isKindOfClass:NSHTTPURLResponse.class]){self.failed=YES;completion(NSURLSessionResponseCancel);return;}
     NSHTTPURLResponse *h=(id)r;self.status=h.statusCode;
     if(r.expectedContentLength>(int64_t)self.limit||![r.URL isEqual:t.originalRequest.URL]){self.failed=YES;completion(NSURLSessionResponseCancel);return;}
-    id tag=h.allHeaderFields[@"Etag"]?:h.allHeaderFields[@"ETag"];if([tag isKindOfClass:NSString.class]&&[tag length]<=256&&[tag rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location==NSNotFound)self.etag=tag;
+    id tag=h.allHeaderFields[@"Etag"]?:h.allHeaderFields[@"ETag"];if(validETag(tag))self.etag=tag;
     completion(NSURLSessionResponseAllow);
 }
 -(void)URLSession:(NSURLSession *)s dataTask:(NSURLSessionDataTask *)t didReceiveData:(NSData *)d {if(d.length>self.limit-self.bytes.length){self.failed=YES;[t cancel];}else[self.bytes appendData:d];}
 -(void)URLSession:(NSURLSession *)s task:(NSURLSessionTask *)t didCompleteWithError:(NSError *)e {if(e)self.failed=YES;dispatch_semaphore_signal(self.done);}
 @end
 static NSData *download(NSString *url, NSUInteger limit, NSString *etag, NSInteger *status, NSString **newTag){
+    if(status)*status=0;if(newTag)*newTag=nil;
+    uint64_t now=monotonicTime();if(launchDeadline&&now>=launchDeadline)return nil;
+    NSTimeInterval remaining=launchDeadline?(launchDeadline-now)/(double)NSEC_PER_SEC:30;
     NSURL *u=[NSURL URLWithString:url];if(![u.scheme isEqual:@"https"]||u.user||u.password||u.port||u.fragment)return nil;
     if(!([u.host isEqual:@"nextendo.network"]||([u.host isEqual:@"raw.githubusercontent.com"]&&[u.path hasPrefix:[@"/NextendoNetwork/Prelude-Nextendo/" stringByAppendingString:recipeCommit]])))return nil;
     DmBcatDownload *d=[DmBcatDownload new];d.bytes=[NSMutableData new];d.limit=limit;d.done=dispatch_semaphore_create(0);
-    NSURLSessionConfiguration *c=NSURLSessionConfiguration.ephemeralSessionConfiguration;c.HTTPCookieStorage=nil;c.HTTPShouldSetCookies=NO;c.URLCredentialStorage=nil;c.URLCache=nil;c.requestCachePolicy=NSURLRequestReloadIgnoringLocalCacheData;c.timeoutIntervalForRequest=15;c.timeoutIntervalForResource=25;
+    NSURLSessionConfiguration *c=NSURLSessionConfiguration.ephemeralSessionConfiguration;c.HTTPCookieStorage=nil;c.HTTPShouldSetCookies=NO;c.URLCredentialStorage=nil;c.URLCache=nil;c.requestCachePolicy=NSURLRequestReloadIgnoringLocalCacheData;c.timeoutIntervalForRequest=MIN(15,remaining);c.timeoutIntervalForResource=MIN(25,remaining);
     NSOperationQueue *queue=[NSOperationQueue new];queue.maxConcurrentOperationCount=1;NSURLSession *s=[NSURLSession sessionWithConfiguration:c delegate:d delegateQueue:queue];
     NSMutableURLRequest *r=[NSMutableURLRequest requestWithURL:u];[r setValue:@"NX-Port-Studio/BCAT" forHTTPHeaderField:@"User-Agent"];
-    if(etag.length<=256&&etag.length&&[etag rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location==NSNotFound)[r setValue:etag forHTTPHeaderField:@"If-None-Match"];
+    if(validETag(etag))[r setValue:etag forHTTPHeaderField:@"If-None-Match"];
     NSURLSessionDataTask *task=[s dataTaskWithRequest:r];[task resume];
-    if(dispatch_semaphore_wait(d.done,dispatch_time(DISPATCH_TIME_NOW,30*NSEC_PER_SEC))) {[task cancel];[s invalidateAndCancel];return nil;}
+    uint64_t deadline=launchDeadline?:now+30*NSEC_PER_SEC;BOOL finished=NO;
+    while((now=monotonicTime())<deadline){
+        launchProgressMaybe();uint64_t wait=MIN(deadline-now,NSEC_PER_SEC/10);
+        if(!dispatch_semaphore_wait(d.done,dispatch_time(DISPATCH_TIME_NOW,(int64_t)wait))){finished=YES;break;}
+    }
+    if(!finished){[task cancel];[s invalidateAndCancel];return nil;}
     [s invalidateAndCancel];if(status)*status=d.status;if(newTag)*newTag=d.etag;return d.failed?nil:d.bytes;
 }
 
@@ -192,6 +215,7 @@ invalid:fail(error,@"Calendar ZIP failed path, bounds, format or integrity valid
 
 static NSDictionary *snapshot(NSString *root,NSString *title,NSString *version){
     if(!safeDirectory(root,NO))return nil;NSDictionary *m=json(boundedRead([root stringByAppendingPathComponent:@"manifest.json"],1048576));
+    if(m[@"etag"]&&!validETag(m[@"etag"]))return nil;
     if(!integer(m[@"formatVersion"])||[m[@"formatVersion"] integerValue]!=1||![m[@"catalogSHA256"] isKindOfClass:NSString.class]||[m[@"catalogSHA256"] length]!=64||![m[@"source"] isEqual:[provider stringByAppendingFormat:@"/api/bcat/%@",title]]||![m[@"titleID"] isEqual:title]||![m[@"version"] isEqual:version]||![m[@"recipe"] isEqual:recipeCommit]||![m[@"files"] isKindOfClass:NSDictionary.class]||![m[@"files"] count]||[m[@"files"] count]>68)return nil;
     NSData *signedData=boundedRead([root stringByAppendingPathComponent:@"catalog.json"],1048576);
     NSDictionary *verified=catalog(signedData,title,version,NO,0,NULL);
@@ -280,6 +304,19 @@ static pthread_mutex_t refreshLock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t startupLock=PTHREAD_MUTEX_INITIALIZER;static BOOL startupAccepted;
 static NSString *startModules,*startTitle,*activeVersion,*activeCache,*activeRoot,*latestRoot;
 static BOOL startOnline,refreshRunning;static DmBcatRefresh *activeRefresh;static NSTimeInterval lastRefresh;
+static NSString *refreshSnapshot(NSString **error){
+    if(!safeDirectory(activeCache,YES)){fail(error,@"Unsafe calendar cache directory");return nil;}
+    NSInteger status=0;NSData *envelope=download(catalogURL,1048576,nil,&status,NULL);
+    if(!envelope||status!=200){fail(error,@"Calendar eligibility check unavailable");return nil;}
+    NSString *previous=current(activeCache,startTitle,activeVersion)?:activeRoot;
+    if(!publish(activeCache,startTitle,activeVersion,envelope,previous,error))return nil;
+    return current(activeCache,startTitle,activeVersion);
+}
+static uint64_t snapshotBytes(NSString *root){
+    NSDictionary *m=root?snapshot(root,startTitle,activeVersion):nil;uint64_t bytes=0;
+    for(NSString *path in m[@"files"]){struct stat st;if(!stat([[[root stringByAppendingPathComponent:@"files"] stringByAppendingPathComponent:path] fileSystemRepresentation],&st))bytes+=(uint64_t)st.st_size;}
+    return bytes;
+}
 static void refresh(void) {
     pthread_mutex_lock(&refreshLock);
     if(!startOnline||!activeVersion||refreshRunning||NSDate.date.timeIntervalSince1970-lastRefresh<300){pthread_mutex_unlock(&refreshLock);return;}
@@ -287,19 +324,33 @@ static void refresh(void) {
     refreshRunning=YES;lastRefresh=NSDate.date.timeIntervalSince1970;
     pthread_mutex_unlock(&refreshLock);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{@autoreleasepool{
-        NSInteger status=0;NSString *why=nil,*selected=nil;BOOL ok=NO;
-        if(safeDirectory(activeCache,YES)){
-            NSData *envelope=download(catalogURL,1048576,nil,&status,NULL);
-            NSString *previous=current(activeCache,startTitle,activeVersion)?:activeRoot;
-            ok=envelope&&status==200&&publish(activeCache,startTitle,activeVersion,envelope,previous,&why);
-            if(ok)selected=current(activeCache,startTitle,activeVersion)?:previous;
-        }
-        NSDictionary *m=selected?snapshot(selected,startTitle,activeVersion):nil;uint64_t bytes=0;
-        if(m)for(NSString *path in m[@"files"]){struct stat st;if(!stat([[[selected stringByAppendingPathComponent:@"files"] stringByAppendingPathComponent:path] fileSystemRepresentation],&st))bytes+=(uint64_t)st.st_size;}
-        BOOL delivered=ok&&m;
+        NSString *why=nil,*selected=refreshSnapshot(&why);uint64_t bytes=snapshotBytes(selected);
+        BOOL delivered=selected!=nil;
         pthread_mutex_lock(&refreshLock);if(delivered)latestRoot=selected;refreshRunning=NO;job.status=9;job.result=delivered?0:1;job.bytes=delivered?bytes:0;pthread_mutex_unlock(&refreshLock);
         fprintf(stderr,"BCAT: %s\n",delivered?"calendar refresh validated; delivery opens use the new snapshot, RomFS overlay remains fixed for this session":"refresh unavailable or invalid; previous validated calendar retained");
     }});
+}
+// Runs on the pre-guest boot thread after the front end is available, never on
+// its UI thread or during rendering. Every new process checks again, even when
+// a previous launch has just populated the cache. Only the completed, validated
+// selection becomes the immutable RomFS overlay seen by the game's first open.
+static void selectAtLaunch(NSString *seed){
+    activeRoot=current(activeCache,startTitle,activeVersion)?:current(seed,startTitle,activeVersion);latestRoot=activeRoot;
+    if(startOnline){
+        launchStarted=monotonicTime();launchDeadline=launchStarted+12*NSEC_PER_SEC;launchProgress=0;
+        fprintf(stderr,"BCAT: checking calendar for this launch before game startup\n");
+        NSDictionary *before=activeRoot?snapshot(activeRoot,startTitle,activeVersion):nil;
+        NSString *why=nil,*selected=refreshSnapshot(&why);BOOL timedOut=monotonicTime()>=launchDeadline;
+        launchDeadline=0;if(launchProgress)front_progress(NULL,1,1);launchProgress=0;
+        DmBcatRefresh *job=[DmBcatRefresh new];job.status=9;job.result=selected?0:1;job.bytes=snapshotBytes(selected);
+        pthread_mutex_lock(&refreshLock);activeRefresh=job;lastRefresh=NSDate.date.timeIntervalSince1970;pthread_mutex_unlock(&refreshLock);
+        if(selected){
+            NSDictionary *after=snapshot(selected,startTitle,activeVersion);BOOL same=[before[@"archiveSHA256"] isEqual:after[@"archiveSHA256"]];
+            activeRoot=selected;latestRoot=selected;
+            fprintf(stderr,"BCAT: calendar check validated (%s); selected before game startup\n",same?"unchanged":"updated");
+        }else fprintf(stderr,"BCAT: calendar check %s; %s (freshness not confirmed)\n",timedOut?"timed out":"unavailable or invalid",activeRoot?"last validated snapshot retained":"no validated calendar available");
+    }else fprintf(stderr,"BCAT: offline mode; %s (freshness not checked)\n",activeRoot?"validated local calendar selected":"no validated calendar available");
+    if(activeRoot){strlcpy(overlayPath,[activeRoot stringByAppendingPathComponent:@"files"].fileSystemRepresentation,sizeof overlayPath);strlcpy(deliveryPath,[[activeRoot stringByAppendingPathComponent:@"files"] stringByAppendingPathComponent:@"DebugUnderPilot/bcat"].fileSystemRepresentation,sizeof deliveryPath);}
 }
 static void start(void){@autoreleasepool{
     // Valid local data remains useful without online services. Only refresh and
@@ -317,11 +368,12 @@ static void start(void){@autoreleasepool{
     char *home=realpath(NSHomeDirectory().fileSystemRepresentation,NULL);if(!home)return;
     NSString *support=[[NSString stringWithUTF8String:home] stringByAppendingPathComponent:@"Library/Application Support"];free(home);
     activeVersion=version;activeCache=[[[support stringByAppendingPathComponent:@"nxnative/BCAT"] stringByAppendingPathComponent:startTitle] stringByAppendingPathComponent:version];
-    activeRoot=current(activeCache,startTitle,version)?:current(seed,startTitle,version);latestRoot=activeRoot;
-    if(activeRoot){strlcpy(overlayPath,[activeRoot stringByAppendingPathComponent:@"files"].fileSystemRepresentation,sizeof overlayPath);strlcpy(deliveryPath,[[activeRoot stringByAppendingPathComponent:@"files"] stringByAppendingPathComponent:@"DebugUnderPilot/bcat"].fileSystemRepresentation,sizeof deliveryPath);fprintf(stderr,"BCAT: validated calendar snapshot selected for %s (immutable RomFS overlay for this session)\n",startTitle.UTF8String);}
-    refresh();
+    selectAtLaunch(seed);
 }}
 void dm_bcat_start(const char *modules,const char *title,int online){
+    // Oodle's helper modes can enter guest_main only to expose a decoder; they
+    // are not game launches and must not initiate calendar/network preparation.
+    const char *job=getenv("DM_OODLE_JOB");if(getenv("DM_OODLE_SERVE")||(job&&*job))return;
     pthread_mutex_lock(&startupLock);
     if(startupAccepted){pthread_mutex_unlock(&startupLock);return;}
     startupAccepted=YES;

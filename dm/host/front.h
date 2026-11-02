@@ -13,6 +13,9 @@ static inline void front_hud_env(void) {
 }
 // Run the guest: with a window the guest runs on its own thread and the main thread belongs to the system UI; without a window it runs directly on the current thread.
 void front_run(void (*guest)(void));
+// Mac-only physical visibility/input focus, independent of Horizon applet focus.
+// A visible non-key window still presents, using monotonic rather than link pacing.
+void mtl_present_window_state(int visible, int focused);
 // The CAMetalLayer the graphics backend presents frames to (NULL when there is no window)
 void *front_metal_layer(void);
 // The highest refresh rate of the window's screen in Hz, 0 = not known (Mac front_mac.m; none on iOS, whose screens run at multiples of 60 Hz). Any thread

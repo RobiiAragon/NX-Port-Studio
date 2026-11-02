@@ -3,6 +3,7 @@
 // Per-game native network settings. Apply once before the guest starts; edits affect the next launch only.
 static NSString *network_preference_key(void) { return @"Network.v1." DM_GAME_ID; }
 static NSString *network_peer_key(void) { return [network_preference_key() stringByAppendingString:@".discoveryPeer"]; }
+#include "nextendo_authorization_mac.inc"
 static NSArray<NSString *> *network_modes(void) { return @[@"auto", @"offline", @"lan", @"ldn", @"nextendo"]; }
 static NSString *network_valid_mode(id value) { return [value isKindOfClass:NSString.class] && [network_modes() containsObject:value] ? value : @"offline"; }
 static BOOL network_valid_peer(NSString *peer) {
@@ -47,10 +48,72 @@ static NSString *network_mode_name(NSString *mode) {
 }
 
 @interface DmNetworkSettings : NSObject
+@property(nonatomic,strong) DmNextendoAuthorization *accountAuthorization;
+@property(nonatomic,strong) NSAlert *accountAlert;
+@property(nonatomic,strong) NSButton *accountButton;
+@property(nonatomic,strong) NSTextField *accountStatus;
+@property(nonatomic,strong) NSProgressIndicator *accountProgress;
 - (void)showNetwork:(id)sender;
+- (void)showNextendoAccount:(id)sender;
+- (void)authorizeNextendoAccess:(id)sender;
 - (void)presentAlert:(NSAlert *)alert disabled:(NSButton *)disabled peer:(NSTextField *)peer owner:(NSWindow *)owner;
 @end
 @implementation DmNetworkSettings
+- (void)accountFinished:(uint32_t)result alert:(NSAlert *)alert {
+    if (!alert || self.accountAlert!=alert || !alert.window.sheetParent) return;
+    [self.accountProgress stopAnimation:nil]; self.accountProgress.hidden=YES; self.accountButton.enabled=YES;
+    self.accountStatus.stringValue=result==0 ? @"Account access verified for this port. Try Online again. If the game kept an earlier rejection, close and reopen the game." :
+        @"Access was not verified. If you denied the macOS prompt, choose Authorize access to try again. For a missing or expired account, open NX Port Studio → Nextendo to link or renew it.";
+    NSAccessibilityPostNotificationWithUserInfo(alert.window,NSAccessibilityAnnouncementRequestedNotification,
+        @{NSAccessibilityAnnouncementKey:self.accountStatus.stringValue,NSAccessibilityPriorityKey:@(NSAccessibilityPriorityMedium)});
+}
+- (void)authorizeNextendoAccess:(id)sender {
+    NSAlert *alert=self.accountAlert;
+    if (sender!=self.accountButton || !alert || !alert.window.sheetParent || self.accountAuthorization.busy) return;
+    __weak DmNetworkSettings *weakSelf=self; __weak NSAlert *weakAlert=alert;
+    if (![self.accountAuthorization authorizeWithCompletion:^(uint32_t result){[weakSelf accountFinished:result alert:weakAlert];}]) return;
+    self.accountButton.enabled=NO; self.accountProgress.hidden=NO; [self.accountProgress startAnimation:nil];
+    self.accountStatus.stringValue=@"Waiting for macOS account access. Complete or cancel the Keychain prompt if it appears.";
+}
+- (void)showNextendoAccount:(id)sender {
+    (void)sender; NSWindow *owner=NSApp.mainWindow; if (!owner || owner.attachedSheet) return;
+    if (!self.accountAuthorization) self.accountAuthorization=[DmNextendoAuthorization new];
+    NSAlert *alert=[NSAlert new]; alert.messageText=@"Nextendo account — " DM_GAME_NAME;
+    alert.informativeText=@"NX Port Studio stores your Nextendo credential in this Mac’s Keychain. Authorize access lets this port read it. If macOS offers Always Allow, choose it to keep access for future account checks. Your network preferences remain in effect.";
+    [alert addButtonWithTitle:@"Close"]; [alert addButtonWithTitle:@"Open NX Port Studio"];
+    alert.buttons.firstObject.keyEquivalent=@"\x1b";
+    self.accountAlert=alert;
+    self.accountStatus=[NSTextField wrappingLabelWithString:@"Choose Authorize access to verify this port. Use NX Port Studio → Nextendo to link or renew your account."];
+    [self.accountStatus setAccessibilityLabel:@"Nextendo account access status"];
+    self.accountButton=[NSButton buttonWithTitle:@"Authorize access" target:self action:@selector(authorizeNextendoAccess:)];
+    [self.accountButton setAccessibilityLabel:@"Authorize this port to read the saved Nextendo credential"];
+    self.accountProgress=[NSProgressIndicator new]; self.accountProgress.style=NSProgressIndicatorStyleSpinning;
+    self.accountProgress.controlSize=NSControlSizeSmall; self.accountProgress.hidden=YES;
+    [self.accountProgress setAccessibilityLabel:@"Checking Nextendo account access"];
+    NSStackView *row=[NSStackView stackViewWithViews:@[self.accountButton,self.accountProgress]]; row.spacing=12;
+    NSStackView *fields=[NSStackView stackViewWithViews:@[self.accountStatus,row]];
+    fields.orientation=NSUserInterfaceLayoutOrientationVertical; fields.alignment=NSLayoutAttributeLeading; fields.spacing=12;
+    fields.frame=NSMakeRect(0,0,440,116); [self.accountStatus.widthAnchor constraintEqualToConstant:440].active=YES;
+    [self.accountStatus.heightAnchor constraintEqualToConstant:78].active=YES; alert.accessoryView=fields;
+    __weak DmNetworkSettings *weakSelf=self; __weak NSAlert *weakAlert=alert;
+    if ([self.accountAuthorization observePendingWithCompletion:^(uint32_t result){[weakSelf accountFinished:result alert:weakAlert];}]) {
+        self.accountButton.enabled=NO; self.accountProgress.hidden=NO; [self.accountProgress startAnimation:nil];
+        self.accountStatus.stringValue=@"Waiting for the account access request already in progress. Complete or cancel its macOS prompt.";
+    }
+    [alert beginSheetModalForWindow:owner completionHandler:^(NSModalResponse response) {
+        DmNetworkSettings *settings=weakSelf; if (!settings || settings.accountAlert!=weakAlert) return;
+        [settings.accountAuthorization cancelObservation]; settings.accountAlert=nil;
+        if (response==NSAlertSecondButtonReturn) {
+            NSURL *url=[NSWorkspace.sharedWorkspace URLForApplicationWithBundleIdentifier:@"org.nxnative.portstudio"];
+            if (url) [NSWorkspace.sharedWorkspace openApplicationAtURL:url configuration:NSWorkspaceOpenConfiguration.configuration completionHandler:nil];
+            else {
+                NSAlert *missing=[NSAlert new]; missing.messageText=@"Open NX Port Studio";
+                missing.informativeText=@"macOS could not locate NX Port Studio. Open it manually and choose Nextendo to link or renew your account.";
+                [missing beginSheetModalForWindow:owner completionHandler:nil];
+            }
+        }
+    }];
+}
 - (void)presentAlert:(NSAlert *)alert disabled:(NSButton *)disabled peer:(NSTextField *)peer owner:(NSWindow *)owner {
     // Attach settings to the game window. A floating application-modal alert can
     // remain behind a reactivated game window, leaving its menus disabled and
@@ -109,4 +172,6 @@ static void network_add_menu(NSMenu *app) {
     NSInteger index = app.numberOfItems;
     if (app.itemArray.lastObject.isSeparatorItem) index--;
     [app insertItem:item atIndex:index];
+    NSMenuItem *account=[[NSMenuItem alloc] initWithTitle:@"Nextendo account…" action:@selector(showNextendoAccount:) keyEquivalent:@""];
+    account.target=g_network_settings; [app insertItem:account atIndex:index+1];
 }

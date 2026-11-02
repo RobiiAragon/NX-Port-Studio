@@ -1122,6 +1122,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Found on:** [The Legend of Zelda: Breath of the Wild](../../dm/games/01007EF00011E000/README.md#files-and-shaders) (disabled blend factors), [The Legend of Zelda: Tears of the Kingdom](../../dm/games/0100F2C0115B6000/README.md#files-and-shaders) (absent-target state, reported by MacNativeGames).
 - **Check:** `t_pso_skey` covers normalized round trips, historical rows differing only in unused state, and preservation of merged-pass logical masks and blend bits; `t_pso_archive` checks disabled blend factors with all targets present. `make -C dm/gfx/tests GAME=<id> check_t_pso_warm` loads two synthetic manifests through `warm_worker`, checks compilation counts and draw-time cache hits, and compares GPU pixels with the original descriptors through both MTLDevice and Metal 4. It includes a merged pass whose physical attachment 0 uses logical target 7's blend and mask state.
 
+### Recorded geometry libraries skipped by the prewarm
+
+- **Symptom:** a recorded prewarm list names geometry libraries, but startup counts those rows as stale and their first draw still loads libraries or builds pipelines.
+- **Cause:** `warm_stale` removed only the ordinary `_b` suffix before looking up the original control key in the shader map. Geometry uses `_bg0` through `_bg4` for its topology kernels, `_bgv` for its vertex reader, and `_bl0`, `_bl1`, `_bl3` for its supported lean kernels. The map contains their original control key, not these generated library names.
+- **Fix:** recognize exactly those generated suffixes after a 16-character lowercase hexadecimal control key, then check that base in the shader map. Keep the full library key when loading and caching; variants must not alias the base or each other. Unknown suffixes and unmapped or malformed bases remain stale. This changes runtime list validation, not the shader translation chain or its libraries.
+- **Found on:** the experimental Splatoon 2 European 5.5.2 startup records: 16 shader rows and six reader-pipeline rows named existing geometry variants. This does not qualify complete gameplay or eliminate compilation of unrecorded states.
+- **Check:** `t_pso_warm` parses supported and rejected names through the production manifest loader, loads original synthetic Metal geometry kernels and readers, checks distinct cache slots, runs a kernel and draws with the exact warmed reader pipeline. Both MTLDevice and Metal 4 paths run with Metal validation.
+
 ### Shader cache key covering the pairs
 
 - **Symptom:** a vertex shader whose pairs changed was restored unpadded from `cas/`.

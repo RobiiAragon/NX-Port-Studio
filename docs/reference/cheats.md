@@ -76,6 +76,8 @@ So **about 12 passes per second**, not tied to the game's frames (a pass plus 83
 
 Beside the VM, `dmnt:cht` keeps up to 0x80 frozen addresses (`EnableFrozenAddress(address, width)`): dmnt reads the current value once (the call fails if that read fails) and writes it back after every VM pass with the raw write SVC. A VM write that covers a frozen address updates the frozen value (`WriteCheatProcessMemoryUnsafe`), but only when the write succeeded. This is what overlays' "freeze" uses; it is not part of the cheat file.
 
+The opcode fixture `t_cheats.c` uses a controlled presentation clock while driving VM passes explicitly, so the real idle worker stays in its normal presentation stand-down branch. It checks both power-of-two and one-second-old failure-note refreshes without racing an extra background pass. This isolates opcode/note checks; idle-thread cadence and concurrent mutation are not qualified by this fixture.
+
 ## The VM, as the reference implements it
 
 State (`dmnt_cheat_vm.hpp`): 16 registers of 64 bits, 16 saved values, 16 loop tops, a condition depth, a program of at most `MaximumProgramOpcodeCount = 0x400` words, and 0x100 static registers.

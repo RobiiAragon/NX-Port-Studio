@@ -12,6 +12,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     if(argc==3){NSData *zip=boundedRead([NSString stringWithUTF8String:argv[1]],zipLimit+1);BOOL expected=atoi(argv[2])!=0;NSDictionary *files=unzip(zip,NULL);if((files!=nil)!=expected)return 1;return 0;}
     CHECK(dm_bcat_supported("0100F8F0000A2000"));CHECK(!dm_bcat_supported("0100152000022000"));
     CHECK(!dm_bcat_supported("\xff"));
+    CHECK(validETag(@"\"fixture\""));CHECK(!validETag(@[]));CHECK(!validETag(NSNull.null));CHECK(!validETag(@"bad\nheader"));CHECK(!validETag(@""));
     CHECK(safePath(@"vsdata/VSSetting_0.byaml"));CHECK(!safePath(@"../data"));CHECK(!safePath(@"/absolute"));CHECK(!safePath(@"a//b"));CHECK(!safePath(@"a/../b"));CHECK(!safePath(@"a\\b"));CHECK(!safePath(@"c:/b"));
     CHECK(!json([@"{\"a\":1,\"a\":2}" dataUsingEncoding:NSUTF8StringEncoding]));
     CHECK(!json([@"{\"a\":1,\"\\u0061\":2}" dataUsingEncoding:NSUTF8StringEncoding]));
@@ -60,6 +61,8 @@ int main(int argc,const char **argv){@autoreleasepool{
     first.status=9;first.result=1;
     CHECK(dm_bcat_sync_observer_status(observer,&outcome,&downloaded)==9&&outcome==1);
     dm_bcat_sync_release(observer);activeVersion=nil;activeRefresh=nil;startOnline=NO;
+    setenv("DM_OODLE_SERVE","1",1);dm_bcat_start("/absent", "0100f8f0000a2000", 1);CHECK(!startupAccepted&&!activeRefresh);unsetenv("DM_OODLE_SERVE");
+    setenv("DM_OODLE_JOB","fixture-job",1);dm_bcat_start("/absent", "0100f8f0000a2000", 1);CHECK(!startupAccepted&&!activeRefresh);unsetenv("DM_OODLE_JOB");
     dm_bcat_start("/absent", "0100f8f0000a2000", 0);CHECK(!dm_bcat_overlay());CHECK(!dm_bcat_delivery());CHECK(!dm_bcat_request_sync());
     dm_bcat_start("/different", "01003bc0000a0000", 1);CHECK([startTitle isEqual:@"0100f8f0000a2000"]&&!startOnline);
     printf("BCAT signed policy/path/atomic store: %u checks passed\n",checks);return 0;

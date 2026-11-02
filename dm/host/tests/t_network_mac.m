@@ -3,6 +3,8 @@
 #import <Cocoa/Cocoa.h>
 #include <stdlib.h>
 #include <string.h>
+static unsigned accountReads;
+uint32_t dm_nextendo_account_authorize_local(void) { accountReads++; return 0x2a2; }
 #define DM_GAME_ID "test-network"
 #define DM_GAME_NAME "Network Test"
 #include "../network_mac.inc"
@@ -10,6 +12,9 @@ static int checks, failures;
 #define CHECK(c, message) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL: %s (line %d)\n", message, __LINE__); } } while (0)
 static int environment_equals(const char *name, const char *value) { const char *actual = getenv(name); return actual && !strcmp(actual, value); }
 int main(void) { @autoreleasepool {
+    DmNetworkSettings *accountSettings=[DmNetworkSettings new];
+    [accountSettings showNextendoAccount:nil]; [accountSettings authorizeNextendoAccess:nil];
+    CHECK(!accountReads,"absent window and absent explicit authorization never read account data");
     const char *inherited = getenv("DM_NETWORK");
     char *original = inherited ? strdup(inherited) : NULL;
     NSString *suite = [@"org.nxnative.network.test." stringByAppendingString:NSUUID.UUID.UUIDString];

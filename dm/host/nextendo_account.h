@@ -15,6 +15,9 @@ void dm_nextendo_set_game_version(const char *version);
 uint32_t dm_nextendo_account_available(uint8_t *out);
 uint32_t dm_nextendo_account_id(uint64_t *out);
 uint32_t dm_nextendo_account_ensure(void);
+// Explicit host UI action only. Validate local access without enabling network
+// services; unlike availability, this read may ask the OS for authorization.
+uint32_t dm_nextendo_account_authorize_local(void);
 uint32_t dm_nextendo_account_load_token(uint64_t *size, char *buffer, uint64_t capacity);
 // Public PKCS#1 RSA key for verifying this process's local envelope signature.
 // This does not claim registration with Nintendo or a Nextendo JWKS service.

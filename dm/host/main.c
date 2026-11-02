@@ -20,8 +20,13 @@ static void *req(const char *n){ void *p=guest_sym(n); if(!p) die("missing symbo
 
 // Game arguments: argv[0] is fixed to "game", and whatever follows "--" is appended as is (on a real device nn::init takes them from the process argument area and hands them to the SDK through SetHostArgc/Argv)
 static char *g_argv[64] = {"game"}; static int g_argc = 1;
+static const char *g_module_directory;
 
 static void guest_main(void) {
+    // The front end's event loop is available while this bounded calendar check
+    // runs. Finish selection before any SDK initializer or game resource open.
+    { void dm_bcat_start(const char *, const char *, int);
+      dm_bcat_start(g_module_directory, DM_GAME_ID, dm_net_nextendo_enabled()); }
     guest_thread_init();
     guest_gate_stack(0);   // the guest code runs on this thread's own stack: its SVCs get a stack of their own
     { void dm_oodle_serve_maybe(int); dm_oodle_serve_maybe(0); }   // DM_OODLE_SERVE tool mode: the game's own Oodle decoder over stdin / stdout (hle_oodle.c, exits when the input ends)
@@ -159,8 +164,7 @@ int main(int argc, char **argv) {
     } else host_preload(argc, argv);
     { void dm_fps_state_apply(void); dm_fps_state_apply(); }   // frame rate and render scale into the frame step state page (loader.c): the iOS launcher sets them after the loading began
     { void dm_display_apply(void); dm_display_apply(); }
-    { void dm_bcat_start(const char *, const char *, int);
-      dm_bcat_start(argc > 1 ? argv[1] : NULL, DM_GAME_ID, dm_net_nextendo_enabled()); }
+    g_module_directory = argc > 1 ? argv[1] : NULL;
     front_run(guest_main);
     return 0;
 }

@@ -43,6 +43,10 @@ jobs:
           make -C dm/host/tests GAME="$GAME" -j3 run 2>&1 | tee logs/host-tests.log
       - name: Native calendar policy, archive, filesystem and SDK fixtures
         run: make -C dm/host/tests GAME="$GAME" bcat 2>&1 | tee logs/bcat.log
+      - name: Native TLS stream semantics and bounded diagnostics
+        run: |
+          make -C dm/host/tests GAME="$GAME" ssl 2>&1 | tee logs/tls.log
+          DM_SSL_TRACE=1 make -C dm/host/tests GAME="$GAME" ssl 2>&1 | tee logs/tls-traced.log
       - name: ThreadSanitizer (audio, HID and guest memory)
         run: |
           make -C dm/host/tests GAME="$GAME" -j3 tsan memory-tsan 2>&1 | tee logs/tsan.log
@@ -60,7 +64,7 @@ jobs:
           make GAME="$GAME" -j3 t_perf_order
           ./t_perf_order --cpu 2>&1 | tee ../../../logs/t_perf_order.log
           make GAME="$GAME" -j3 perf-order-tsan 2>&1 | tee ../../../logs/t_perf_order-tsan.log
-          tests="t_gfx_suspend t_capture t_dirty_slots t_dirty_race t_dirty_retire_race t_tex_layout t_pace t_fstep t_link_ticks t_cpu_tex t_hmap t_cover t_pso_skey t_refl t_rt_range_ro t_present_rescue t_gpuprof t_sparse_layout t_timestamp t_rt_depth_ro t_rt_range_shape t_ub t_pso_pending t_vk_desc"
+          tests="t_gfx_suspend t_capture t_dirty_slots t_dirty_race t_dirty_retire_race t_tex_layout t_pace t_fstep t_link_ticks t_cpu_tex t_hmap t_cover t_pso_skey t_refl t_rt_range_ro t_present_rescue t_present_background t_gpuprof t_sparse_layout t_timestamp t_rt_depth_ro t_rt_range_shape t_ub t_pso_pending t_vk_desc"
           make GAME="$GAME" -j3 $tests 2>&1 | tee ../../../logs/gfx-build.log
           failed=0
           for t in $tests; do
@@ -95,6 +99,11 @@ jobs:
           make -C dm/host/tests GAME="$GAME" -j3 asan 2>&1 | tee logs/host-asan.log
       - name: ASan and UBSan, native calendar delivery
         run: make -C dm/host/tests GAME="$GAME" B=build/bcat-asan SAN="-fsanitize=address,undefined -fno-omit-frame-pointer" bcat 2>&1 | tee logs/bcat-asan.log
+      - name: ASan and UBSan, native TLS and desktop presentation
+        run: |
+          make -C dm/host/tests GAME="$GAME" ssl-sanitize 2>&1 | tee logs/tls-asan.log
+          DM_SSL_TRACE=1 make -C dm/host/tests GAME="$GAME" ssl-sanitize 2>&1 | tee logs/tls-traced-asan.log
+          make -C dm/gfx/tests GAME="$GAME" check_t_present_background_asan 2>&1 | tee logs/background-asan.log
       - name: ASan and UBSan, CPU texture layout and deswizzle test (dm/gfx/tex/tests)
         run: make -C dm/gfx/tex/tests asan 2>&1 | tee logs/texture-asan.log
       - name: ThreadSanitizer, the host tests that start threads (dm/host/tests)

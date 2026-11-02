@@ -208,6 +208,7 @@ int dm_mac_app_prepare(int *host_argc, char ***host_argv, const char *expected_t
     snprintf(p, sizeof p, "%s/msl", res); setenv("DM_MSL_DIR", p, 0);
     snprintf(p, sizeof p, "%s/font", dm); setenv("DM_FONT_DIR", p, 0);
     snprintf(p, sizeof p, "%s/system_data", dm); if (!stat(p, &st) && S_ISDIR(st.st_mode)) setenv("DM_SYSTEM_DATA_DIR", p, 0);
+    snprintf(p, sizeof p, "%s/nextendo-private/routes.tsv", dm); if (!stat(p, &st) && S_ISREG(st.st_mode)) setenv("DM_NEXTENDO_ROUTES", p, 0);
     snprintf(p, sizeof p, "%s/nextendo/routes.tsv", dm); if (!stat(p, &st) && S_ISREG(st.st_mode)) setenv("DM_NEXTENDO_ROUTES", p, 0);
     snprintf(p, sizeof p, "%s/shader_map.tsv", dm); if (!stat(p, &st)) setenv("DM_NVN_SHMAP", p, 0);
     snprintf(p, sizeof p, "%s/aoc", res); if (!stat(p, &st)) setenv("DM_AOC_DIR", p, 0);

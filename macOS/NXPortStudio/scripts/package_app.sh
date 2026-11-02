@@ -107,8 +107,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleShortVersionString</key><string>1.6.0</string>
-    <key>CFBundleVersion</key><string>22</string>
-    <key>CFBundleGetInfoString</key><string>1.6.0 Release Candidate 5</string>
+    <key>CFBundleVersion</key><string>23</string>
+    <key>CFBundleGetInfoString</key><string>1.6.0 Release Candidate 6</string>
     <key>CFBundleDevelopmentRegion</key><string>es</string>
     <key>CFBundleLocalizations</key><array><string>es</string><string>en</string><string>fr</string><string>ja</string><string>zh-Hans</string></array>
     <key>CFBundleIconFile</key><string>AppIcon</string>

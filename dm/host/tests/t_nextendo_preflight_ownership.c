@@ -22,9 +22,13 @@ static int fixture_kill(pid_t child,int sig) { (void)child;(void)sig;kills++;ret
 int main(void) {
     dm_nextendo_preflight_reply reply;
     CHECK(!dm_nextendo_preflight_query(&reply,100));
+    dm_nextendo_preflight_status status=dm_nextendo_preflight_last_status();
+    CHECK(status.stage==DM_PREFLIGHT_REAP && status.error==ECHILD && status.bytes==0 && status.exit_code==-1 && !status.signal);
     CHECK(spawns==1 && waits==1 && !kills);
     fail_spawn=1;CHECK(!dm_nextendo_preflight_query(&reply,100));CHECK(spawns==2 && waits==1 && !kills);
+    status=dm_nextendo_preflight_last_status();CHECK(status.stage==DM_PREFLIGHT_SPAWN && status.error==EAGAIN && status.bytes==-1);
     CHECK(!dm_nextendo_preflight_query(&reply,0) && !dm_nextendo_preflight_query(&reply,5001));
+    status=dm_nextendo_preflight_last_status();CHECK(status.stage==DM_PREFLIGHT_ARGUMENT && status.error==EINVAL && status.bytes==-1);
     CHECK(spawns==2 && !kills);
     printf("Preflight child ownership: %u checks passed; no kill after ECHILD\n",checks);return 0;
 }

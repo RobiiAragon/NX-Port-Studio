@@ -10,6 +10,7 @@
 #endif
 #include <CommonCrypto/CommonDigest.h>
 #include "nextendo_account.h"
+#include "account_trace.h"
 #import "nextendo_api_apple.h"
 #include "net_socket.h"
 #include <stdatomic.h>
@@ -67,7 +68,8 @@ static BOOL unsigned_decimal(NSString *text, uint64_t *out) {
     if (!value) return NO; *out = value; return YES;
 }
 static BOOL number(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID(); }
-static NSData *read_credentials(BOOL allowInteraction) {
+static NSData *read_credentials(BOOL allowInteraction, BOOL guestWait) {
+    (void)guestWait;
     if (allowInteraction) atomic_fetch_add(&preflightGeneration, 1);
     dm_nextendo_credential_provider provider = atomic_load(&credentialProvider);
     if (provider) { NSMutableData *data = [NSMutableData dataWithLength:65536]; size_t size = 0; if (!data || !provider(data.mutableBytes, data.length, &size) || !size || size > data.length) return nil; data.length = size; return data; }
@@ -94,15 +96,15 @@ static NSData *read_credentials(BOOL allowInteraction) {
     }
     CFTypeRef result = NULL;
     // The probe has no guest scheduler/TLS: it runs before host preload.
-    if (!preflightChild) dm_guest_host_wait_begin();
+    if (guestWait) dm_guest_host_wait_begin();
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
-    if (!preflightChild) dm_guest_host_wait_end();
+    if (guestWait) dm_guest_host_wait_end();
     if (status || !result) { if (result) CFRelease(result); return nil; }
     id data = CFBridgingRelease(result); return [data isKindOfClass:NSData.class] && [data length] <= 65536 ? data : nil;
 #endif
 }
-static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) {
-    if (!enabled()) return nil; NSData *data = read_credentials(allowInteraction); if (!data.length || data.length > 65536) return nil;
+static DmNextendoCredential *decode_credential(NSData *data) {
+    if (!data.length || data.length > 65536) return nil;
     id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]; if (![decoded isKindOfClass:NSDictionary.class]) return nil; NSDictionary *json = decoded;
     if (!number(json[@"schema_version"]) || [json[@"schema_version"] doubleValue] != 1 || ![json[@"token_kind"] isEqual:@"nex"]) return nil;
     NSString *token = json[@"token"]; if (![token isKindOfClass:NSString.class] || !token.length || [token lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 16384) return nil;
@@ -121,7 +123,18 @@ static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) 
     id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return nil; for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return nil;
     DmNextendoCredential *c = [DmNextendoCredential new]; c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
 }
+static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) {
+    BOOL guestWait=YES;
+#if !TARGET_OS_IOS
+    guestWait=!preflightChild;
+#endif
+    return enabled() ? decode_credential(read_credentials(allowInteraction,guestWait)) : nil;
+}
 static DmNextendoCredential *credential(void) { DmNextendoCredential *c = credential_with_interaction(YES); atomic_fetch_add(&preflightGeneration, 1); return c; }
+uint32_t dm_nextendo_account_authorize_local(void) { @autoreleasepool {
+    DmNextendoCredential *c=decode_credential(read_credentials(YES,NO));
+    atomic_fetch_add(&preflightGeneration,1); return c ? 0 : DM_ACCOUNT_FAIL;
+} }
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) {
     atomic_fetch_add(&preflightGeneration, 1);
     atomic_store(&credentialProvider, provider); pthread_mutex_lock(&accountLock); cachedFingerprint = nil; cachedToken = nil; cachedVersion = nil; cachedExpiry = 0; pthread_mutex_unlock(&accountLock);
@@ -157,33 +170,46 @@ int dm_nextendo_account_preflight_child(int fd) { @autoreleasepool {
     while (done < sizeof reply) { ssize_t n = write(fd, bytes + done, sizeof reply - done); if (n < 0 && errno == EINTR) continue; if (n <= 0) return 67; done += (size_t)n; }
     return 0;
 } }
-static BOOL preflight_available(void) {
+static BOOL preflight_available(dm_account_trace_provider_state *trace) {
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     static uint64_t generation; static NSTimeInterval checkedUntil, expiresAt; static BOOL available;
     dm_guest_host_wait_begin(); pthread_mutex_lock(&lock);
     uint64_t before = atomic_load(&preflightGeneration);
     NSTimeInterval now = NSDate.date.timeIntervalSince1970, uptime = NSProcessInfo.processInfo.systemUptime;
     if (generation != before || uptime >= checkedUntil || (available && now >= expiresAt)) {
+        trace->cached = 0;
         dm_nextendo_preflight_reply reply; int valid = dm_nextendo_preflight_query(&reply, 3000);
+        dm_nextendo_preflight_status status=dm_nextendo_preflight_last_status();
+        trace->stage=status.stage; trace->error=status.error; trace->bytes=status.bytes;
+        trace->exit_code=status.exit_code; trace->signal=status.signal;
         now = NSDate.date.timeIntervalSince1970;
         expiresAt = valid ? (double)reply.expires_ms / 1000 : 0;
         available = valid && reply.available && expiresAt > now;
+        trace->query_valid = valid;
+        trace->child_available = valid ? (int)reply.available : -1;
+        trace->expiry_valid = valid && reply.available ? expiresAt > now : -1;
         generation = before; checkedUntil = NSProcessInfo.processInfo.systemUptime + MIN(1, available ? expiresAt - now : 1);
         // Explicit reads/provider changes can happen concurrently. Do not
         // publish an older observation over that change, even for one second.
-        if (atomic_load(&preflightGeneration) != before) { checkedUntil = 0; available = NO; }
-    }
+        trace->generation_changed = atomic_load(&preflightGeneration) != before;
+        if (trace->generation_changed) { checkedUntil = 0; available = NO; }
+    } else { trace->cached = 1; trace->expiry_valid = available ? now < expiresAt : -1; }
     BOOL result = available;
     pthread_mutex_unlock(&lock); dm_guest_host_wait_end(); return result;
 }
 #endif
 uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool {
-    if (!out) return DM_ACCOUNT_FAIL; *out = 0; if (!enabled()) return 0;
+    if (!out) return DM_ACCOUNT_FAIL; *out = 0;
+    dm_account_trace_provider_state trace = {enabled(),-1,-1,-1,-1,-1,-1,-1,0,-1,-1,0};
+    if (!trace.enabled) { dm_account_trace_provider(0,trace); return 0; }
 #if TARGET_OS_IOS
+    trace.provider = 1;
     *out = credential_with_interaction(NO) != nil;
 #else
-    *out = atomic_load(&credentialProvider) ? credential_with_interaction(NO) != nil : preflight_available();
+    trace.provider = atomic_load(&credentialProvider) != NULL;
+    *out = trace.provider ? credential_with_interaction(NO) != nil : preflight_available(&trace);
 #endif
+    dm_account_trace_provider(*out != 0,trace);
     return 0;
 } }
 uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {

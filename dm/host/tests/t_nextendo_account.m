@@ -4,12 +4,15 @@
 #import <Security/Security.h>
 #include "../hle.h"
 #include "t_gate_fixture.h"
+#include "t_trace_capture.h"
+#include "../account_trace.h"
 #include "../nextendo_account.h"
 #include "../net_socket.h"
 #include <mach-o/getsect.h>
 #include <mach-o/ldsyms.h>
 #include <stdatomic.h>
 #include <pthread.h>
+#include <errno.h>
 
 static int checks, failures;
 static _Atomic int entered, left, waits, providerCalls;
@@ -81,7 +84,11 @@ static void token_tests(void) {
     CHECK(load(&size, bytes, 16, user) != 0 && size > 16 && bytes[0] == 0x6a, "short cache buffer reports needed length without overwriting it");
     CHECK(load(&size, bytes, 8192, user) == 0 && size < 3072 && bytes[size] == 0 && bytes[8192] == 0x6a, "token cache is bounded and NUL-terminated; reported size excludes NUL");
     NSString *jwt = [[NSString alloc] initWithBytes:bytes length:(NSUInteger)size encoding:NSASCIIStringEncoding]; NSArray *segments = [jwt componentsSeparatedByString:@"."]; CHECK(segments.count == 3, "compact signed envelope contains three segments");
-    NSDictionary *header = [NSJSONSerialization JSONObjectWithData:unb64(segments[0]) options:0 error:nil], *claims = [NSJSONSerialization JSONObjectWithData:unb64(segments[1]) options:0 error:nil];
+    if (segments.count != 3) return;
+    NSData *headerBytes=unb64(segments[0]), *claimBytes=unb64(segments[1]);
+    CHECK(headerBytes && claimBytes,"synthetic envelope JSON segments decode before parsing");
+    if (!headerBytes || !claimBytes) return;
+    NSDictionary *header = [NSJSONSerialization JSONObjectWithData:headerBytes options:0 error:nil], *claims = [NSJSONSerialization JSONObjectWithData:claimBytes options:0 error:nil];
     NSDictionary *original = [NSJSONSerialization JSONObjectWithData:fixture options:0 error:nil];
     CHECK([header[@"alg"] isEqual:@"RS256"] && [claims[@"iss"] isEqual:@"nx-port-studio"] && [claims[@"sub"] isEqual:@"1800000042"] && [claims[@"nnex"] isEqual:original[@"token"]] && [claims[@"tv"] isEqual:@"3.0.5"], "own namespace, actual PID, untouched NEX proof and original game version");
     CHECK(!claims[@"aud"] && !claims[@"jku"] && !claims[@"hm"] && !claims[@"sn"] && !claims[@"country"] && [claims[@"exp"] doubleValue] <= [original[@"expires_at"] doubleValue], "no invented Nintendo identity, membership or country; expiry bounded by the proof");
@@ -137,8 +144,51 @@ static void async_tests(void) {
     service_result=0; CHECK(dm_nextendo_async_execute(contextA,service_operation,&service_result)==0 && !result(contextA), "a later service request has its own real completion");
     mode=DM_NET_LAN; CHECK(dm_nextendo_async_execute(contextA,service_operation,&service_result)!=0, "local modes do not execute a provider service operation"); mode=DM_NET_NEXTENDO; dtor(contextA);
 }
+static void trace_tests(void) {
+    typedef uint32_t (*Available)(uint8_t *,const void *);
+    Available available = H(Available,"_ZN2nn7account32IsNetworkServiceAccountAvailableEPbRKNS0_10UserHandleE");
+    NSMutableDictionary *record = valid_record(); record[@"scopes"] = @[@"TRACE_SECRET_SENTINEL_6da8b7"];
+    set_record(record); uint8_t bytes[3] = {0x73,9,0x91}; uint64_t wrong[3] = {user[0]^1,user[1],user[2]};
+    const char *disabled[] = {"0","true","01",""};
+    TraceCapture capture = trace_capture_begin(); unsetenv("DM_ACCOUNT_TRACE");
+    int before = atomic_load(&providerCalls); uint32_t baseline = available(&bytes[1],user);
+    for (unsigned i=0;i<sizeof disabled/sizeof *disabled;i++) { setenv("DM_ACCOUNT_TRACE",disabled[i],1); available(&bytes[1],user); }
+    char *text = trace_capture_end(capture);
+    CHECK(!*text && !baseline && bytes[0]==0x73 && bytes[1]==1 && bytes[2]==0x91 && atomic_load(&providerCalls)==before+5,"trace is absent by default and only exact 1 enables it; real one-byte ABI remains intact"); free(text);
+    setenv("DM_ACCOUNT_TRACE","1",1); capture=trace_capture_begin(); before=atomic_load(&providerCalls);
+    uint32_t result=available(&bytes[1],user); int after=atomic_load(&providerCalls);
+    uint32_t invalid=available(&bytes[1],wrong); int invalidCalls=atomic_load(&providerCalls); uint8_t invalidOut=bytes[1];
+    // The original null-output path must not inspect even this invalid handle.
+    uint32_t nullOutput=available(NULL,(const void *)(uintptr_t)1);
+    set_record(nil); uint32_t missing=available(&bytes[1],user); uint8_t missingOut=bytes[1]; set_record(record);
+    text=trace_capture_end(capture);
+    CHECK(result==baseline && after==before+1 && invalidCalls==after && invalid==0x2a2 && !invalidOut && nullOutput==0x2a2 && !missing && !missingOut && atomic_load(&providerCalls)==after+1,"observation preserves each real call, invalid-handle rejection and unavailable result");
+    CHECK(bytes[0]==0x73 && bytes[2]==0x91 && strstr(text,"result=0x0 valid_handle=1 available=1") && strstr(text,"result=0x2a2 valid_handle=0 available=0") && strstr(text,"valid_handle=-1 available=-1") && strstr(text,"result=0x0 valid_handle=1 available=0"),"direct registered HLE trace distinguishes all gate outcomes without output overflow");
+    CHECK(!strstr(text,"TRACE_SECRET_SENTINEL") && !strstr(text,"nx2.") && !strstr(text,"synthetic_user") && !strstr(text,"1800000042"),"credential sentinel, token, username and identity never enter trace");
+    unsigned previousLines=0; for(char *p=text;*p;p++) if(*p=='\n')previousLines++; free(text);
+    capture=trace_capture_begin(); errno=E2BIG; dm_account_trace_available(0,1,1); int preserved=errno;
+    dm_account_trace_available(0,1,1); // Identical consecutive states do not spend the section budget.
+    for(unsigned i=0;i<200;i++) dm_account_trace_nifm(DM_ACCOUNT_TRACE_AVAILABLE,i&1,i&1,(dm_account_trace_network){0,-1,-1,0});
+    for(unsigned i=0;i<200;i++) dm_account_trace_nifm(DM_ACCOUNT_TRACE_NETWORK_RESULT,i&1,i&1,(dm_account_trace_network){0,-1,-1,0});
+    for(unsigned i=0;i<200;i++) dm_account_trace_available(0x9000+i,1,1);
+    for(unsigned i=0;i<200;i++) dm_account_trace_provider(i&1,(dm_account_trace_provider_state){1,0,0,1,1,1,0,(int)i,0,32,0,0});
+    text=trace_capture_end(capture); unsigned lines=0; for(char *p=text;*p;p++) if(*p=='\n')lines++;
+    CHECK(preserved==E2BIG && lines+previousLines==128 && strstr(text,"op=acc.available result=0x9000"),"four independent 32-event budgets preserve account evidence after NIFM polling and preserve errno"); free(text); unsetenv("DM_ACCOUNT_TRACE");
+}
+static void local_authorization_tests(void) {
+    mode=DM_NET_OFFLINE; set_record(valid_record()); int before=atomic_load(&providerCalls); uint8_t available=9;
+    CHECK(dm_nextendo_account_authorize_local()==0 && atomic_load(&providerCalls)==before+1,"explicit local authorization validates the real synthetic proof once even with network disabled");
+    CHECK(!dm_nextendo_account_available(&available) && !available && atomic_load(&providerCalls)==before+1 && mode==DM_NET_OFFLINE,"local authorization never enables in-game account/network services");
+    NSMutableDictionary *expired=valid_record(); expired[@"expires_at"]=@1; set_record(expired);
+    CHECK(dm_nextendo_account_authorize_local()!=0,"explicit authorization cannot accept an expired proof");
+    set_record(nil); CHECK(dm_nextendo_account_authorize_local()!=0,"missing local credential remains unavailable");
+    set_record(valid_record()); mode=DM_NET_NEXTENDO;
+}
 int main(void) { @autoreleasepool {
+    unsetenv("DM_ACCOUNT_TRACE");
+    setenv("DM_NEXTENDO_ROUTES","synthetic-account-profile",1);
     dm_nextendo_set_credential_provider(provider); dm_nextendo_set_game_version("3.0.5"); identity_tests(); token_tests(); async_tests();
+    local_authorization_tests(); trace_tests();
     CHECK(atomic_load(&entered) > 0 && atomic_load(&entered) == atomic_load(&left) && atomic_load(&waits) > 0, "blocking account hooks publish balanced guest contexts and mark host security waits");
     printf("Nextendo account: %d checks, %d failures; synthetic provider only, no user credentials read\n", checks, failures); return failures ? 1 : 0;
 } }

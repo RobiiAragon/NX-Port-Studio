@@ -20,6 +20,7 @@ sys.path.insert(0, str(HERE.parent / 'tools'))
 import romfs as rfs
 import system_data
 import nextendo_services
+import nextendo_local_peers
 import nextendo_bcat
 import mii_resources
 MODULE_FILES = ('*.patched.bin', '*.fixups.tsv', '*.gates.tsv', '*.cuts.tsv', '*.obs.tsv', '*.changed.tsv', 'nro.tsv')   # what the host reads from the module folder (build_ipa.sh copies the same tables but changed.tsv: the iPhone's cheats never write code)
@@ -217,7 +218,27 @@ def replace_app(tmp, out):
         tmp.rename(out)
 
 
+def nextendo_snapshot(a):
+    """Capture once before reuse/copy: only these verified bytes enter the bundle."""
+    source = getattr(a, 'nextendo_services_dir', None)
+    if not source: return None
+    collection = getattr(a, 'nextendo_peer_collection', None)
+    if collection is None:
+        collection = Path.home() / 'Library/Application Support/NX Port Studio/Nextendo/PeerCertificates'
+    repository = Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory(prefix='nextendo-pack-') as folder:
+        root = Path(folder).resolve()
+        public = nextendo_services.stage(source, root / 'public', a.title_id)
+        private = nextendo_local_peers.prepare(repository, a.title_id, public, collection, root / 'private')
+        return {'public':{p.name:p.read_bytes() for p in public.iterdir()},
+                'private':{p.name:p.read_bytes() for p in private.iterdir()} if private else None}
+
+
 def pack(a):
+    return _pack(a, nextendo_snapshot(a))
+
+
+def _pack(a, nextendo):
     out = Path(a.out).resolve()
     if out.suffix != '.app': raise SystemExit(f'the output must end in .app: {out}')
     key_file = out.with_name(out.name + '.key')
@@ -241,8 +262,11 @@ def pack(a):
         sources = [Path(__file__).resolve(), HERE / 'launcher.c', HERE / 'save_supervisor.c', HERE / 'save_supervisor_start.c', HERE / 'save_supervisor.h', HERE.parent / 'host/front.h', HERE.parent / 'host/romfs_image.h', HERE.parent / 'host/save_sync.c', HERE.parent / 'host/save_sync.h', HERE.parent / 'tools/romfs.py'] + swift_sources()
         if getattr(a, 'nextendo_bcat_dir', None):
             sources += [HERE.parent / p for p in ('tools/nextendo_bcat.py', 'tools/bcat_prepare.m', 'host/hle_bcat_apple.m', 'host/nextendo_bcat.h')]
+        if nextendo:
+            sources += [Path(nextendo_services.__file__).resolve(), Path(nextendo_local_peers.__file__).resolve()]
         inputs = {'options': vars(a), 'files': [(str(p), p.stat().st_mode, digest(p), os.readlink(p) if p.is_symlink() else None) for p in files + sources],
                   'trees': [(p, inventory(Path(p))) for p in (a.romfs, a.aoc, getattr(a, 'nextendo_bcat_dir', None)) if p],
+                  'nextendo': {kind:{name:hashlib.sha256(data).hexdigest() for name,data in profile.items()} if profile else None for kind,profile in nextendo.items()} if nextendo else None,
                   'tools': [[str(c), c.stat().st_mode, c.stat().st_size, c.stat().st_mtime_ns, c.stat().st_ctime_ns, run([c, '--version']).strip()] for c in (clang, swiftc)] + [
                             str(sdk), run(['xcrun', '--sdk', 'macosx', '--show-sdk-version']).strip(),
                             str(codesign), codesign.stat().st_mode, digest(codesign), minos]}
@@ -281,8 +305,14 @@ def pack(a):
         step("imported firmware resources"); system_data.stage(a.system_data_dir, dm / "system_data")
     if getattr(a, "mii_database", None):
         step("private personal Mii snapshot"); mii_resources.stage(a.mii_database, dm / 'mii_database.dmii')
-    if getattr(a, "nextendo_services_dir", None):
-        step("public Nextendo service profile"); nextendo_services.stage(a.nextendo_services_dir, dm / 'nextendo', a.title_id)
+    if nextendo:
+        for kind, name in (('public', 'nextendo'), ('private', 'nextendo-private')):
+            profile = nextendo[kind]
+            if profile:
+                step('public Nextendo service profile' if kind == 'public' else 'approved local Nextendo service profile')
+                destination = dm / name; destination.mkdir(exist_ok=True, mode=0o700)
+                for filename, data in profile.items():
+                    path = destination / filename; path.write_bytes(data); path.chmod(0o600)
     if getattr(a, "nextendo_bcat_dir", None):
         step("Nextendo calendar recipe and any complete validated snapshot")
         nextendo_bcat.stage(HERE.parent.parent, a.nextendo_bcat_dir, dm / 'bcat', a.title_id, a.version, allow_missing=True)
@@ -336,6 +366,7 @@ def parse(argv):
     ap.add_argument('--system-data-dir', help='extracted firmware resources (system_data/<title-id>/files)')
     ap.add_argument('--mii-database', help='validated private personal Mii library/export snapshot')
     ap.add_argument('--nextendo-services-dir', help='validated public Nextendo service profile for this title')
+    ap.add_argument('--nextendo-peer-collection', help='explicit local approved-peer collection directory (Mac only; default: Studio local collection)')
     ap.add_argument('--nextendo-bcat-dir', help='verified private calendar snapshot cache for this title/version')
     ap.add_argument('--env-file', help='environment switches baked in (Resources/dm/env.txt)')
     ap.add_argument('--settings', help='the game\'s launcher settings (dm/games/settings.py output; Resources/dm/launcher.json, which the Mac front end reads)')

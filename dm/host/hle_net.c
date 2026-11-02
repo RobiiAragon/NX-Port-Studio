@@ -3,6 +3,7 @@
 // separate account, social and scoped-TLS adapters.
 #include "hle.h"
 #include "net_socket.h"
+#include "account_trace.h"
 #include <stdatomic.h>
 void dm_guest_sleep_ns(int64_t ns);
 
@@ -26,11 +27,29 @@ HLE_FORCE("_ZN2nn4nifm22IsNetworkRequestOnHoldEv", "offline: on hold for the fir
     while (h > 0 && !atomic_compare_exchange_weak(&g_nifm_hold, &h, h - 1)) {}
     return h > 0;
 }
-int dm_nifm_available(void) { return dm_net_enabled() && atomic_load(&g_nifm_pending) && !atomic_load(&g_nifm_hold) && !dm_net_ipconfig(NULL, NULL, NULL, NULL, NULL); }
+static int nifm_available(dm_account_trace_network *state) {
+    // Preserve the original short-circuit order and exactly one IP query.
+    int enabled = dm_net_enabled(); if (state) state->enabled = enabled;
+    if (!enabled) return 0;
+    int pending = atomic_load(&g_nifm_pending); if (state) state->pending = pending;
+    if (!pending) return 0;
+    int hold = atomic_load(&g_nifm_hold); if (state) state->hold = hold;
+    if (hold) return 0;
+    if (state) state->ip_queried = 1;
+    return !dm_net_ipconfig(NULL, NULL, NULL, NULL, NULL);
+}
+int dm_nifm_available(void) { return nifm_available(NULL); }
 void dm_nifm_submit_wait(void) { if (dm_net_enabled()) { h_nifm_Submit(); while (h_nifm_OnHold()) dm_guest_sleep_ns(0); } }
-HLE_FORCE("_ZN2nn4nifm18IsNetworkAvailableEv", "offline by default; explicit LAN reports the actual IPv4 request state", int, h_nifm_Available, void) { return dm_nifm_available(); }
+HLE_FORCE("_ZN2nn4nifm18IsNetworkAvailableEv", "offline by default; explicit LAN reports the actual IPv4 request state", int, h_nifm_Available, void) {
+    dm_account_trace_network state = {-1,-1,-1,0}; int available = nifm_available(&state);
+    dm_account_trace_nifm(DM_ACCOUNT_TRACE_AVAILABLE, (uint32_t)available, available, state); return available;
+}
 HLE_FORCE("_ZN2nn4nifm31HandleNetworkRequestErrorResultEv", "whether the network request was resolved without a system UI", unsigned, h_nifm_HandleErr, void) { return dm_nifm_available() != 0; }
-HLE_FORCE("_ZN2nn4nifm26HandleNetworkRequestResultEv", "SDK 4 network request result without a system UI", Result, h_nifm_HandleResult, void) { return dm_nifm_available() ? RES_OK : RES_FAIL; }
+HLE_FORCE("_ZN2nn4nifm26HandleNetworkRequestResultEv", "SDK 4 network request result without a system UI", Result, h_nifm_HandleResult, void) {
+    dm_account_trace_network state = {-1,-1,-1,0}; int available = nifm_available(&state);
+    Result result = available ? RES_OK : RES_FAIL;
+    dm_account_trace_nifm(DM_ACCOUNT_TRACE_NETWORK_RESULT, result, available, state); return result;
+}
 HLE_FORCE("_ZN2nn4nifm26GetCurrentPrimaryIpAddressEPNS_6socket6InAddrE", "offline by default; explicit LAN returns the actual interface IPv4 address", Result, h_nifm_GetIp, uint32_t *a) { if (!a) return RES_FAIL; *a = 0; return dm_net_ipconfig(a, NULL, NULL, NULL, NULL) ? RES_FAIL : RES_OK; }
 HLE_FORCE("_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE", "offline: no proxy setting", Result, h_nifm_GetProxy, void *p) { (void)p; return RES_FAIL; }
 
@@ -100,6 +119,12 @@ SKF("nnsocketGetSockOpt", h_nsk_GetSockOpt, int s, int l, int o, void *v, unsign
 SKF("nnsocketSetSockOpt", h_nsk_SetSockOpt, int s, int l, int o, const void *v, unsigned n) { return dm_net_sockopt(s, l, o, (void *)v, &n, 1); }
 SKF("nnsocketFcntl", h_nsk_Fcntl, int s, int c, int flags) { return dm_net_fcntl(s, c, flags); }
 SKW("nnsocketPoll", h_nsk_Poll, void *f, unsigned long n, int t) { return dm_sk_poll(f, n, t); }
+HLE_FORCE_WAIT("nnsocketGetHostByNameCancel", "real scoped IPv4 resolution with an independent cancellation ID", void *, h_nsk_GetHostCancel, const char *name, uint32_t id) { return dm_net_gethostbyname_cancel(name, id); }
+HLE_FORCE_WAIT("_ZN2nn6socket13GetHostByNameEPKci", "real scoped IPv4 resolution with an independent cancellation ID", void *, h_sk_GetHostCancel, const char *name, uint32_t id) { return dm_net_gethostbyname_cancel(name, id); }
+HLE_FORCE("nnsocketRequestCancelHandle", "allocate a nonzero resolver cancellation identity, not a socket", uint32_t, h_nsk_RequestCancel, void) { return dm_net_request_cancel_handle(); }
+HLE_FORCE("_ZN2nn6socket19RequestCancelHandleEv", "allocate a nonzero resolver cancellation identity, not a socket", uint32_t, h_sk_RequestCancel, void) { return dm_net_request_cancel_handle(); }
+SKW("nnsocketCancel", h_nsk_Cancel, uint32_t id) { return dm_net_cancel(id); }
+SKW("_ZN2nn6socket6CancelEi", h_sk_Cancel, uint32_t id) { return dm_net_cancel(id); }
 SKF("nnsocketResolverGetOption", h_nsk_ResGet, void *o, int k) { (void)o; (void)k; return sk_fail(); }
 SKF("nnsocketResolverSetOption", h_nsk_ResSet, const void *o) { (void)o; return sk_fail(); }
 HLE_FORCE_WAIT("nnsocketRecv", "socket transport, offline by default", long, h_nsk_Recv, int s, void *b, unsigned long n, int f) { return dm_net_recv(s, b, n, f, NULL, NULL); }

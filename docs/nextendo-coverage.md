@@ -1,6 +1,6 @@
 # Nextendo integration coverage
 
-Snapshot: 2026-10-31. The provider-signed game catalog is revision 19 (58 entries, 62 regional title IDs); the independently signed NPLN patch catalog is revision 9 (22 exact-build patches). Catalog eligibility is not a gameplay test.
+I retain the catalog snapshot from 2026-10-31: provider-signed game catalog revision 19 (58 entries, 62 regional title IDs) and independently signed NPLN patch catalog revision 9 (22 exact-build patches). I updated the game-test evidence through **2026-11-02** for the unpublished **1.6.0 RC6** candidate. Catalog eligibility is not a gameplay test.
 
 ## Implemented native infrastructure
 
@@ -18,11 +18,17 @@ Five production account/BAAS/data endpoints completed native TLS handshakes with
 
 The native social bridge now retrieves real friend snapshots and publishes the SDK application-presence field through canonical provider HTTPS. API/schema failures remain failures; object layout is verified from SDK getter/constructor semantics. PID and required server-reported BAAS identity are distinct. Friend availability and request completion use actual service results. Synthetic tests cover pagination, filters, cache/account separation, presence publication, malformed responses and unsupported layouts. Notifications, invitations, asynchronous profile requests and recent-play filters remain open, along with provider-specific legacy game adaptations outside the signed NPLN catalog and real per-game authentication, matchmaking and completed-match tests. On the probed MK8 NEX host, the presented certificate is self-signed without the required SAN; the probed device/application-auth chain does not match the published provider CA. These are retained as failed checks, not converted into successful authentication. Unknown exact builds receive no address-based patch. A game with no NPLN patch can still use its original SDK path; that is not a compatibility claim.
 
-On 2026-10-31, the installed Mac Smash 13.0.5 port played a real Nextendo arena round and returned to the same lobby. Its private NEX endpoint used an explicitly approved exact-leaf enrollment; this is not a default CA-authenticated service or an approval for other endpoints. Quickplay currently rejects the connection as unstable, and a later arena session disconnected while spectating. Those failures remain open; one completed round does not establish stable online play. iOS Smash online remains unqualified.
+On 2026-10-31, I played a real Nextendo arena round in the installed Mac Smash 13.0.5 port and returned to the same lobby. I explicitly approved the private NEX endpoint's exact certificate; that enrollment does not establish CA authentication or approve other endpoints. Quickplay currently rejects the connection as unstable, and I later disconnected while spectating an arena session. Those failures remain open; one completed round does not establish stable online play. I have not qualified iOS Smash online.
+
+I now have a private Mario Kart 8 Deluxe **4.0.1** Mac candidate. Its version matches the catalog requirement, so the older **3.0.5** version mismatch describes my historical build rather than the current candidate. I have not completed a Nextendo race or qualified the remaining TLS/device-authentication, NAT and match paths. My October 31 hostname/chain failures remain recorded failures. The completed 3.0.5 Mac–Switch LAN race and the Mac/iOS–Switch LAN/LDN results are separate historical evidence; I have not repeated their physical qualification with 4.0.1.
+
+On **2026-11-02**, I entered the **Splatoon 2 EUR 5.5.2 online lobby and Territorial matchmaking queue on Mac**, after completing the tutorial and reaching the plaza. Two real service connections completed verified TLS with the explicitly approved title-scoped identity and its paired numeric handoff. I chose to postpone the match test because too few players were available during my attempt. I have not completed a match or qualified peer-to-peer gameplay, LAN/LDN, another regional executable or iOS. I did not measure a service-wide player count. See my [exact-build note](../dm/games/0100F8F0000A2000/README.md#network-requirements-and-remaining-tests).
+
+These are my three titles with specific runtime/connection evidence in this delivery. I do not transfer those results to the other catalog entries.
 
 ## Full catalog inventory
 
-“Profile” means a generated, bounded service configuration for every regional title ID. “Patch builds” counts signed published plans, not tested native builds. Smash 13.0.5 has one verified Mac arena round; other native online gameplay remains unverified.
+“Profile” means a generated, bounded service configuration for every regional title ID. “Patch builds” counts signed published plans, not tested native builds. I verified one Mac arena round in Smash 13.0.5 and the Mac lobby/queue milestone in Splatoon 2 EUR 5.5.2. I have not qualified a Splatoon match, a Mario Kart Nextendo race or online gameplay for the remaining entries.
 
 | Game / application | Catalog protocol | Accepted versions | Regional profiles | Patch builds | Native online |
 | --- | --- | --- | ---: | ---: | --- |
@@ -43,7 +49,7 @@ On 2026-10-31, the installed Mac Smash 13.0.5 port played a real Nextendo arena 
 | Luigi's Mansion 3 | SDK / unspecified | 1.4.0 | 1 | 0 | Unverified |
 | Mario & Sonic at the Olympic Games Tokyo 2020 | nex | 1.0.1 | 1 | 0 | Unverified |
 | Mario Golf: Super Rush | SDK / unspecified | 4.0.0 | 1 | 0 | Unverified |
-| Mario Kart 8 Deluxe | SDK / unspecified | 4.0.1 | 1 | 0 | Unverified |
+| Mario Kart 8 Deluxe | SDK / unspecified | 4.0.1 | 1 | 0 | Private Mac 4.0.1 candidate; Nextendo race unverified |
 | Mario Party Superstars | nex | 1.1.1 | 1 | 0 | Unverified |
 | Mario Strikers: Battle League | nex | 1.3.2 | 1 | 0 | Unverified |
 | Mario Tennis Aces | SDK / unspecified | 3.1.1 | 1 | 0 | Unverified |
@@ -67,7 +73,7 @@ On 2026-10-31, the installed Mac Smash 13.0.5 port played a real Nextendo arena 
 | Saints Row: The Third – The Full Package | nex | 1.6.1 | 1 | 0 | Unverified |
 | SEGA Genesis - Nintendo Classics | npln | 3.1.1 | 1 | 1 | Unverified |
 | Sonic Racing: CrossWorlds | SDK / unspecified | 1.43 | 1 | 0 | Unverified |
-| Splatoon 2 | SDK / unspecified | 5.5.2 | 3 | 0 | Unverified |
+| Splatoon 2 | SDK / unspecified | 5.5.2 | 3 | 0 | [EUR Mac lobby and Territorial queue; no completed match](../dm/games/0100F8F0000A2000/README.md#network-requirements-and-remaining-tests) |
 | Splatoon 3 | npln | 11.3.0 | 1 | 2 | Unverified |
 | Super Kirby Clash | SDK / unspecified | 1.0.1 | 1 | 0 | Unverified |
 | Super Mario 3D World + Bowser's Fury | SDK / unspecified | 1.2.2 | 1 | 0 | Unverified |
@@ -87,7 +93,7 @@ On 2026-10-31, the installed Mac Smash 13.0.5 port played a real Nextendo arena 
 
 ## Native-profile qualification scope
 
-The revision-19 catalog intersects **16 titles** with the native game profiles in this engine snapshot. Fourteen have a declared native build whose display version is accepted by the catalog. Scarlet and Violet currently declare native profiles for 1.0.0, while the service requires 4.0.0; those newer builds still need their own native qualification. A matching title ID or display version does not establish completed online play.
+The revision-19 catalog intersects **17 titles** with the native game profiles in this engine snapshot. Fifteen have a declared native build whose display version is accepted by the catalog, including my experimental Splatoon 2 EUR Mac profile. Scarlet and Violet currently declare native profiles for 1.0.0, while the service requires 4.0.0; I still need to qualify those newer builds. A matching title ID or display version does not establish completed online play.
 
 All 62 regional service configurations were prepared and staged through the production integrity checks using the pinned public provider CA. These are route/configuration checks, separate from the native profiles below and from authentication, matchmaking or a completed match.
 
@@ -95,7 +101,7 @@ All 62 regional service configurations were prepared and staged through the prod
 | --- | --- | --- | --- | --- |
 | Animal Crossing: New Horizons | [01006F8002326000](../dm/games/01006F8002326000/README.md) | 3.0.3 | 3.0.3 | Not qualified |
 | Luigi's Mansion 3 | [0100DCA0064A6000](../dm/games/0100DCA0064A6000/README.md) | 1.4.0 | 1.4.0 | Not qualified |
-| Mario Kart 8 Deluxe | [0100152000022000](../dm/games/0100152000022000/README.md) | 4.0.0, 4.0.1 | 4.0.1 | Not qualified |
+| Mario Kart 8 Deluxe | [0100152000022000](../dm/games/0100152000022000/README.md) | 4.0.0, 4.0.1 | 4.0.1 | Current private Mac 4.0.1 candidate; Nextendo race not qualified |
 | Mario Party Superstars | [01006FE013472000](../dm/games/01006FE013472000/README.md) | 1.1.1 | 1.1.1 | Not qualified |
 | MONSTER HUNTER RISE | [0100B04011742000](../dm/games/0100B04011742000/README.md) | 16.0.2 | 16.0.2 | Not qualified |
 | Pokémon Legends: Z-A | [0100F43008C44000](../dm/games/0100F43008C44000/README.md) | 2.0.2 | 2.0.2 | Not qualified |
@@ -104,6 +110,7 @@ All 62 regional service configurations were prepared and staged through the prod
 | Pokémon Sword | [0100ABF008968000](../dm/games/0100ABF008968000/README.md) | 1.3.2 | 1.3.2 | Not qualified |
 | Pokémon Violet | [01008F6008C5E000](../dm/games/01008F6008C5E000/README.md) | 1.0.0 | 4.0.0 | Accepted update not yet qualified |
 | Portal 2 | [0100ABD01785C000](../dm/games/0100ABD01785C000/README.md) | 1.0.3 | 1.0.3 | Not qualified |
+| Splatoon 2, European release | [0100F8F0000A2000](../dm/games/0100F8F0000A2000/README.md) | 5.5.2 (experimental Mac profile) | 5.5.2 | Tutorial completed, plaza, online lobby and Territorial queue; match test deferred, no completed match |
 | Super Mario 3D World + Bowser's Fury | [010028600EBDA000](../dm/games/010028600EBDA000/README.md) | 1.2.2 | 1.2.2 | Not qualified |
 | Super Mario Bros. Wonder | [010015100B514000](../dm/games/010015100B514000/README.md) | 1.0.0, 1.0.1, 1.2.1 | 1.2.1 | Not qualified |
 | Super Mario Odyssey | [0100000000010000](../dm/games/0100000000010000/README.md) | 1.4.1 | 1.4.1 | Not qualified |

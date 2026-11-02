@@ -1,0 +1,2 @@
+# Optional per-device prewarm seed list; no recorded render-pipeline keys are shipped.
+# The shader pair tables drive the first-boot pipeline prebuild.

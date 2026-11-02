@@ -29,8 +29,7 @@ class HostMSL(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        for name in ('dm/host/Makefile', 'dm/mac/min_os.mk', 'dm/gfx/tests/Makefile', 'dm/gfx/tools/host_msl.py',
-                     'dm/sanitizers/sanitizers.mk', 'dm/sanitizers/ignorelist.txt', f'dm/games/{GAME}/game.tsv'):
+        for name in ('dm/host/Makefile', 'dm/mac/min_os.mk', 'dm/gfx/tests/Makefile', 'dm/sanitizers/sanitizers.mk', 'dm/gfx/tools/host_msl.py', f'dm/games/{GAME}/game.tsv'):
             dst = self.root / name
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO / name, dst)
