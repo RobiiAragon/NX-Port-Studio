@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC7:** corregí la recepción de sockets en memoria supervisada por el motor gráfico y la profundidad de los pipelines preparados de Smash al probar ports recién recompilados. Distingo las partidas completadas, la entrada a salas y las pruebas sintéticas; sigue abierta la validación actual de online y pantalla completa. [Notas del candidato](docs/releases/1.6.0-rc.7.md).
+> **1.6.0 RC7:** corregí la recepción de sockets en memoria supervisada por el motor gráfico y la profundidad de los pipelines preparados de Smash al probar ports recién recompilados. Medí unos 60 FPS en una misma escena de entrenamiento de Smash en ventana y pantalla completa; todavía no he validado una partida online con este candidato. [Notas y límites de la prueba](docs/releases/1.6.0-rc.7.md).
 
 ## Capturas de Studio
 
