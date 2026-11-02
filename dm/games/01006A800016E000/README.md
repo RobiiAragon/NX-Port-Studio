@@ -1,5 +1,7 @@
 # Super Smash Bros. Ultimate (`01006A800016E000`)
 
+I keep the inherited gameplay baseline below separate from my [current Studio runtime qualification](#studio-runtime-qualification-2026-11-02): the modern rebuild has an unresolved offline crash, and my installed legacy-chain update still needs physical acceptance tests.
+
 Update 13.0.5 (`v2031616`) over the base game, with its 99 DLC licences; SDK 8.2.1. Bandai Namco / Sora's engine (namespaces `app`, `lib`, `phx`, `nu`) on NVN. Modules `main`, `subsdk0` (NintendoSDK_movie) and `sdk`, the same `sdk` and movie builds as Catherine: Full Body ([0100BF00112C0000](../0100BF00112C0000/README.md)); the fighters' code is 98 NRO modules loaded at run time. Plays on the iPhone (IPA 17.5 GB; offline). On the Mac: the opening movie, the title, the first launch's DLC unlocks and Challenges board, the main menu, the Smash rulesets, stage select, fighter select, 2-player battles (Frigate Orpheon, Big Blue, Great Bay, Find Mii) at 60 fps with about 2.7 ms of GPU per frame and 2 GB resident (1.2 GB of Metal allocations), quitting a battle to its results and a second battle whose fighters' NROs the game loaded again.
 
 ## What it needs
@@ -103,3 +105,9 @@ General host changes first needed here; each applies to every game:
 
 - [Mac network settings hidden behind the game window](../../../docs/reference/services.md#mac-network-settings-hidden-behind-the-game-window): replaced the floating modal with an attached settings sheet.
 - The base game 1.0.0 (v0) packed alone (a derived profile) stops before the address region check: the NRO collection's `data.arc` reader (`dm/gfx/tools/smash_arc.py`) knows only 13.x's file system table, and 1.0.0's is not one zstd frame (`ZstdError: Unknown frame descriptor`); with the NROs skipped, the rewrite of its `main` (`fd471eb4…`) stops at a jump table it cannot resolve (`patch_nso.py`, `jump table f5c9cc`). Its engine region is not measured.
+
+## Studio runtime qualification (2026-11-02)
+
+I updated the installed Mac port to a primary-process host while retaining the existing `8393d85a4eae` shader chain and game modules. I verified the signature, module/shader metadata and unchanged saves. Fullscreen, background and online acceptance tests for this update are still pending.
+
+I also reviewed a complete modern rebuild from source `7fcdec8803202366624e541954bc24f836e12308`, with chain `a7dbbce711c3`, 101 modules and no reused old-chain libraries. An existing offline, headless run without NSApp crashed after 239.457 seconds at `main+0x35fbe84`, reading through a resource with a zero header. The paired legacy controls reached their 300-second bounds. This failure does not require Nextendo or fullscreen; I have not established which operation invalidated the resource, or qualified a sustained game session with the modern rebuild. I have made no runtime workaround for this unresolved failure. Successful tests of another title or of an earlier Smash build do not qualify a current Studio rebuild of Smash.
