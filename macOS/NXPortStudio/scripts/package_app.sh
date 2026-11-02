@@ -48,12 +48,15 @@ done
 
 # Keep the translator's checked-in dmsh_xlate_bin and third-party licenses.
 # Generated compilers, game data, test fixtures and the GUI itself are omitted.
+# Shader-library ABI tables are local build outputs, regenerated with each game's
+# shaders and their chain stamp; they must not seed the portable source snapshot.
 for SOURCE in dm scripts docs; do
     /usr/bin/rsync -a \
         --exclude='.git/' --exclude='.build/' --exclude='.nx-archives/' --exclude='.nx-identify/' --exclude='build/' --exclude='.swiftpm/' \
         --exclude='__pycache__/' --exclude='*.pyc' --exclude='.DS_Store' \
         --exclude='tests/' --exclude='test/' --exclude='obj/' --exclude='bin/' \
         --exclude='*.dSYM/' --exclude='*.partial' --exclude='*_build/' \
+        --exclude='c1_full.tsv' --exclude='cb_extent.tsv' \
         --exclude='fuzz/' --exclude='*.pdb' --exclude='host/gen/' --exclude='ios/Gen/' --exclude='ios/DmIOS.xcodeproj/' \
         --exclude='host/dmhost' --exclude='host/dmhost_*' \
         "$REPO_DIR/$SOURCE" "$ENGINE/"
