@@ -269,7 +269,10 @@ static void errors_and_resolver(void) {
     CHECK(GET(int (*)(uint32_t), "nnsocketCancel")(cancel_id)==0 &&
           GET(int (*)(uint32_t), "_ZN2nn6socket6CancelEi")(0)==0 && dm_net_errno()==22,
           "cancel admits inactive identities and preserves SDK zero-ID convention");
-    CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") == NULL, "automatic mode never falls back to unconfigured service DNS");
+    CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") != NULL, "automatic mode without an online profile retains local DNS");
+    setenv("DM_NEXTENDO_ROUTES", "/nonexistent/explicit-service-policy", 1);
+    CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") == NULL, "automatic mode with an explicit invalid service policy fails closed");
+    unsetenv("DM_NEXTENDO_ROUTES");
 }
 static void broadcast(void) {
     unsetenv("DM_NETWORK_INTERFACE"); uint32_t ip, mask;

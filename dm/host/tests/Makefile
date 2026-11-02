@@ -529,21 +529,28 @@ $(B)/t_nextendo_legacy_keychain: t_nextendo_legacy_keychain.m $(PREFLIGHT_DEPS) 
 	$(CLANG) $(SSL_FLAGS) -o $@ t_nextendo_legacy_keychain.m ../hle_nextendo_preflight_mac.c ../hle_account_trace.c -framework Foundation -framework Security -framework LocalAuthentication
 $(B)/t_nextendo_legacy_keychain_asan: t_nextendo_legacy_keychain.m $(PREFLIGHT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nextendo_legacy_keychain.m ../hle_nextendo_preflight_mac.c ../hle_account_trace.c -framework Foundation -framework Security -framework LocalAuthentication
+PREFLIGHT_CAPABILITY_SOURCES = t_nextendo_preflight_capability.m ../hle_nextendo_preflight_mac.c ../hle_account_trace.c ../hle_net_backend.c ../hle_nsd_backend.c
+$(B)/t_nextendo_preflight_capability: $(PREFLIGHT_CAPABILITY_SOURCES) $(PREFLIGHT_DEPS) ../nsd.h | $(B)
+	$(CLANG) $(SSL_FLAGS) -o $@ $(PREFLIGHT_CAPABILITY_SOURCES) -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_nextendo_preflight_capability_asan: $(PREFLIGHT_CAPABILITY_SOURCES) $(PREFLIGHT_DEPS) ../nsd.h | $(B)
+	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(PREFLIGHT_CAPABILITY_SOURCES) -framework Foundation -framework Security -framework LocalAuthentication
 $(B)/t_nextendo_preflight_ownership: t_nextendo_preflight_ownership.c ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -o $@ t_nextendo_preflight_ownership.c
 $(B)/t_nextendo_preflight_ownership_asan: t_nextendo_preflight_ownership.c ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nextendo_preflight_ownership.c
 .PHONY: nextendo-account nextendo-account-sanitize
-nextendo-account: $(B)/t_nextendo_account $(B)/t_nextendo_preflight $(B)/t_nextendo_legacy_keychain $(B)/t_nextendo_preflight_ownership
+nextendo-account: $(B)/t_nextendo_account $(B)/t_nextendo_preflight $(B)/t_nextendo_legacy_keychain $(B)/t_nextendo_preflight_ownership $(B)/t_nextendo_preflight_capability
 	$(B)/t_nextendo_account
 	$(B)/t_nextendo_preflight
 	$(B)/t_nextendo_legacy_keychain
 	$(B)/t_nextendo_preflight_ownership
-nextendo-account-sanitize: $(B)/t_nextendo_account_asan $(B)/t_nextendo_preflight_asan $(B)/t_nextendo_legacy_keychain_asan $(B)/t_nextendo_preflight_ownership_asan
+	$(B)/t_nextendo_preflight_capability
+nextendo-account-sanitize: $(B)/t_nextendo_account_asan $(B)/t_nextendo_preflight_asan $(B)/t_nextendo_legacy_keychain_asan $(B)/t_nextendo_preflight_ownership_asan $(B)/t_nextendo_preflight_capability_asan
 	$(B)/t_nextendo_account_asan
 	$(B)/t_nextendo_preflight_asan
 	$(B)/t_nextendo_legacy_keychain_asan
 	$(B)/t_nextendo_preflight_ownership_asan
+	$(B)/t_nextendo_preflight_capability_asan
 
 ROUTE_SOURCES = t_nextendo_routes.c ../hle_nextendo_routes.c ../hle_net_backend.c ../hle_nsd_backend.c ../hle_ssl_apple.m ../hle_nextendo_x509.c
 ROUTE_DEPS = ../nsd.h $(ROUTE_SOURCES) ../nextendo_routes.h ../net_socket.h ../ssl_backend.h test_nextendo_routes.py test_ssl_transport.py Makefile

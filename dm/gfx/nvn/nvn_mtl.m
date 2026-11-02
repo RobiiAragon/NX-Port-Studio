@@ -4017,7 +4017,7 @@ static inline uint64_t cb_len(NvShader *sh, int reg, uint64_t size) { uint32_t e
 
 static int stage_of(NSString *stage) {
     if ([stage isEqualToString:@"vertex"]) return 0; if ([stage isEqualToString:@"pixel"]) return 1; if ([stage isEqualToString:@"compute"]) return 5;
-    if ([stage isEqualToString:@"hull"]) return 3; if ([stage isEqualToString:@"domain"]) return 4; if ([stage isEqualToString:@"geometry"]) return 2; return -1;
+    if ([stage isEqualToString:@"hull"]) return 3; if ([stage isEqualToString:@"domain"]) return 4; if ([stage isEqualToString:@DMSH_KIND_GEOMETRY]) return 2; return -1;
 }
 #define NVN_RT_RANGE_RO_IMPL 1
 // Private continuation accepts only B reflection that is explicitly RO; a missing rw on sbuf does not let the default 0 count as proof; does not change the existing reflection / translation chain.

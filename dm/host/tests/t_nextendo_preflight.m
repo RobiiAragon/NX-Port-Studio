@@ -51,6 +51,7 @@ static NSData *record(void) {
 // exercised separately by t_nextendo_legacy_keychain, not by this mock.
 static uint32_t capturedAvailability(uint8_t *out) { *out = credential_with_interaction(NO) != nil; return 0; }
 int main(void) { @autoreleasepool {
+    setenv("DM_NEXTENDO_ROUTES","query-capture-fixture",1);
     uint8_t available = 9;
     CHECK(capturedAvailability(&available) == 0 && !available && reads == 1);
     CHECK(disallowsInteraction());
@@ -83,6 +84,9 @@ int main(void) { @autoreleasepool {
     class_replaceMethod(meta, @selector(new), original, method_getTypeEncoding(constructor));
     CHECK(allocationResult == 0 && !available && reads == allocationReads);
     unsigned before = reads;
+    unsetenv("DM_NEXTENDO_ROUTES"); available=9;
+    CHECK(capturedAvailability(&available)==0 && !available && reads==before);
+    setenv("DM_NEXTENDO_ROUTES","query-capture-fixture",1);
     for (unsigned i=0; i<3; i++) { mode=(dm_net_mode_t)i; available=9; CHECK(capturedAvailability(&available)==0 && !available && reads==before); }
     CHECK(!writes && begins == ends);
     printf("Nextendo noninteractive preflight query: %u checks passed; no real Keychain operations\n", checks);

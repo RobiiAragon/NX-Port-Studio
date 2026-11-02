@@ -73,9 +73,11 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
         if (value && asprintf(&environment[variables], "%s=%s", keys[i], value) < 0) error = ENOMEM;
         else if (value) variables++;
     }
-    // The caller has already gated enabled account services. The child needs
-    // no game settings, route files, account values or other DM_* switches.
-    if (!error && !(environment[variables++] = strdup("DM_NETWORK=auto"))) error = ENOMEM;
+    // The caller has already gated enabled account services. Give this bounded,
+    // credential-only child the explicit capability: AUTO would disable it
+    // without the parent's deliberately omitted route profile. No routes, game
+    // settings, account values or other DM_* switches enter the child.
+    if (!error && !(environment[variables++] = strdup("DM_NETWORK=nextendo"))) error = ENOMEM;
     if (!error) error = posix_spawn(&child, executable, &actions, &attributes, arguments, environment);
     for (size_t i = 0; i < variables; i++) free(environment[i]);
     if (initialized) posix_spawnattr_destroy(&attributes);

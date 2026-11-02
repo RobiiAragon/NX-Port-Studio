@@ -186,6 +186,7 @@ static void local_authorization_tests(void) {
 }
 int main(void) { @autoreleasepool {
     unsetenv("DM_ACCOUNT_TRACE");
+    setenv("DM_NEXTENDO_ROUTES","synthetic-account-profile",1);
     dm_nextendo_set_credential_provider(provider); dm_nextendo_set_game_version("3.0.5"); identity_tests(); token_tests(); async_tests();
     local_authorization_tests(); trace_tests();
     CHECK(atomic_load(&entered) > 0 && atomic_load(&entered) == atomic_load(&left) && atomic_load(&waits) > 0, "blocking account hooks publish balanced guest contexts and mark host security waits");
