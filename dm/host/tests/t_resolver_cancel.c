@@ -191,6 +191,7 @@ int main(void) {
     for (unsigned i=0;i<64;++i) CHECK(!g_resolver_jobs[i]);
     // Scoped policy has the same admission as GetAddrInfo; no native DNS for a
     // configured IPv4 route, numeric address, rejected name or offline request.
+    setenv("DM_NEXTENDO_ROUTES","/nonexistent/synthetic-resolver-profile",1);
     setenv("DM_NETWORK","auto",1); dm_net_set_dns_provider(policy); n=service_count;
     CHECK(dm_net_gethostbyname_cancel("allowed.invalid",id)!=NULL);
     CHECK(dm_net_gethostbyname_cancel("127.0.0.1",0)!=NULL);

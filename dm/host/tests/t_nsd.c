@@ -29,7 +29,9 @@ int main(void) {
     input[254]=0;input[253]='b';CHECK(dm_nsd_resolve(output.fqdn,input)!=0);
     CHECK(dm_nsd_resolve(NULL,"example.com")!=0 && dm_nsd_resolve(output.fqdn,NULL)!=0);
     for (int i=0;i<3;i++) { mode=(dm_net_mode_t)i;memset(&output,0xa5,sizeof output);CHECK(dm_nsd_resolve(output.fqdn,"accounts.nintendo.com")!=0 && (unsigned char)output.fqdn[0]==0xa5); }
-    mode=DM_NET_AUTO; CHECK(!dm_nsd_resolve(output.fqdn,"nncs1-%.n.n.srv.nintendo.net") && !strcmp(output.fqdn,"nncs1-lp1.n.n.srv.nintendo.net"));
+    mode=DM_NET_AUTO; CHECK(dm_nsd_resolve(output.fqdn,"nncs1-%.n.n.srv.nintendo.net")!=0);
+    setenv("DM_NEXTENDO_ROUTES","/nonexistent/synthetic-nsd-profile",1);
+    CHECK(!dm_nsd_resolve(output.fqdn,"nncs1-%.n.n.srv.nintendo.net") && !strcmp(output.fqdn,"nncs1-lp1.n.n.srv.nintendo.net"));
     printf("NSD: %d checks, %d failures; no network or account data\n",checks,failures);
     return failures?1:0;
 }
