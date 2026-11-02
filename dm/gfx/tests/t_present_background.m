@@ -1,5 +1,5 @@
-// Production present lifecycle with a silent display link and real monotonic
-// waits. No Metal device, drawable, game, window or simulated guest clock.
+// Production present lifecycle with a silent display link, deterministic pacing
+// inputs and a real monotonic wait. No Metal device, drawable, game or window.
 #import <QuartzCore/CAMetalDisplayLink.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -8,6 +8,10 @@
 static pthread_mutex_t observed_lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t observed_changed=PTHREAD_COND_INITIALIZER;
 static int observed;
+static unsigned timed_waits;
+static int observe_timedwait(pthread_cond_t *cond,pthread_mutex_t *lock,const struct timespec *limit) {
+    ++timed_waits; return pthread_cond_timedwait(cond,lock,limit);
+}
 static int observe_wait(pthread_cond_t *cond,pthread_mutex_t *lock) {
     pthread_mutex_lock(&observed_lock); observed=1; pthread_cond_broadcast(&observed_changed); pthread_mutex_unlock(&observed_lock);
     return pthread_cond_wait(cond,lock);
@@ -28,8 +32,10 @@ static int observe_wait(pthread_cond_t *cond,pthread_mutex_t *lock) {
 - (void)invalidate { self.invalidated=YES; }
 @end
 #define CAMetalDisplayLink BackgroundLink
+#define pthread_cond_timedwait observe_timedwait
 #define pthread_cond_wait observe_wait
 #include "../nvn/nvn_mtl.m"
+#undef pthread_cond_timedwait
 #undef pthread_cond_wait
 #undef CAMetalDisplayLink
 #include "../nvn/nvn_pace.h"
@@ -47,38 +53,34 @@ static void sleep_to(uint64_t target) {
     }
 }
 static void *ticket_wait(void *unused) { (void)unused; mtl_present_wait(3); return NULL; }
-static _Atomic int driver_stop,driver_pause;
-static void *ticks(void *unused) {
-    (void)unused; uint64_t next=now_ns();
-    while (!atomic_load(&driver_stop)) {
-        if (atomic_load(&driver_pause)) {
-            pthread_mutex_lock(&observed_lock);
-            while (atomic_load(&driver_pause) && !atomic_load(&driver_stop)) pthread_cond_wait(&observed_changed,&observed_lock);
-            pthread_mutex_unlock(&observed_lock); next=now_ns();
-        }
-        next+=16666667; sleep_to(next);
-        if (atomic_load(&driver_pause) || atomic_load(&driver_stop)) continue;
-        pthread_mutex_lock(&g_link_mu); ++g_link_tick_n; g_link_tick_ns=now_ns();
-        pthread_cond_broadcast(&g_link_cv); pthread_mutex_unlock(&g_link_mu);
-    }
-    return NULL;
-}
-static void pause_driver(int on) {
-    atomic_store(&driver_pause,on);
-    pthread_mutex_lock(&observed_lock); pthread_cond_broadcast(&observed_changed); pthread_mutex_unlock(&observed_lock);
-}
-static void cadence(unsigned hz,int fallback) {
-    const unsigned frames=hz*3/10; uint64_t period=1000000000/hz,start=now_ns(); nvn_pacer pacer={start};
-    unsigned link_waits=0,clock_waits=0;
+// The fixture drives delivered ticks explicitly: VM scheduling is not a display
+// callback contract. A late CPU frame is a separate input, not a wider timeout.
+static void cadence(unsigned hz,int fallback,int late) {
+    const unsigned frames=hz*3/10; const uint64_t period=1000000000/hz,start=1000000000;
+    nvn_pacer pacer={start}; unsigned link_waits=0,clock_waits=0,late_frames=0,before_waits=timed_waits;
     for (unsigned i=0;i<frames;++i) {
-        uint64_t wait=nvn_pace(&pacer,now_ns(),period);
+        uint64_t frame_start=pacer.target;
+        if (late && i==frames/2) frame_start+=3*period;
+        uint64_t wait=nvn_pace(&pacer,frame_start,period);
+        if (late && i==frames/2) {
+            CHECK(!wait && pacer.target==frame_start); ++late_frames; // No catch-up burst.
+        } else CHECK(wait==period && pacer.target==frame_start+period);
+        if (!fallback) {
+            pthread_mutex_lock(&g_link_mu); g_link_tick_n+=60/hz; pthread_mutex_unlock(&g_link_mu);
+        }
         if (mtl_link_active() && mtl_link_wait_tick((int)(60/hz),2*period)) ++link_waits;
-        else if (wait) { ++clock_waits; sleep_to(pacer.target); }
+        else if (wait) ++clock_waits;
     }
-    double elapsed=(now_ns()-start)/1e9;
-    CHECK(elapsed>0.23 && elapsed<0.42);
-    CHECK(fallback ? !link_waits && clock_waits==frames : link_waits==frames && !clock_waits);
-    printf("%u Hz %s: %.3f s for %u frames PASS\n",hz,fallback?"background monotonic":"key visible link",elapsed,frames);
+    CHECK(timed_waits==before_waits); // Hidden/non-key paths must not await a silent link.
+    CHECK(pacer.target-start==(frames+2*late_frames)*period);
+    CHECK(fallback ? !link_waits && clock_waits==frames-late_frames : link_waits==frames && !clock_waits);
+    printf("%u Hz %s%s: %u deadlines PASS\n",hz,fallback?"background monotonic":"key visible link",late?" after CPU deschedule":"",frames);
+}
+static void real_monotonic_wait(unsigned hz) {
+    uint64_t start=now_ns(),period=1000000000/hz; nvn_pacer pacer={start};
+    CHECK(!mtl_link_active() && nvn_pace(&pacer,start,period)==period);
+    sleep_to(pacer.target);
+    CHECK(now_ns()>=pacer.target); // No VM-dependent upper wall-time requirement.
 }
 int main(void) { @autoreleasepool {
     mtl_present_window_state(1,1); uint64_t before=atomic_load(&g_present_epoch);
@@ -88,9 +90,9 @@ int main(void) { @autoreleasepool {
     CHECK(!mtl_link_active() && g_pq_read==3 && g_pq_done==0);
     void *poison=mmap(NULL,4096,PROT_NONE,MAP_ANON|MAP_PRIVATE,-1,0); CHECK(poison!=MAP_FAILED);
     CHECK(present_enqueue(poison,1.0/60,NULL,0)==0); // Must not resolve a texture or get a drawable.
-    uint64_t begin=now_ns(),seen=0;
+    unsigned begin_waits=timed_waits; uint64_t seen=0;
     CHECK(!mtl_link_wait_ticks(1,1000000000) && !mtl_link_wait_vsync(&seen,1000000000));
-    CHECK(now_ns()-begin<50000000);
+    CHECK(timed_waits==begin_waits);
     pthread_t waiter; CHECK(!pthread_create(&waiter,NULL,ticket_wait,NULL));
     pthread_mutex_lock(&observed_lock);
     while (!observed) pthread_cond_wait(&observed_changed,&observed_lock);
@@ -115,16 +117,14 @@ int main(void) { @autoreleasepool {
     CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.01,false);
     CHECK(old_link.invalidated && !g_link_owns_layer && !g_link);
     g_link_started=0; g_link=[BackgroundLink new]; mtl_present_window_state(1,1);
-    pthread_t driver; CHECK(!pthread_create(&driver,NULL,ticks,NULL));
     for (unsigned hz=30;hz<=60;hz+=30) {
-        cadence(hz,0); pause_driver(1);
+        cadence(hz,0,0); cadence(hz,0,1);
         mtl_present_window_state(1,0); // Visible behind another app, link silent.
-        CHECK(present_epoch_valid(atomic_load(&g_present_epoch))); cadence(hz,1);
+        CHECK(present_epoch_valid(atomic_load(&g_present_epoch))); cadence(hz,1,0); cadence(hz,1,1); real_monotonic_wait(hz);
         mtl_present_window_state(0,0); // Covered / minimized / another Space.
-        CHECK(!present_epoch_valid(atomic_load(&g_present_epoch))); cadence(hz,1);
-        mtl_present_window_state(1,1); pause_driver(0); cadence(hz,0);
+        CHECK(!present_epoch_valid(atomic_load(&g_present_epoch))); cadence(hz,1,0); cadence(hz,1,1); real_monotonic_wait(hz);
+        mtl_present_window_state(1,1); cadence(hz,0,0); cadence(hz,0,1);
     }
-    atomic_store(&driver_stop,1); pause_driver(0); CHECK(!pthread_join(driver,NULL));
     g_link=nil;
     printf("background presentation: %u checks PASS\n",checks); return 0;
 } }
