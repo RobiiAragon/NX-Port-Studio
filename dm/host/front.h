@@ -20,6 +20,9 @@ void mtl_present_window_state(int visible, int focused);
 void *front_metal_layer(void);
 // The highest refresh rate of the window's screen in Hz, 0 = not known (Mac front_mac.m; none on iOS, whose screens run at multiples of 60 Hz). Any thread
 int front_screen_max_fps(void);
+// Current Mac screen mode capability and fullscreen state, cached by AppKit. Any thread.
+int front_screen_variable_refresh(void);
+int front_fullscreen(void);
 // The frame rate the display link paces the game at (60, 30, 120; nvn_mtl.m link_sync): in fullscreen, a screen whose refresh rate is not a multiple of it is switched, while the game runs,
 // to a mode of the same size whose rate is, and back when the window leaves fullscreen or that screen (front_mac.m; none on iOS). Called from the present thread
 void front_screen_match(int fps);

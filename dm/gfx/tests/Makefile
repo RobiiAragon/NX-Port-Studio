@@ -433,3 +433,7 @@ t_logic: t_logic.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_logic.m $(MTL_T_SRC) $(FW)
 check_t_logic: t_logic
 	@set -e; work=$$(mktemp -d); trap 'rm -rf "$$work"' EXIT; python3 test_dmsh_logic.py --fixture "$$work"; MTL_DEBUG_LAYER=1 ./t_logic "$$work"
+
+# AppKit mode classification only: no app/window, game files or GPU required.
+t_screen_refresh_mac: t_screen_refresh_mac.m ../../host/mac_screen_refresh.inc
+	clang -O1 -g -Wall -Wextra -Werror -fobjc-arc -o $@ $< -framework AppKit -framework Foundation

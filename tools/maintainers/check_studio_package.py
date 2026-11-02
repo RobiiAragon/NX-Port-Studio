@@ -8,6 +8,7 @@ import subprocess
 DENIED_SUFFIXES = {'.keys', '.keyring', '.nsp', '.nsz', '.xci', '.xcz', '.nca',
                    '.nso', '.nro', '.tik', '.ipa', '.mobileprovision', '.p12', '.pfx', '.pdb'}
 DENIED_DIRECTORIES = {'.git', '.build', '.nx-archives', '.nx-identify', 'build', '__pycache__', 'system_data', 'exefs', 'romfs', 'saves'}
+DENIED_NAMES = {'c1_full.tsv', 'cb_extent.tsv'}
 
 
 def verify(bundle):
@@ -34,6 +35,8 @@ def verify(bundle):
         elif path.is_dir():
             if path.name.casefold() in DENIED_DIRECTORIES:
                 raise ValueError('A private/generated directory entered the app')
+        elif path.name.casefold() in DENIED_NAMES:
+            raise ValueError('A local shader-build table entered the app')
         elif path.suffix.casefold() in DENIED_SUFFIXES:
             raise ValueError('A private/game artifact entered the app')
     subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(root)], check=True)
