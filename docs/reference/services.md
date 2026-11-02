@@ -1034,6 +1034,15 @@ This suspension path remains applicable to iOS and explicit host suspension. Mac
 - **Checks and limits:** getter/constructor layouts were independently surveyed on four owned SDK builds. Synthetic API/social tests pass normally and under ASan/UBSan, including bad HTTP/schema, malformed IDs, buffers, pagination, unsupported layouts, identity separation and real SDK application-field publication. These checks read no user credentials and send no presence. Notification delivery, invitations, asynchronous profiles and real-game service interoperability remain open.
 - **Found on:** [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md) and [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) SDK surfaces, not a completed Nextendo match.
 
+### Presence initialization waits for account authorization
+
+- **Symptom:** a Mac port finishes pipeline prebuild but remains black while its main thread waits in `UserPresence::Initialize` through `dm_nextendo_account_ensure`, `SecItemCopyMatching` and SecurityServer. No authorization dialog is necessarily visible.
+- **Cause:** the presence initializer treated selecting a local UID as an online account authorization request. `account_ensure` reads the stored credential with interaction allowed; the bounded passive availability preflight does not protect that separate path. A valid local user does not by itself authorize a protected Nextendo credential.
+- **Fix:** `dm_nextendo_presence_initialize` validates the known SDK object layout and existing local UID, then copies only the UID. This local operation is independent of network mode, service profile and NEX account availability. A missing/invalid local UID or unknown object layout still fails without changing the object. `Commit` remains a distinct authenticated online operation; initializing an object does not claim publication, account linkage or server access.
+- **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) 13.0.5 on Mac, after a successful shader prebuild; the metadata stack identified this exact initializer/credential path. I have not yet verified game progress with this correction.
+- **Check:** the existing social fixture uses a synthetic credential-service tripwire and injected HTTP transport. I check zero ensure/proof reads and zero requests for local initialization in offline, LAN, LDN, AUTO and Nextendo modes, with/without a profile and account; explicit/default UIDs, untouched field/canary bytes and invalid UID/layout cases are covered. Commit still fails with no linked account or disabled online services. Normal and ASan/UBSan runs require no real account, Keychain access or game.
+- **Limit:** this fixes only the initializer's unwarranted credential read. It does not establish that every other online operation is noninteractive, nor qualify a corrected frame, local session or online match. Those retain their existing authentication behavior and need separate evidence.
+
 ### Duplicate forced service hooks abort before game startup
 
 - **Symptom:** the host aborts with `duplicate entry in the forced takeover list` before showing a game window.
