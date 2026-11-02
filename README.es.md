@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC6:** entré al lobby online y a la cola Territorial de Splatoon 2 en Mac, y comprobé que los frames siguen avanzando al perder el foco o quedar cubierta la ventana. Distingo esto de una partida completada, mi ronda verificada en una sala de Smash y las pruebas LAN históricas de Mario Kart. Siguen pendientes los colores de personajes de Splatoon y el editor Mii del firmware original. [Notas del candidato](docs/releases/1.6.0-rc.6.md).
+> **1.6.0 RC7:** corregí la recepción de sockets en memoria supervisada por el motor gráfico y la profundidad de los pipelines preparados de Smash al probar ports recién recompilados. Distingo las partidas completadas, la entrada a salas y las pruebas sintéticas; sigue abierta la validación actual de online y pantalla completa. [Notas del candidato](docs/releases/1.6.0-rc.7.md).
 
 ## Capturas de Studio
 

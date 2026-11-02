@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC6:** I reached Splatoon 2’s online lobby and Territorial matchmaking queue on Mac, and checked continued frame progression when the game loses focus or is covered. I distinguish this from a completed match, my verified Smash arena round and historical Mario Kart LAN tests. Splatoon character colors and the original firmware Mii editor remain open. [Candidate notes](docs/releases/1.6.0-rc.6.md).
+> **1.6.0 RC7:** I corrected native socket receives into graphics-tracked memory and Smash’s offline pipeline depth metadata while testing freshly rebuilt ports. I keep completed matches, lobby entry and synthetic checks separate; current online and fullscreen qualification remains open. [Candidate notes](docs/releases/1.6.0-rc.7.md).
 
 ## Inside Studio
 

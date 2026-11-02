@@ -7,21 +7,21 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-static int checks,failures,requests; static unsigned generation=1,response_status=200;
-static BOOL linked=YES; static NSString *reply;
+static int checks,failures,requests,credential_ensures,credential_reads; static unsigned generation=1,response_status=200;
+static BOOL linked=YES,local_present=YES; static NSString *reply;
 static dm_net_mode_t mode=DM_NET_AUTO;
 static uint8_t uid[16]={1};
 static uint32_t constructor[]={0x52804002,0x2a1f03e1,0x14000000};
 static uint32_t presence_constructor[]={0x52801c02,0x2a1f03e1,0x14000000};
 static uint32_t nick[]={0x91006000,0xd65f03c0},presence[]={0x91010000,0xd65f03c0},account[]={0xf9400800,0xd65f03c0},valid[]={0x3944a000,0xd65f03c0},favorite[]={0x39448000,0xd65f03c0};
 #define CHECK(x) do{checks++;if(!(x)){failures++;fprintf(stderr,"social check failed line %d\n",__LINE__);}}while(0)
-NSString *dm_nextendo_api_bearer(void){return linked?@"synthetic-social-proof":nil;}
-NSData *dm_nextendo_api_identity(void){return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
+NSString *dm_nextendo_api_bearer(void){credential_reads++;return linked?@"synthetic-social-proof":nil;}
+NSData *dm_nextendo_api_identity(void){credential_reads++;return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
 void dm_guest_host_wait_begin(void){} void dm_guest_host_wait_end(void){}
 dm_net_mode_t dm_net_mode(void){return mode;}
-int dm_account_uid_exists(const void *value){return value&&!memcmp(value,uid,16);}
-int dm_account_copy_uid(void *value){if(!value)return 0;memcpy(value,uid,16);return 1;}
-uint32_t dm_nextendo_account_ensure(void){return linked?0:0x2a2;}
+int dm_account_uid_exists(const void *value){return local_present&&value&&!memcmp(value,uid,16);}
+int dm_account_copy_uid(void *value){if(!value||!local_present)return 0;memcpy(value,uid,16);return 1;}
+uint32_t dm_nextendo_account_ensure(void){credential_ensures++;return linked?0:0x2a2;}
 void *guest_sym(const char *name){
     if(strstr(name,"UserPresenceC1"))return presence_constructor;
     if(strstr(name,"FriendC1"))return constructor;
@@ -31,6 +31,33 @@ void *guest_sym(const char *name){
     if(strstr(name,"IsValid"))return valid;
     if(strstr(name,"IsFavorite"))return favorite;
     return NULL;
+}
+// Presence Initialize selects an existing local UID; it must not authorize a
+// network account or publish anything, even when AUTO has a service profile.
+static void local_presence_initialization(void) {
+    const char *profile_value=getenv("DM_NEXTENDO_ROUTES");
+    NSString *profile=profile_value?[NSString stringWithUTF8String:profile_value]:nil;
+    dm_net_mode_t previous_mode=mode;BOOL previous_linked=linked;
+    const dm_net_mode_t modes[]={DM_NET_OFFLINE,DM_NET_LAN,DM_NET_LDN,DM_NET_AUTO,DM_NET_NEXTENDO};
+    for(unsigned m=0;m<sizeof modes/sizeof modes[0];m++) for(int configured=0;configured<2;configured++) for(int account=0;account<2;account++) {
+        mode=modes[m];linked=account;
+        if(configured)setenv("DM_NEXTENDO_ROUTES","/nonexistent/synthetic-social-profile",1);else unsetenv("DM_NEXTENDO_ROUTES");
+        uint8_t object[0xe0+16],expected[sizeof object];memset(object,0xa5,sizeof object);memcpy(expected,object,sizeof object);memcpy(expected,uid,16);
+        int reads=credential_ensures,proof_reads=credential_reads,http=requests;
+        CHECK(!dm_nextendo_presence_initialize(object,uid));CHECK(!memcmp(object,expected,sizeof object));
+        CHECK(credential_ensures==reads&&credential_reads==proof_reads&&requests==http);
+        memset(object,0xa5,sizeof object);CHECK(!dm_nextendo_presence_initialize(object,NULL)&&!memcmp(object,expected,sizeof object));
+        CHECK(credential_ensures==reads&&credential_reads==proof_reads&&requests==http);
+    }
+    uint8_t object[0xe0+16],expected[sizeof object],bad[16]={2};memset(object,0xa5,sizeof object);memcpy(expected,object,sizeof object);
+    int reads=credential_ensures,proof_reads=credential_reads,http=requests;
+    CHECK(dm_nextendo_presence_initialize(NULL,uid)!=0);
+    CHECK(dm_nextendo_presence_initialize(object,bad)!=0&&!memcmp(object,expected,sizeof object));
+    local_present=NO;CHECK(dm_nextendo_presence_initialize(object,NULL)!=0&&!memcmp(object,expected,sizeof object));local_present=YES;
+    presence_constructor[0]=0;CHECK(dm_nextendo_presence_initialize(object,uid)!=0&&!memcmp(object,expected,sizeof object));presence_constructor[0]=0x52801c02;
+    CHECK(credential_ensures==reads&&credential_reads==proof_reads&&requests==http);
+    mode=previous_mode;linked=previous_linked;
+    if(profile){const char *value=profile.UTF8String;if(!value){CHECK(false);return;}setenv("DM_NEXTENDO_ROUTES",value,1);}else unsetenv("DM_NEXTENDO_ROUTES");
 }
 static bool transport(const char *url,const char *method,const char *auth,const uint8_t *body,size_t body_size,uint8_t *output,size_t capacity,size_t *size,unsigned *status){
     requests++;CHECK(!strcmp(auth,"Bearer synthetic-social-proof"));
@@ -60,8 +87,8 @@ int main(void){@autoreleasepool{
     CHECK(!memcmp(objects,uid,16)&&objects[0x600]==0xa5);
     int before=requests;uint64_t ids[4]={0,0,0,0xface};
     CHECK(!dm_nextendo_friends_list(&count,ids,NULL,1,1,filter,true)&&count==1&&ids[0]==502&&ids[1]==0&&ids[3]==0xface&&requests==before);
-    char profile[]="/tmp/nx-social-profile-XXXXXX";CHECK(mkdtemp(profile)!=NULL);
-    NSString *manifest=[[NSString stringWithUTF8String:profile] stringByAppendingPathComponent:@"manifest.json"];
+    char profile[]="/tmp/nx-social-profile-XXXXXX";char *created=mkdtemp(profile);CHECK(created!=NULL);if(!created)return 1;
+    NSString *manifest=[[NSString stringWithUTF8String:profile] stringByAppendingPathComponent:@"manifest.json"];if(!manifest)return 1;
     CHECK([@"{\"identity\":{\"friends\":\"baas\",\"account\":\"baas\"}}" writeToFile:manifest atomically:YES encoding:NSUTF8StringEncoding error:nil]);
     chmod(manifest.fileSystemRepresentation,0600);
     NSString *routes=[[NSString stringWithUTF8String:profile] stringByAppendingPathComponent:@"routes.tsv"];
@@ -88,13 +115,14 @@ int main(void){@autoreleasepool{
     }
     generation++;reply=@"{\"friends\":[]}";CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,3,filter,true)&&!count);
     uint64_t nsa=0;CHECK(!dm_nextendo_api_baas_id(&nsa)&&nsa==0xabcdef0000001234ull);
+    local_presence_initialization();
     uint8_t own[0xe0+16];memset(own,0,sizeof own);own[0xe0]=0xa5;
     CHECK(!dm_nextendo_presence_initialize(own,uid)&&!memcmp(own,uid,16)&&own[0xe0]==0xa5);
     own[0x20]=1;own[0x21]=2;CHECK(!dm_nextendo_presence_commit(own));
     response_status=503;CHECK(dm_nextendo_presence_commit(own)!=0);response_status=200;
     presence_constructor[0]=0;CHECK(dm_nextendo_presence_initialize(own,uid)!=0);presence_constructor[0]=0x52801c02;
     mode=DM_NET_OFFLINE;CHECK(dm_nextendo_presence_commit(own)!=0);mode=DM_NET_AUTO;
-    linked=NO;CHECK(dm_nextendo_api_baas_id(&nsa)!=0&&!nsa);CHECK(dm_nextendo_presence_initialize(own,uid)!=0);
+    linked=NO;CHECK(dm_nextendo_api_baas_id(&nsa)!=0&&!nsa);CHECK(!dm_nextendo_presence_initialize(own,uid));CHECK(dm_nextendo_presence_commit(own)!=0);
     unsetenv("DM_NEXTENDO_ROUTES");available=9;CHECK(!dm_nextendo_friends_available(&available,uid)&&!available);
     printf("Nextendo social: %d checks, %d failed; real parsers and SDK adapters, synthetic HTTP only\n",checks,failures);return failures?1:0;
 }}

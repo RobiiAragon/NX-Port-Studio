@@ -34,7 +34,9 @@ static bool presence_layout(void) {
     return words[14]==0xd65f03c0u;
 }
 uint32_t dm_nextendo_presence_initialize(void *object,const void *uid) {
-    if(!object||!presence_layout()||!dm_net_nextendo_enabled()||dm_nextendo_account_ensure())return RES_FAIL;
+    // Initializing local presence is independent of network authorization.
+    // Publishing it remains an authenticated online operation in Commit.
+    if(!object||!presence_layout())return RES_FAIL;
     uint8_t local[16];if(!uid){if(!dm_account_copy_uid(local))return RES_FAIL;uid=local;}
     if(!dm_account_uid_exists(uid))return RES_FAIL;
     // The original SDK initializer writes only the selected local UID. Its
