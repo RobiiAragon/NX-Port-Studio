@@ -5,6 +5,7 @@
 #include "hle.h"
 #include "nextendo_account.h"
 #include "account_local.h"
+#include "account_trace.h"
 
 typedef struct { uint64_t v[2]; } Uid;                 // nn::account::Uid, 16 bytes
 typedef struct { uint64_t v[3]; } UserHandle;          // nn::account::UserHandle, 24 bytes
@@ -119,7 +120,12 @@ HLE_FORCE("_ZN2nn7account27StoreSaveDataThumbnailImageERKNS0_3UidEPKvm", "save-d
     (void)uid; (void)img; (void)n; return RES_OK;
 }
 HLE_FORCE("_ZN2nn7account28DeleteSaveDataThumbnailImageERKNS0_3UidE", "save-data thumbnail; the host keeps none", Result, h_acc_DeleteThumb, const Uid *uid) { (void)uid; return RES_OK; }
-HLE_FORCE_WAIT("_ZN2nn7account32IsNetworkServiceAccountAvailableEPbRKNS0_10UserHandleE", "only a coherent unexpired Nextendo NEX credential enables the local user's NSA", Result, h_acc_NsaAvail, uint8_t *out, const UserHandle *h) { if (!out) return RES_FAIL; *out = 0; return online_user(h) ? dm_nextendo_account_available(out) : RES_FAIL; }
+HLE_FORCE_WAIT("_ZN2nn7account32IsNetworkServiceAccountAvailableEPbRKNS0_10UserHandleE", "only a coherent unexpired Nextendo NEX credential enables the local user's NSA", Result, h_acc_NsaAvail, uint8_t *out, const UserHandle *h) {
+    if (!out) { dm_account_trace_available(RES_FAIL, -1, -1); return RES_FAIL; }
+    *out = 0; int valid = online_user(h);
+    Result result = valid ? dm_nextendo_account_available(out) : RES_FAIL;
+    dm_account_trace_available(result, valid, *out != 0); return result;
+}
 HLE_FORCE("_ZN2nn7account9CloseUserERKNS0_10UserHandleE", "close user; the handle holds no session", void, h_acc_CloseUser, const UserHandle *h) { (void)h; }
 HLE_FORCE_WAIT("_ZN2nn7account12AsyncContext6CancelEv", "cancel an account request without publishing a late success", Result, h_acc_AcCancel, void *self) { return dm_nextendo_async_cancel(self); }
 HLE_FORCE_WAIT("_ZN2nn7account12AsyncContext7HasDoneEPb", "actual account request completion", Result, h_acc_AcHasDone, void *self, uint8_t *done) { return dm_nextendo_async_done(self, done); }

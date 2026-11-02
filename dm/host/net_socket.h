@@ -2,6 +2,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include "net_discovery.h"
 
 typedef struct { int32_t fd; int16_t events, revents; } dm_net_pollfd;
@@ -13,7 +14,10 @@ dm_net_mode_t dm_net_mode(void);
 // session type. The guest chooses sockets, LDN or online APIs from its menu.
 static inline int dm_net_nextendo_enabled(void) {
     dm_net_mode_t mode = dm_net_mode();
-    return mode == DM_NET_NEXTENDO || mode == DM_NET_AUTO;
+    const char *profile = getenv("DM_NEXTENDO_ROUTES");
+    // A missing profile leaves automatic local play unchanged. An explicitly
+    // supplied but invalid profile still enables fail-closed service policy.
+    return mode == DM_NET_NEXTENDO || (mode == DM_NET_AUTO && profile && *profile);
 }
 static inline int dm_net_ldn_enabled(void) {
     dm_net_mode_t mode = dm_net_mode();
@@ -76,6 +80,9 @@ int dm_net_getaddrinfo(const char *host, const char *service, const void *hints,
 int dm_net_getaddrinfo_legacy(const char *host, const char *service, const void *hints, void **result);
 void dm_net_freeaddrinfo(void *result);
 void *dm_net_gethostbyname(const char *name);
+void *dm_net_gethostbyname_cancel(const char *name, uint32_t cancel_id);
+uint32_t dm_net_request_cancel_handle(void);
+int dm_net_cancel(uint32_t cancel_id);
 int dm_net_ipconfig(uint32_t *address, uint32_t *mask, uint32_t *gateway, uint32_t *dns1, uint32_t *dns2);
 int dm_nifm_available(void);
 void dm_nifm_submit_wait(void);

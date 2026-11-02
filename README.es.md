@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC5:** pasé el renderizado de Mac al proceso principal y medí 59,8–60 FPS en una muestra de Mario Kart 4.0.1 a pantalla completa. Agregué calendarios para Splatoon 2 y una biblioteca privada para importar Miis; me falta validar partidas online de Splatoon 2 y terminar el editor del firmware original. [Notas de versión](docs/releases/1.6.0-rc.5.md).
+> **1.6.0 RC6:** entré al lobby online y a la cola Territorial de Splatoon 2 en Mac, y comprobé que los frames siguen avanzando al perder el foco o quedar cubierta la ventana. Distingo esto de una partida completada, mi ronda verificada en una sala de Smash y las pruebas LAN históricas de Mario Kart. Siguen pendientes los colores de personajes de Splatoon y el editor Mii del firmware original. [Notas del candidato](docs/releases/1.6.0-rc.6.md).
 
 ## Capturas de Studio
 
@@ -57,7 +57,9 @@ Cada mecanismo tiene pruebas y alcances distintos. Esto no demuestra que todos l
 | Studio en macOS | Ejecuté correctamente las pruebas de compilación, configuración, procesos, recursos y firma Xcode. | Apple silicon; Studio requiere macOS 14+. Algunos juegos necesitan funciones más recientes de macOS/Metal. |
 | LAN Mac ↔ Switch | **Completé una carrera de Mario Kart 8 Deluxe 3.0.5** entre un build anterior de Mac y mi Switch física. | Es una referencia histórica con versiones coincidentes y modo LAN. No he repetido esa carrera con el candidato actual. |
 | Puente LDN | El 31 de octubre probé Mario Kart 3.0.5 por LAN y LDN entre ports nativos Mac/iOS y mi Switch física. También ejecuté correctamente las pruebas de protocolo. | Corresponde a los ports anteriores a esta sincronización; me falta repetir la prueba con el nuevo motor. El puente LDN IP necesita un módulo compatible en la consola. |
-| Nextendo | Verifiqué la cuenta y **una ronda real de arena de Smash 13.0.5 en Mac**. | Conexión automática y certificado exacto que autoricé para ese servicio. Este resultado no valida partida rápida, otros juegos ni online en iOS. |
+| Mario Kart 8 Deluxe 4.0.1 | Tengo un candidato privado actual para Mac y medí su renderizado a pantalla completa en el proceso principal. | Las pruebas LAN/LDN de 3.0.5 siguen siendo históricas. No he completado una carrera Nextendo ni repetido la prueba física LAN/LDN con este candidato 4.0.1. |
+| Smash 13.0.5 — Nextendo | Verifiqué la cuenta y **una ronda real de arena en Mac**. | Autoricé el certificado exacto del servicio. Siguen pendientes el rechazo por red inestable de Partida rápida y una desconexión posterior como espectador; no he validado online en iOS. |
+| Splatoon 2 EUR 5.5.2 — Nextendo | El 2 de noviembre entré al **lobby online y a la cola Territorial en Mac**, después de completar el tutorial y llegar a la plaza. | Decidí dejar la prueba de partida para después porque había pocos jugadores disponibles. No he validado una partida completada, juego entre pares, LAN/LDN ni iOS para este título. |
 | iPhone/iPad | Comprobé que el build firmado de Mario Kart 3.0.5 entra a salas LAN con mi Switch física, con cada dispositivo como anfitrión. | Verifiqué la entrada a la sala; aún no he validado una carrera completa en iPhone. Siguen aplicando restricciones de dispositivo, firma y plataforma. |
 | Android/Windows | Los tengo planeados para después de estabilizar la base Apple. | Aún no tengo builds ni resultados de compatibilidad; ARM y x86 requieren trabajo propio. |
 
@@ -101,7 +103,7 @@ La interfaz inicia en español y permite elegir inglés, francés, japonés y ch
 
 Los ports arrancan con los servicios de conexión automáticos. Elige En línea, Inalámbrico o LAN dentro del juego, sin seleccionar otro modo ni reiniciar. Configurar Nextendo es una acción independiente: la falta de credenciales online no bloquea el juego local. La desconexión y la dirección de descubrimiento opcional quedan como ajustes avanzados.
 
-**LAN:** utiliza el modo LAN propio del juego y sockets IP reales. Requiere versiones coincidentes y la misma red. La carrera del build anterior es la referencia física; no certifica un candidato posterior del runtime. Comprobé que el candidato actual 3.0.5 para Mac [crea una sala LAN local](dm/games/0100152000022000/README.md#local-network-validation) y llega al lobby y a las reglas del anfitrión. Aún no he validado la incorporación de otro dispositivo ni una nueva carrera con ese candidato.
+**LAN:** utiliza el modo LAN propio del juego y sockets IP reales. Requiere versiones coincidentes y la misma red. La carrera completada con Mario Kart 3.0.5 y la [creación de sala de un candidato anterior](dm/games/0100152000022000/README.md#local-network-validation) son resultados históricos. Ahora tengo un candidato privado 4.0.1 para Mac; todavía no he repetido con él la prueba física LAN/LDN.
 
 **LDN:** transporta por IP el descubrimiento y los participantes del servicio inalámbrico local. Requiere un peer/módulo compatible y un juego coincidente. Las pruebas entre procesos no sustituyen una comprobación física.
 
@@ -117,7 +119,7 @@ Para las salas creadas en el iPhone/iPad, **Juego local → Activar puente** hab
 
 ### Bloqueos actuales de servicios de juego
 
-El 2026-10-31 comprobé que cinco servicios de cuenta, BAAS y datos completan el handshake TLS nativo con la CA del proveedor, incluidos sus certificados de larga duración. El servidor NEX de MK8 que probé aún presenta un certificado autofirmado sin el hostname requerido, y la cadena de autenticación de dispositivo/aplicación no coincide con la CA publicada. Esas comprobaciones siguen fallando. El build de Mario Kart 8 Deluxe **3.0.5** que probé también queda fuera del requisito **4.0.1**. El [inventario completo](docs/nextendo-coverage.md) incluye los 58 títulos, 62 perfiles regionales y 22 planes de parches por build; aún me falta validar los demás juegos online en su versión nativa.
+En las pruebas TLS del 31 de octubre registré handshakes correctos con la CA del proveedor y fallos pendientes de hostname NEX y cadena de autenticación del dispositivo. Conservo esa evidencia y los errores de confianza no resueltos siguen fallando. Mi candidato privado actual de Mario Kart es **4.0.1** y cumple la versión exigida; todavía no he validado sus rutas pendientes de TLS/autenticación, NAT ni una carrera online. En Smash siguen abiertos Partida rápida y la estabilidad de sesiones posteriores. En Splatoon 2, dos conexiones TLS verificadas permitieron llegar al lobby y a la cola; dejé la partida para después y no doy por validado el juego entre pares. El [inventario de cobertura](docs/nextendo-coverage.md) separa los resultados reales de estos tres títulos de las 58 entradas del catálogo, 62 perfiles regionales y 22 planes de parches por build.
 
 ## Contenido del repositorio
 

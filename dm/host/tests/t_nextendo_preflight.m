@@ -61,6 +61,10 @@ int main(void) { @autoreleasepool {
     CHECK(capturedAvailability(&available) == 0 && !available && disallowsInteraction());
     returnedStatus = errSecSuccess; returnedData = record();
     CHECK(capturedAvailability(&available) == 0 && available && disallowsInteraction());
+    mode=DM_NET_OFFLINE; unsigned explicitReads=reads, explicitWaits=begins;
+    CHECK(dm_nextendo_account_authorize_local()==0 && reads==explicitReads+1 && begins==explicitWaits && !capturedQuery[(__bridge id)kSecUseAuthenticationContext]);
+    available=9; CHECK(!capturedAvailability(&available) && !available && reads==explicitReads+1);
+    mode=DM_NET_AUTO;
     // Existing explicit access retains its previous policy. No system API is
     // actually called: the same query capture returns fixture-only data.
     CHECK(dm_nextendo_account_ensure() == 0 && !capturedQuery[(__bridge id)kSecUseAuthenticationContext]);

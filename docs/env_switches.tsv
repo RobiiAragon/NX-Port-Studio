@@ -1,5 +1,6 @@
 name	class	meaning
 DM_AB	diagnostic	`=<frames>` splits the run into phases of that many frames and alternates every switch set to `ab` (on in the odd phases); logs an `[ab]` line per phase with GPU and frame time and attachment traffic
+DM_ACCOUNT_TRACE	diagnostic	`=1` logs at most 32 state changes in each of four account/NIFM sections (128 total), including passive-provider query/cache outcomes; no identities, credentials, addresses or extra queries
 DM_ALIAS_SIZE	diagnostic	`=<bytes>` gives the guest an alias region of that size instead of the profile's (at least 256 MB, whole host pages; the heap and stacks stay as they are): `0x1000000000`, the Switch's 64 GB, holds what a game reserves unchanged; the NSP script's address region check sets it (Mac only: an iPhone has no room)
 DM_ALIAS_WINDOWS	diagnostic	`=<MB>` logs every 30 s how much of each window of that size in the alias region is mapped (windows aligned to their size in absolute addresses)
 DM_ALLOW_OTHER_METAL	switch	`1` lets `own_compilers.py` build the shader libraries with a Metal compiler other than the one in `dmsh_chain.lock` (it stops otherwise, GitHub issue #242); the NSP script sets it for `--allow-other-metal`
@@ -75,6 +76,7 @@ DM_LDN_TRACE	diagnostic	Log LDN bridge sessions and protocol events
 DM_LINK_VTICK	switch	`0` keeps the system's display-link rate on 144 or 165 Hz Mac screens; by default the link counts only the refreshes nearest a steady 1/60 s clock
 DM_LOADHASH	diagnostic	`=1` logs an address-independent SHA-256 per module after loading
 DM_LONGFRAME	diagnostic	`0` turns off the long-frame log (on by default), a line for a frame over 20 ms or with GPU time over 16.7 ms that is clearly above recent frames
+DM_MAC_BACKGROUND	switch	Mac desktop policy: continue guest execution by default; 0 restores suspension on focus loss/minimize. Input is always released on resign.
 DM_MEASURE_LOCK	path	Shared measurement lock file used by regress.py and bench.py while games run
 DM_MEMSTAT	diagnostic	`=<tsv>` writes one line per second of memory accounting: footprint, Metal allocation and resident and charged memory by region class (guest, code, malloc, gpu, …)
 DM_MEMSTAT_DUMP	diagnostic	`=<seconds>`: with `DM_MEMSTAT`, at that second writes every VM region of 1 MiB or more to `<tsv>.regions`
@@ -213,6 +215,7 @@ DM_OPMODE	player	The operation mode the game sees: `0` handheld, `1` console (de
 DM_PAD_MERGE	switch	`=1` merges every controller into player 1, as before, instead of giving each controller a player of its own (Mac and iOS)
 DM_PATCH_FRONT	switch	`=<bytes>`: the size of the patch area right before the module base for a long text (`BIG_TEXT`); set only by the rewriter's own rerun with the size it needs
 DM_PHONE_MOTION	switch	On iOS, whether the phone's own device motion drives player 1's six-axis sensor: `auto` (default) while no controller supplies fresh motion, `1` phone only, `0` never; each source keeps its own orientation
+DM_POLL_TRACE	diagnostic	1 logs at most 128 terminal Poll records with numeric stage/count/timeout/result/errno/event flags, preserving transport behavior
 DM_PREEMPT	switch	`0` / `1` overrides the profile's `core_preempt`: also check already-runnable higher-priority peers on the caller's core after every thread SVC
 DM_PRELOAD	diagnostic	Set: on the Mac, runs the host's early background loading (`dm_host_preload_start`) as the iOS app does, to exercise that path
 DM_PRESENT_FIFO	switch	`0` makes the display link take the newest queued frame each tick, as before; by default it shows frames in order, at most one tick behind
@@ -295,6 +298,7 @@ DM_SLOWFRAME	diagnostic	`=1` writes the per-frame timing breakdown to the log on
 DM_SPIN	switch	`0` makes the rewriter's spin gate return at once, so guest poll loops spin with no sleep; the gate stays (on by default)
 DM_SPIN_LIST	diagnostic	`=1` makes `patch_nso.py` print every guest poll loop it found and sends through a spin gate
 DM_SPIN_POLL	switch	`=<µs>`: how long a spin-gate wait polls before it sleeps with the yield back-off (default 2000; `0` yields on every pass)
+DM_SSL_TRACE	diagnostic	1 logs at most 128 numeric TLS configuration, verification, handshake and stream-state records; preserves errno and contains no names, addresses, accounts or stream data
 DM_SVC	diagnostic	`=1` logs memory SVCs (`SetHeapSize`, `MapMemory`, `Map`/`UnmapPhysicalMemory`) with their addresses and sizes
 DM_SYMCHECK	diagnostic	`=1` checks every hashed module symbol lookup against a linear search and logs a red line for each mismatch
 DM_SYSTEM_DATA_DIR	path	Private imported firmware resources; never console keys or resources in the public source tree

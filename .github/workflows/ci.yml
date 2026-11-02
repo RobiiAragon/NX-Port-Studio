@@ -51,6 +51,8 @@ jobs:
           dm.tools.tests.test_nsp_heap_check
           dm.tools.tests.test_game_inputs
           dm.tools.tests.test_nextendo_services
+          dm.tools.tests.test_nextendo_local_peers
+          dm.tools.tests.test_env_switches
           dm.tools.tests.test_nextendo_patches
           dm.tools.tests.test_dotnet_environment
           dm.tools.tests.test_nsp_nsz

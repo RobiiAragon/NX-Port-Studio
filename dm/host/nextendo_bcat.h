@@ -8,9 +8,10 @@ int dm_bcat_supported(const char *title);
 int dm_bcat_prepare(const char *title, const char *version, const char *catalog,
                     const char *destination, char *error, size_t error_size);
 int dm_bcat_validate(const char *title, const char *version, const char *directory);
-/* Startup never waits for the network. The RomFS overlay is fixed for this
- * session; an atomic background refresh is available to new delivery opens and
- * mounts immediately, and to the RomFS overlay at the next launch. */
+/* Called from the pre-guest boot thread with the front end's event loop live.
+ * Online launches check before selecting the immutable RomFS overlay, sharing
+ * a 12-second network budget. Offline/errors retain the last validated copy.
+ * Later guest synchronization refreshes delivery opens only, never live RomFS. */
 void dm_bcat_start(const char *module_directory, const char *title, int online);
 const char *dm_bcat_overlay(void);
 const char *dm_bcat_delivery(void);

@@ -2,6 +2,7 @@
 // Link hle_net.c, hle_offline.c, hle_net_backend.c, hle_bigstack.c and entry.S with a generated game_profile.h include path.
 #include "../hle.h"
 #include "../net_socket.h"
+#include "t_trace_capture.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -47,6 +48,12 @@ static _Atomic int contexts_entered, contexts_left, invalid_contexts;
 static __thread int context_depth;
 static volatile sig_atomic_t sigpipe_count;
 static int resolver_abi;
+static unsigned config_queries;
+// Only hle_net.c is compiled with this replacement. The real backend remains
+// unchanged; counting proves observation never adds another interface query.
+int fixture_ipconfig(uint32_t *a,uint32_t *b,uint32_t *c,uint32_t *d,uint32_t *e) {
+    config_queries++; return dm_net_ipconfig(a,b,c,d,e);
+}
 static void sigpipe(int signal) { (void)signal; sigpipe_count++; }
 #define CHECK(c, message) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL line %d: %s (guest errno=%d host errno=%d)\n", __LINE__, message, dm_net_errno(), errno); abort(); } } while (0)
 void dm_guest_host_wait_begin(void) { atomic_fetch_add(&waits, 1); atomic_fetch_add(&wait_balance, 1); }
@@ -133,6 +140,28 @@ static void nifm(void) {
     CHECK(dm_net_ipconfig(&ip, NULL, NULL, NULL, NULL) < 0 && ip == 0 && !dm_nifm_available(), "missing interface does not claim connectivity");
     setenv("DM_NETWORK_INTERFACE", "lo0", 1);
     GET(fn_vvoid, "_ZN2nn4nifm20CancelNetworkRequestEv")(); CHECK(!dm_nifm_available(), "cancel clears the request state");
+}
+static void nifm_trace(void) {
+    fn_void available=GET(fn_void,"_ZN2nn4nifm18IsNetworkAvailableEv");
+    fn_void result=GET(fn_void,"_ZN2nn4nifm26HandleNetworkRequestResultEv");
+    fn_vvoid submit=GET(fn_vvoid,"_ZN2nn4nifm20SubmitNetworkRequestEv");
+    fn_vvoid cancel=GET(fn_vvoid,"_ZN2nn4nifm20CancelNetworkRequestEv");
+    fn_void hold=GET(fn_void,"_ZN2nn4nifm22IsNetworkRequestOnHoldEv");
+    setenv("DM_NETWORK","auto",1); setenv("DM_NETWORK_INTERFACE","lo0",1); cancel();
+    unsetenv("DM_ACCOUNT_TRACE"); TraceCapture capture=trace_capture_begin();
+    config_queries=0; int before=available(),beforeResult=result(); char *text=trace_capture_end(capture);
+    CHECK(!*text && !before && beforeResult==RES_FAIL && !config_queries,"disabled trace preserves unsubmitted NIFM and short-circuits IP queries"); free(text);
+    setenv("DM_ACCOUNT_TRACE","1",1); capture=trace_capture_begin();
+    int after=available(),afterResult=result(); unsigned idleQueries=config_queries;
+    submit(); int pending=available(); unsigned pendingQueries=config_queries; hold();
+    int connected=available(),connectedResult=result(); unsigned connectedQueries=config_queries;
+    setenv("DM_NETWORK_INTERFACE","no-such-interface",1); int missing=available(),missingResult=result(); unsigned missingQueries=config_queries;
+    cancel(); int cancelled=available(); unsetenv("DM_NETWORK"); int offline=available();
+    text=trace_capture_end(capture);
+    CHECK(after==before && afterResult==beforeResult && !idleQueries && !pending && !pendingQueries && connected==1 && connectedResult==RES_OK && connectedQueries==2 && !missing && missingResult==RES_FAIL && missingQueries==4 && !cancelled && !offline && config_queries==4,"trace keeps bool/Result ABI and exactly one IP query per settled evaluation, none for hold/cancel/offline");
+    CHECK(strstr(text,"op=nifm.available return=0x1 available=1 enabled=1 pending=1 hold=0 ip_queried=1") && strstr(text,"op=nifm.result return=0x2a2 available=0") && strstr(text,"enabled=1 pending=1 hold=1 ip_queried=0") && strstr(text,"enabled=0 pending=-1 hold=-1 ip_queried=0"),"trace describes the actual evaluated branch and leaves unqueried state unknown");
+    CHECK(!strstr(text,"127.0.0.1") && !strstr(text,"no-such-interface") && !strstr(text,"lo0"),"network trace contains no IP address or interface values"); free(text);
+    unsetenv("DM_ACCOUNT_TRACE"); setenv("DM_NETWORK","auto",1); setenv("DM_NETWORK_INTERFACE","lo0",1);
 }
 static void udp(void) {
     int guest = SOCKET(2, 2, 17); address local = addr(htonl(0x7f000001), 0), peer = local;
@@ -230,6 +259,16 @@ static void errors_and_resolver(void) {
     CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("127.0.0.1", "1", &hints, &out) == 4 && !out, "C resolver refuses ambiguous exported ABIs"); resolver_abi = 0;
     CHECK(dm_net_getaddrinfo("127.0.0.1", "1", &(dm_net_addrinfo){.family = 28}, &out) == 5 && !out, "unsupported resolver family returns EAI_FAMILY");
     CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("127.0.0.1") != NULL, "automatic mode resolves a real numeric LAN peer through legacy hostent");
+    uint32_t cancel_id=GET(uint32_t (*)(void), "nnsocketRequestCancelHandle")();
+    CHECK(cancel_id && GET(uint32_t (*)(void), "_ZN2nn6socket19RequestCancelHandleEv")()!=cancel_id,
+          "C and C++ cancellation IDs are nonzero and independent from sockets");
+    CHECK(GET(void *(*)(const char *,uint32_t), "nnsocketGetHostByNameCancel")("127.0.0.1",cancel_id)!=NULL,
+          "SDK3 cancellable C resolver preserves guest ABI through the wait gate");
+    CHECK(GET(void *(*)(const char *,uint32_t), "_ZN2nn6socket13GetHostByNameEPKci")("127.0.0.1",0)!=NULL,
+          "C++ cancellable overload accepts zero as a noncancelable lookup");
+    CHECK(GET(int (*)(uint32_t), "nnsocketCancel")(cancel_id)==0 &&
+          GET(int (*)(uint32_t), "_ZN2nn6socket6CancelEi")(0)==0 && dm_net_errno()==22,
+          "cancel admits inactive identities and preserves SDK zero-ID convention");
     CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") == NULL, "automatic mode never falls back to unconfigured service DNS");
 }
 static void broadcast(void) {
@@ -276,9 +315,48 @@ static void discovery_peer(void) {
           "capable host retains native discovery destination");
     CLOSE(guest); close(native);
 }
+static void poll_diagnostics(void) {
+    int guest = SOCKET(2, 2, 17);
+    CHECK(guest >= 0, "diagnostic test owns a real UDP descriptor");
+    struct observation { int result, guest_error, host_error; dm_net_pollfd fd; } before[7];
+    FILE *capture = tmpfile(); CHECK(capture != NULL, "capture sanitized Poll metadata");
+    fflush(stderr); int saved = dup(STDERR_FILENO);
+    CHECK(saved >= 0 && dup2(fileno(capture), STDERR_FILENO) >= 0, "capture stderr");
+    fn_poll legacy = GET(fn_poll, "nnsocketPoll");
+    for (int enabled = 0; enabled < 2; ++enabled) {
+        setenv("DM_POLL_TRACE", enabled ? "1" : "0", 1);
+        for (int i = 0; i < 7; ++i) {
+            dm_net_pollfd fd = {i == 5 ? 999 : i == 4 ? -1 : guest,
+                                i == 3 || i == 4 ? 0x4000 : 0xc3, 0x1234};
+            void *buffer = i < 2 ? NULL : &fd;
+            uint64_t count = i == 0 ? 0 : i == 2 ? UINT64_MAX : 1;
+            dm_net_set_errno(37); errno = E2BIG;
+            int result = legacy(buffer, count, 0), host_error = errno, guest_error = dm_net_errno();
+            if (!enabled) before[i] = (struct observation){result, guest_error, host_error, fd};
+            else CHECK(result == before[i].result && guest_error == before[i].guest_error &&
+                       host_error == before[i].host_error && !memcmp(&fd, &before[i].fd, sizeof fd),
+                       "trace preserves actual HLE result, both errnos and all guest bytes");
+        }
+    }
+    fflush(stderr); CHECK(dup2(saved, STDERR_FILENO) >= 0 && close(saved) == 0, "restore stderr");
+    CHECK(!fseek(capture, 0, SEEK_SET), "rewind diagnostic capture");
+    char text[4096]; size_t bytes = fread(text, 1, sizeof text - 1, capture); text[bytes] = 0;
+    CHECK(!ferror(capture) && fclose(capture) == 0, "read captured diagnostic");
+    unsigned lines = 0; for (const char *p = text; (p = strstr(p, "[poll-trace]")); ++p) ++lines;
+    CHECK(lines == 7, "disabled tracing emits nothing; legacy ABI emits one terminal event per call");
+    CHECK(strstr(text, "stage=0 count=0 timeout=0 result=0 errno=0 eventmask=0x0000") &&
+          strstr(text, "stage=3 count=1 timeout=0 result=-1 errno=14 eventmask=0x0000") &&
+          strstr(text, "stage=2 count=18446744073709551615 timeout=0 result=-1 errno=22 eventmask=0x0000") &&
+          strstr(text, "stage=5 count=1 timeout=0 result=-1 errno=22 eventmask=0x4000") &&
+          strstr(text, "stage=0 count=1 timeout=0 result=1 errno=0 eventmask=0x00c3"),
+          "metadata distinguishes validation failures, legal idle waits and actual POLLNVAL");
+    CHECK(!strstr(text, "fd=") && !strstr(text, "0x1234"), "no descriptors or sentinel payload appear");
+    unsetenv("DM_POLL_TRACE"); CLOSE(guest);
+}
 int main(int argc, char **argv) {
+    unsetenv("DM_ACCOUNT_TRACE");
     struct sigaction sa = {.sa_handler = sigpipe}; sigemptyset(&sa.sa_mask); sigaction(SIGPIPE, &sa, NULL);
-    offline(); nifm(); udp(); concurrency(); tcp(); errors_and_resolver(); discovery_peer();
+    offline(); nifm(); nifm_trace(); udp(); concurrency(); tcp(); errors_and_resolver(); discovery_peer(); poll_diagnostics();
     if (argc == 2 && !strcmp(argv[1], "--no-broadcast")) puts("broadcast test skipped explicitly (requires local-network permission for this test executable)"); else broadcast();
     GET(fn_vvoid, "_ZN2nn6socket8FinalizeEv")();
     CHECK(atomic_load(&waits) > 0 && atomic_load(&wait_balance) == 0, "all host waits yield and restore guest execution");

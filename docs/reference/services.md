@@ -401,6 +401,14 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Found on:** [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md) (4.0.0 and 4.0.1; GitHub issue #550).
 - **Check:** `t_oe` and `t_hid` (`dm/host/tests`). On the Mac, from a save past the Mii pick: L+R at the title, Down, A (2P), A (Grand Prix), A (50cc). The log shows `oe library applet: controller support`, then `oe focus state → 2 (library applet open)` and `→ 1 (library applet closed)`, and the character select takes input. With one controller the applet logs `too few, closed as the player would (canceled)` once and the engine class menu comes back.
 
+### Tagged error applet diagnostics
+
+- **Symptom:** a game requests `ShowError(ErrorResultVariant)`, but the host log identifies only the argument type and hides the numeric failure; an applet stand-in can therefore leave a retry looking like an unexplained connection wait.
+- **Cause:** the display hook discarded the variant. Its SDK constructors/getters use a four-byte state at +0: state 1 stores a four-byte `Result` at +4; state 2 stores a packed eight-byte `ErrorCode` at +4. The default constructor initializes only the state. I checked the same layout in my original SDK 3.4.1, 4.4.0, 7.3.2, 8.2.1 and 16.2.6 modules.
+- **Fix:** `hle_error.c` retains the existing error-applet focus scope and void return, and logs only the tag plus its numeric Result or category/error pair. `memcpy` handles the four-byte-aligned 64-bit payload. Null, default and unknown variants do not read payload; no pointer, account data or surrounding argument buffer is logged. This is a diagnostic change, not a successful error result, new dialog or networking workaround. The SDK's constructors and pure conversion operators remain untouched.
+- **Check:** `t_error_result.c` invokes the registered hook with read-only four-, eight- and twelve-byte objects at a protected-page boundary, unaligned objects, unknown/default/null tags and full-width values. Normal and ASan/UBSan checks verify the bounded reads, unchanged inputs and balanced applet scope.
+- **Found on:** my Splatoon 2 EUR 5.5.2 candidate requested four variant error applets during an online attempt after account access and synchronized time were available. Their numeric cause remains unobserved until the updated hook runs; this change does not establish online gameplay.
+
 ### The software keyboard blocks only its caller
 
 - **Symptom:** the sound stutters and the input box lags while the player types a name (Octopath Traveler 0 on an iPhone: one 4.7 s frame, 5,035 wakeups a second instead of about 1,800, and no audio underruns).
@@ -625,6 +633,30 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Discovery scheduling:** the same kernel UDP socket, source port, options and original payload are retained. A worker sends at most 32 destinations and 32 KiB per eight-millisecond batch (one larger UDP datagram may exceed the byte quantum). The queue holds at most 16 datagrams globally/two per socket, coalesces identical pending queries, fails excess work with `ENOBUFS` and cancels by descriptor generation on close/reuse. Destination-specific `EHOSTUNREACH`, `ENETUNREACH` and Darwin `EHOSTDOWN` (guest errno 112) are skipped within a bounded initial batch and subsequent worker sweeps. Permission/interface failures stop the automatic work; original native broadcasts and explicit peers still return their own errors. UDP success means accepted best-effort delivery, never a discovered console. A /24 sweep takes about 64 ms and a small /20 query about 1,024 ms without backpressure or competing queries. A connected discovery UDP endpoint cannot represent this multi-peer sweep and fails explicitly; `SendTo` and LDN support it. `t_net_discovery` checks real unicast query/reply traffic, unchanged binary payload/source port, ranges, ordinary traffic, queue bounds, unreachable neighbors and close/reuse without contacting a LAN. The owner subsequently confirmed LAN and LDN play across native Mac/iOS ports and physical Switch hardware on October 31; a new engine synchronization still requires its own game qualification.
 - **Native settings:** Mac ports default to automatic service selection and persist an optional network disable/discovery peer per title in `org.nxnative.network`; environment overrides win and edits apply on the next launch. Labels distinguish built-in LAN for compatible stock or modified consoles from the experimental LDN bridge requiring a compatible module, and from Nextendo's credential/service requirements.
 
+I can temporarily set `DM_ACCOUNT_TRACE=1` for one port to distinguish an account
+availability rejection from an unavailable NIFM request. The shared trace emits
+at most 32 state changes for each of four sections (128 total) and remains disabled
+for every other value. Repeated identical states are suppressed independently,
+so NIFM polling cannot exhaust account observation.
+Provider events distinguish enabled services, a direct provider or passive helper,
+cache reuse, packet validity, child availability, valid expiry and generation
+changes using booleans only. A query failure also records a numeric stage,
+OS error, byte count and exit/signal status, with no PID, executable path or
+packet contents. Stage values in `nextendo_preflight_mac.h` distinguish arguments,
+executable lookup, pipe/queue setup, spawn, registration, read, reap, timeout,
+wait, exit, packet length and protocol validation; zero means a validated reply.
+`-1` means that path did not evaluate the field.
+Account events contain the actual Horizon Result, whether the handle was issued
+by the host and the one-byte availability output. NIFM events contain the actual
+Bool or Result return and the enabled/pending/hold state already evaluated by
+that call; `-1` means the original short-circuit path did not evaluate a field.
+`ip_queried` records whether the original evaluation queried IPv4 configuration.
+I do not log account values, OAuth codes, credentials, guest pointers, IP/DNS
+addresses or interface names, and observation adds no credential/interface query.
+The trace preserves return values and host errno. A successful availability
+check still does not establish authentication, matchmaking or an online match.
+I remove this diagnostic setting after the coordinated reproduction.
+
 ### Native broadcast capability and peer discovery are separate
 
 - **Symptom:** a capable Mac client sends a normal discovery broadcast, but an iPhone-hosted room cannot receive that broadcast under its signing profile. The phone may still accept and answer a unicast query.
@@ -646,6 +678,19 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Found on:** synthetic native-LAN interface fixtures. The physical [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md#local-network-validation) session baseline is separate; no new physical VPN/game session is claimed.
 
 ### Native client TLS with scoped trust
+
+For a failing connection, I can temporarily set `DM_SSL_TRACE=1` for one port.
+It emits at most 128 numeric records per process, preserving errno. Stages 0–9
+are hostname admission, socket attachment, value setting, option setting, native
+preparation, certificate verification, handshake, optional certificate export,
+first successful read and first successful write (plus terminal stream errors).
+`session` is a process-local TLS object identifier, not an account identifier.
+Flags are handshaking (1), established (2), verified (4), rejected (8), exact pin
+(16) and scoped anchor (32). Hostname detail contains only allowed (1) and numeric
+name (2) bits; value/option detail packs the property in the upper 32 bits and
+its value in the lower bits. Stream detail is a byte count. No hostname, address,
+descriptor, pointer, account, certificate contents or stream payload is logged.
+The diagnostic does not change service admission, trust or TLS results.
 
 - **Symptom:** an online title can open a native TCP connection but `nn::ssl` always fails its context or handshake.
 - **Cause:** the former hooks had no TLS engine, and their C signatures did not implement the SDK's context, connection and certificate-buffer contracts. A TCP socket alone cannot answer the SDK's encrypted stream calls.
@@ -764,8 +809,16 @@ Most service calls can be found before they crash, before the first boot or the 
 
 ### Time zone rules, calendar conversion and the network clock
 
-- **Fix:** hooked: `time::ToPosixTime` (host `mktime`), and `time::ToPosixTime` with an explicit rule (the host's zone, as for `ToCalendarTime`); `time::LoadTimeZoneRule` and the `ToCalendarTime` overload with a rule (the host's zone is used); `time::StandardNetworkSystemClock::IsAccuracySufficient` (offline: no). `time::GetDayOfWeek` is a pure computation and needs nothing.
+- **Fix:** hooked: `time::ToPosixTime` (host `mktime`), and `time::ToPosixTime` with an explicit rule (the host's zone, as for `ToCalendarTime`); `time::LoadTimeZoneRule` and the `ToCalendarTime` overload with a rule (the host's zone is used). Network-clock availability uses the [checked kernel synchronization state](#synchronized-network-clock-and-availability-tasks). `time::GetDayOfWeek` is a pure computation and needs nothing.
 - **Found on:** [13 Sentinels: Aegis Rim](../../dm/games/01003FC01670C000/README.md) (SDK 11, `ToPosixTime`); [Monster Hunter Rise](../../dm/games/0100B04011742000/README.md) (SDK 11, the rest); [Octopath Traveler 0](../../dm/games/01005270232F2000/README.md) (`GetDayOfWeek`); [Pokémon Legends: Z-A](../../dm/games/0100F43008C44000/README.md) (19.3.11, `ToPosixTime` with an explicit rule, found in the imports before it was met).
+
+### Synchronized network clock and availability tasks
+
+- **Symptom:** valid calendar resources and an available network account still do not satisfy a game's schedule/news gate, before game login.
+- **Cause:** the old network clock always failed. Its availability task shared one event, signaled even when only queried, and always returned failure. In my Splatoon 2 EUR 5.5.2 candidate (SDK 3.4.1), the original task consumer writes a ready state only for a successful completed result; the schedule gate explicitly requires that state. Real HLE counts confirm the task runs before the title screen. This establishes the unsupported service contract, not a completed online session.
+- **Fix:** `hle_network_clock.c` reads the public `ntp_gettime` API without adjusting the clock or daemon configuration. `GetCurrentTime` and `IsAccuracySufficient` both require `TIME_OK` from the call and structure, a valid positive POSIX timestamp/fraction, and nonnegative maximum and estimated errors no greater than one second. The bound matches the whole-second guest `PosixTime` resolution. [Apple's kernel implementation](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_ntptime.c#L104) defines these synchronization/error measurements and increases maximum error as synchronization ages. An unsynchronized, imprecise or unavailable kernel clock remains a failure; neither the user clock nor `DM_FIXED_TIME` provides a fallback. This API does not synchronize the host itself or establish server authentication.
+- **Task lifetime:** each opaque SDK task owns a separate SDK-created SystemEvent, honoring manual/automatic clear mode. Initialization and event lookup never signal completion. Start performs a fresh kernel query inline and then signals the captured binding lifetime, retaining the actual result. Repeating Start clears the previous completion and queries again. Cancellation is not newly hooked: I have not qualified its return ABI, and the kernel query has no outstanding worker after Start returns. Destruction uses the SDK event destructor to close both handles and removes the bounded registry entry; address/handle reuse cannot inherit an old completion. The callback-capable HLE path uses `dm_host_lock`, whose native-wait annotation releases a contended caller's guest core. The scheduler fixture wakes a higher-priority pinned caller from the SDK event callback while initialization owns the registry lock; plain `pthread_mutex_lock` deadlocks that handoff, while the annotated lock lets initialization return. Normal and ASan/UBSan fixtures exercise the registered HLE APIs with injected kernel states and real host event bindings/SVCs.
+- **Scope:** user/fixed clocks, calendar conversion, LAN/LDN configuration, and process/system settings are unchanged. Snapshot network-context fields and additional network-clock timespec/context exports remain unimplemented; I do not publish a fabricated context or extend their ABI without evidence. Physical game validation of this new backend remains pending.
 
 ### Steady clock, clock snapshots and user clocks
 
@@ -799,6 +852,8 @@ Most service calls can be found before they crash, before the first boot or the 
 
 ### Guest clock reads wait while the app is in the background
 
+This suspension path remains applicable to iOS and explicit host suspension. Mac desktop windows now [continue by default](frame-rate.md#mac-games-continue-when-the-desktop-window-loses-focus); changing apps does not freeze their guest clock.
+
 - **Symptom:** after switching apps and back, one guest thread at 100% in a tight loop (`main+0x9abd0`, `x10 = 0`); the game freezes, picture still, sound on. Mac repro `DM_OE_SCRIPT=bg=1@20,bg=0@25`.
 - **Cause:** the frame pacing measured a frame period of 0 (`main+0x5926a8`: the clock difference between two frames). The host freezes the guest clock in the background but its threads went on, so two frames read the same time.
 - **Fix:** guest reads of the system counter (the `cntpct` gate, `svc GetSystemTick`) now wait while the app is in the background (`hle_os.c` `guest_clock_read_wait`); host work and the keyboard freeze ([The software keyboard blocks only its caller](#the-software-keyboard-blocks-only-its-caller)) keep the frozen clock.
@@ -815,7 +870,7 @@ Most service calls can be found before they crash, before the first boot or the 
 
 - **Symptom:** `libc++abi: terminating due to uncaught exception of type std::__1::system_error` (the arguments came out as rubbish, the format named the failure) once the game's own code ran, with `sdk+0x5f2e60` (`std::terminate`) and `sdk+0x66ad2c`/`sdk+0x66acc8` (`get_terminate`/`terminate`) in the backtrace.
 - **Cause:** SDK 22's exported `clock_gettime` (`sdk+0xa1430`) accepts `CLOCK_REALTIME` and `CLOCK_MONOTONIC` and returns `ENOTSUP` for ids 2–11; both accepted ids jump through musl ifunc slots in the SDK's data (`sdk+0xba5018`, `sdk+0xba5020`) whose `R_AARCH64_GLOB_DAT` relocations bind `nn::time::GetAdjustableUserSystemClockCurrentTimespec`, `_ZN2nn4time41GetStandardUserSystemClockCurrentTimespecEP8timespec` and **`_ZN2nn4time37GetStandardSteadyClockCurrentTimespecEP8timespec`** (`sdk+0xb92298`). The first two were answered from [the CLOCK_REALTIME entry](#clock_gettimeclock_realtime-through-the-time-source-pointer); the steady one was not, so the SDK's shared-memory client ran, could not read the time service's page, and returned an error, which `std::chrono::steady_clock::now()` (`sdk+0x5f2e10`: `mov w0,#1; bl clock_gettime; cbnz w0` → `std::__1::__throw_system_error`) turned into the exception.
-- **Fix:** `hle_time.c` answers `GetStandardSteadyClockCurrentTimespec` with the host's monotonic clock (`struct timespec` from `clock_gettime(CLOCK_MONOTONIC)`). The network-clock variants (`_ZN2nn4time44GetStandardNetworkSystemClockCurrentTimespecEP8timespec`, `_ZN2nn4time46GetAdjustableNetworkSystemClockCurrentTimespecEP8timespec`) are left unbound: none of the games seen reaches them, and the network clock is not accurate from the host anyway. To name such a failure, `hle_sdk16.c` takes `nn::diag::detail::VAbortImpl` (an assert, an uncaught C++ exception or an SDK check with a message): it logs `[diag] abort at <function>: <expression> (<file>:<line>) message format <format>` and then aborts as `AbortImpl` does. Only the format is printed: the host cannot expand a `va_list` the guest built.
+- **Fix:** `hle_time.c` answers `GetStandardSteadyClockCurrentTimespec` with the host's monotonic clock (`struct timespec` from `clock_gettime(CLOCK_MONOTONIC)`). The network-clock variants (`_ZN2nn4time44GetStandardNetworkSystemClockCurrentTimespecEP8timespec`, `_ZN2nn4time46GetAdjustableNetworkSystemClockCurrentTimespecEP8timespec`) remain unbound: none of the games seen reaches them, and their ABI has not been qualified by the [network-clock backend](#synchronized-network-clock-and-availability-tasks). To name such a failure, `hle_sdk16.c` takes `nn::diag::detail::VAbortImpl` (an assert, an uncaught C++ exception or an SDK check with a message): it logs `[diag] abort at <function>: <expression> (<file>:<line>) message format <format>` and then aborts as `AbortImpl` does. Only the format is printed: the host cannot expand a `va_list` the guest built.
 - **Check:** with `DM_AUDIO=1`, a run to the first room has no `[diag]` line and the frame counter keeps advancing.
 - **Found on:** [Well Dweller](../../dm/games/0100217023F6C000/README.md) (SDK 22.2.0), in `std::chrono::steady_clock::now()` called from GameMaker's frame-timing helper.
 
@@ -1017,6 +1072,24 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Checks:** route tests cover actual configured addresses/UDP ports for both resolver ABIs, malformed templates and denial outside the configured scope. All 840 checks across 40 configurations pass normally and under ASan/UBSan. A native post-fix run resolved both NNCS servers, registered their four endpoints, opened UDP and received actual NAT responses. The installed Mac port subsequently entered arenas and played one live arena round; see its game note.
 - **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) 13.0.5, SDK 8.2.1. Metadata-only native traces established successful TicketGranting, SecureConnection, arena listing and create-session responses independently of the subsequent local resolver failure. No account bodies are retained in these diagnostics.
 
+### Online connection fails after successful name resolution
+
+- **Symptom:** an online attempt resolves a name and returns a numeric connection error, while counters show Poll and error-getter calls without a known socket creation or TLS handshake.
+- **Cause:** open. Call counts alone identify neither the Poll return value nor which caller queried the error. A symbol absent from the counter table is not a measured zero; an original SDK callback can also bypass a counted wrapper. The numeric applet error does not identify TLS as the failing stage.
+- **Diagnostic:** `DM_POLL_TRACE=1` adds at most 128 terminal transport-Poll records per process, independently of `DM_NET_TRACE`. Each contains only numeric stage, original count, signed timeout, actual result, Horizon errno on failure (zero in a successful record), and the union of input event flags already inspected by the normal validation loop. Stages are `0` completion, `1` disabled transport, `2` excessive count, `3` null nonempty buffer, `4` allocation, `5` unsupported event flags, `6` descriptor borrowing and `7` host Poll. A successful record does not clear the SDK's retained errno. No descriptor, address, guest pointer or payload is recorded. Offline wrapper waits bypass this transport diagnostic.
+- **Checks:** I compare tracing disabled and enabled through the real guest HLE entries, including the legacy `nnsocketPoll` ABI: result, host errno, retained Horizon errno and all guest bytes remain identical. Zero-count waits, ignored negative descriptors, invalid descriptors, unsupported flags, null buffers and excessive counts keep their existing behavior. A concurrent writer fixture verifies the 128-record limit, exact numeric fields, disabled modes and errno preservation, normally and under ASan/UBSan.
+- **Found on:** my private Splatoon 2 EUR 5.5.2 bring-up, SDK 3.4.1. Its main's Poll callers pass a pointer, 64-bit count and signed 32-bit timeout; their error-getter branches check a return of `-1`. This static contract does not identify the runtime caller or establish a working online match. The game's profile remains unqualified for online play.
+
+### Cancellable socket DNS still enters the console resolver
+
+- **Symptom:** account and calendar checks pass, but an online connection fails before the known Socket or TLS-context entry points. Successful GetAddrInfo calls belong to a different resolver path; empty Poll waits also succeed.
+- **Cause:** the host covered GetHostByName with one argument and an options wrapper, while the SDK's cancellable C entry calls the separate two-argument C++ overload. The original overload requires the console resolver's initialized service state, which the replacement Socket Initialize deliberately does not create. Updating an SDK flag would still leave that console service unavailable.
+- **Fix:** the C and C++ cancellable overloads share the existing scoped NSD/provider admission. An admitted IPv4 literal completes directly; an admitted native name uses Apple's public DNSServiceGetAddrInfo on a private serial queue, with at most 64 active queries. DNSServiceSetDispatchQueue and DNSServiceRefDeallocate run on that same queue. The system-owned `kDNSServiceFlagsTimeout` deadline bounds an unanswered query without an application timeout or retry. Cancellation IDs are distinct from sockets, need no reserved query slot and are not reused by the allocator. Cancel targets the operation object active when requested, so a later query reusing the same ID cannot receive an old cancellation. Finalize fences admission and drains native operations. Waiting guest threads publish their native wait state; the queue never calls guest code.
+- **Errors and limits:** negative DNS answers and empty batches return null while preserving previous socket errno, consistently with GetAddrInfo. They never publish an empty hostent. Actual API/system failures and cancellation report their translated errno; cancellation reports Horizon ECANCELED(125), following the existing Darwin errno translation. This adaptation policy does not treat a DNS host-error value as a POSIX errno. Observable h_errno remains unimplemented here because no consumer has been demonstrated. A zero ID is valid for a noncancelable query; the separately verified SDK Cancel(0) convention returns zero and sets EINVAL. Account, TLS, routing and game-version validation remain independent.
+- **Checks:** I test the real C/C++ HLE gate ABI and a synthetic Apple callback provider: multiple IPv4 answers, duplicates, preseeded errno, empty batches, API errors, system timeout, late callbacks, concurrent ID generations, cancellation, all 64 slots and Finalize fencing. The fixture asserts creation/deallocation on the correct serial queue without DNS traffic or account data. `make -C dm/host/tests resolver-live` is an optional actual Apple API smoke restricted to localhost in LAN mode; it is excluded from CI. The API also links against iPhone libSystem without an extra library. A physical game connection is separate validation.
+- **Found on:** my [Splatoon 2 EUR](../../dm/games/0100F8F0000A2000/README.md) 5.5.2 bring-up, SDK 3.4.1. CURL uses the uncovered overload; measured GetAddrInfo calls come from other sites. My existing six transport-Poll records were all successful zero-count waits. No Poll behavior was changed.
+- **Primary contract:** Apple's public [DNS Service Discovery header](https://github.com/apple-oss-distributions/mDNSResponder/blob/main/mDNSShared/dns_sd.h) documents its deadline, callback flags and same-queue deallocation. I verified guest arguments, returns and hostent layout against my SDK module. The implementation contains no copied SDK code or fixed game addresses.
+
 ### NEX rejects the socket before TLS after F_SETFL fails
 
 - **Symptom:** NSD/DNS succeed and TCP connects, but NEX closes the socket before calling the TLS connection hooks; Smash asks to display `2306-0502`.
@@ -1055,7 +1128,11 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Fix:** an explicit `pinned-address` V2 record pairs the numeric alias with an existing `pinned-exact` identity having the same address and exact certificate bytes. Policy loading rejects the entire configuration if that pair is absent or differs; wildcard inheritance, identity renaming and independent numeric trust are disallowed. The TLS adapter retains the game's logical numeric name while sending canonical service SNI and verifying the same enrolled certificate. There is no automatic enrollment from guest traffic.
 - **Checks:** 40 configurations and 605 checks pass normally and under ASan/UBSan, including a real encrypted numeric-handoff exchange, changed certificate rejection before application data, unchanged service identity, unknown numeric denial and six invalid pairing cases. The observed live secure endpoint independently presented the exact previously enrolled certificate. A native handshake-only probe sent no account or application data; actual matchmaking remains separate validation.
 - **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) 13.0.5, after the original service reached its HTTP 101 and binary traffic stage.
+- **Found on:** [Splatoon 2](../../dm/games/0100F8F0000A2000/README.md) 5.5.2, SDK 3.4.1. I verified the first TLS session, then observed the numeric-name admission failure on its secure-server handoff. The paired policy completed both TLS sessions and reached the online lobby and Territorial queue; a match remains unqualified.
 - **Found on:** [Super Smash Bros. Ultimate](../../dm/games/01006A800016E000/README.md) 13.0.5, SDK 8.2.1. Diagnostics read no account data.
+- **Local preparation:** `dm/tools/nextendo_local_peers.py` prepares a separate private profile only from an explicit, local `formatVersion: 1` collection. Its `certificates` dictionary maps SHA-256 to `role: approved-service-leaf`, `file: <SHA>.der`, a nonempty `approval` string and exact `{titleID, host, ip}` bindings. The historical binding IP never selects a destination: the helper derives it from the validated public profile using the runtime's exact/label/suffix scoring. It appends paired `pinned-exact` and `pinned-address` records with identical service identity and DER bytes, retaining the public rows, CA, identity namespace and provenance hashes. A public exact-host conflict, several approved services/pins sharing one address, an invalid collection or an existing destination fails without replacement. No collection or no applicable approval returns no private profile. Published-provider-CA entries grant no local leaf approval.
+- **Mac packaging:** `dm/mac/pack_app.py` validates and snapshots the public profile once, then prepares any applicable locally approved peers from Studio's private `Nextendo/PeerCertificates` directory; `--nextendo-peer-collection` selects an explicit collection instead. It hashes and packs those same captured bytes. Changes to a pin, approval, public route or preparation source invalidate app reuse; temporary snapshot paths and creation times do not participate. The public profile remains in `dm/nextendo`, alongside any online-variant modules, and the private profile is separate in `dm/nextendo-private`. The Mac bootstrap prefers the private route file, then the public one; an explicit `DM_NEXTENDO_ROUTES` override still wins. A malformed collection or profile fails before replacing an existing app.
+- **Preparation boundary:** I tested synthetic scope, corruption, hash/DER bounds, ownership/permissions, symlinks/path traversal, scoring, ambiguity, unchanged public inputs and exclusive atomic publication, including consumption by the production C route loader. Packaging fixtures cover content-based reuse, pin/approval/route changes, single capture and preserved online modules; the stand-in primary host checks private/public/explicit route precedence without opening a settings window. The helper performs no network lookup, automatic enrollment, system trust change or account access. Public/iOS staging continues to reject private profiles, and iOS preparation is unchanged. These fixtures do not qualify a native online match.
 
 
 ## Native calendar delivery
@@ -1065,14 +1142,14 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Symptom:** the game has an account but cannot read its delivery calendar; the old delivery mount always fails, or original SDK delivery-file calls reach an unavailable service.
 - **Cause:** account credentials, game-version eligibility and delivered resources are different requirements. Public resource downloads were not staged, and only BCAT initialization had a host implementation.
 - **Fix:** I prepare and revalidate a complete provider resource snapshot, mount actual read-only files and implement SDK file/directory/progress operations. A failed refresh retains the validated cache and never becomes an empty successful delivery. I document the supported recipes, integrity boundary and startup publication behavior in [Native delivery calendars](nextendo-bcat.md).
-- **Found on:** my private provisional Splatoon 2 EUR 5.5.2 bring-up (SDK 3.4.1); [validation and remaining qualification](nextendo-bcat.md#validation-and-remaining-bring-up). I have not established online gameplay for that port.
+- **Found on:** my [experimental Splatoon 2 EUR 5.5.2 profile](../../dm/games/0100F8F0000A2000/README.md) (SDK 3.4.1), initially brought up privately; [validation and remaining qualification](nextendo-bcat.md#validation-and-remaining-bring-up). I have not established online gameplay for that port.
 
 ### System gameplay recording dereferences an unavailable applet proxy
 
 - **Symptom:** startup crashes in `nn::oe::EnableGamePlayRecording` after `CreateTransferMemory`, while the recording applet proxy is null.
 - **Cause:** I have no host system-recorder service. The original SDK proceeds through the console's applet proxy even when the host can render the game independently.
 - **Fix:** I report `IsGamePlayRecordingSupported=false` and handle its void enable/pause/restart controls without claiming a recording or consuming the supplied buffer. This is an explicit platform capability limit, separate from game rendering or a memory allocation fix.
-- **Found on:** Splatoon 2 EUR 5.5.2, SDK 3.4.1; after this change my bounded headless bootstrap reached its frame loop for 15 seconds. A later private Mac candidate rendered character creation; [bring-up evidence and remaining qualification](nextendo-bcat.md#validation-and-remaining-bring-up).
+- **Found on:** [Splatoon 2 EUR 5.5.2](../../dm/games/0100F8F0000A2000/README.md), SDK 3.4.1; after this change my bounded headless bootstrap reached its frame loop for 15 seconds. A later private Mac candidate rendered character creation; [bring-up evidence and remaining qualification](nextendo-bcat.md#validation-and-remaining-bring-up).
 
 ### Game startup waits in Keychain before its first shader draw
 
@@ -1081,3 +1158,28 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Fix:** I run only the passive Mac availability check in a short-lived instance of the identical executable, selected before bundle, AppKit or guest initialization. Its environment contains only home/temporary paths, locale and a controlled account-service mode: diagnostics, injected libraries and game/account route settings are not inherited. Only that child disables legacy Keychain interaction; the renderer's policy and explicit access stay intact. The child validates the original credential format, identity and expiry, then returns only a versioned 32-byte availability/expiry packet through a dedicated pipe. The parent requires its owned PID and clean exit, rejects malformed/trailing data, uses a fixed monotonic deadline and cancels only an unreaped owned child. `ECHILD` never authorizes signalling a numeric PID. A child-only alarm also bounds an orphaned probe. A one-second observation cache is capped by actual credential expiry and invalidated by controlled credential/provider changes. This neither authorizes nor migrates stored items; attribute existence is never accepted as a usable account. The iOS provider/document path is unchanged.
 - **Checks:** I test a real temporary file-based Keychain with initially permitted and denied ACLs, expired records and a locked state. While a denied helper holds its own UI policy off, an explicitly authorized read succeeds in the parent with its policy unchanged. Search list and default Keychain remain unchanged; no personal items, network requests or UI grants are used. Separate transport tests reject malformed packets, wrong PID/version, signal/nonzero exits and a hung child; an injected `ECHILD` proves no recycled PID is killed. Query mocks remain only API-capture coverage, including failed context allocation. These checks pass normally and under ASan/UBSan; a real game retest remains a separate milestone.
 - **Found on:** my private Splatoon 2 EUR 5.5.2 Mac candidate (SDK 3.4.1). My offline control completed its real pipeline prebuild with zero failures and rendered 3D character creation. I then retested the isolated helper in automatic mode on November 1: the app rendered its startup information screen, opened audio, committed its save and continued to the tutorial. No preflight child remained when I sampled the process tree. This establishes progress beyond the previous startup wait; graphics warnings and online gameplay qualification remain open.
+
+### Explicit Mac access to the saved Nextendo account
+
+I expose **Nextendo account…** in every Mac port's application menu. Opening or
+closing its attached sheet never reads credentials. Only **Authorize access**
+starts a background read of the credential already saved by Studio; macOS can
+then request access through its own Keychain dialog. The button is disabled
+while the request is pending, with a native spinner and accessible status.
+A denial stays a denial and requires another explicit action to retry. Closing
+the sheet drops its observer; reopening can observe the same pending operation
+without starting another read. Feedback returns on the main thread.
+
+I use the same complete credential decoder for this explicit local operation.
+It can verify local access while network services are disabled, without changing
+the running session's preferences or the game-facing availability policy. Missing,
+expired, malformed and inaccessible credentials still fail. I preserve the passive
+helper, its one-second cache bound and real expiry checks; it never requests UI.
+The sheet offers **Open NX Port Studio** for linking or renewing the account and
+reports only whether access was verified, never account values or credentials.
+Authorization alone does not establish an online match.
+
+My synthetic-provider and query-capture fixtures cover disabled-network access,
+credential rejection and unchanged game availability. The Foundation lifecycle
+fixture covers off-main execution, duplicate clicks, denial, explicit retry and
+close/reopen observation without opening a window or reading the real Keychain.

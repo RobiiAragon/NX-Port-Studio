@@ -121,6 +121,12 @@ static int g_pq_inflight;   // Under g_pq_mu: number of presents committed to th
 int g_dm_present_link;   // Present pacing mode (runtime value of DM_PRESENT_LINK, modified directly during same-process alternating measurement): 0 = acquire the drawable itself; 1 = display link at 60 Hz; 2 = display link at 120 Hz, the game presents a frame every other display-link tick
 static int g_present_latency;   // DM_PRESENT_LATENCY: the display link's frame latency in a window and in fullscreen alike (0 = not set: link_latency picks it)
 static uint64_t g_pq_done;
+static _Atomic int g_present_hidden, g_present_unfocused;
+static _Atomic uint64_t g_present_epoch;
+static void present_hidden_drop_locked(void);
+static int present_epoch_valid(uint64_t epoch) {
+    return !atomic_load(&g_present_hidden) && epoch == atomic_load(&g_present_epoch);
+}
 static uint64_t g_pq_read;
 static id<MTLResidencySet> g_res;
 static int g_res_dirty;
@@ -3709,7 +3715,8 @@ static void shmap_load(void) {
 // positive (GeometryToCompute.GenerateEmitVertex). Its absence, alongside the
 // fixed-input index/info helpers, proves that this kernel emits no vertices.
 // A zero/unknown stride, lean kernel or incomplete metadata proves nothing.
-static int geo_no_vertex_output(NSDictionary *j, NSDictionary *geo, const nvn_refl *rf) {
+static int geo_no_vertex_output(NSDictionary *j, const nvn_refl *rf) {
+    NSDictionary *geo = j[@"geometry"];
     if (![geo isKindOfClass:NSDictionary.class] || !rf->route_b ||
         ![j[@"chain"] isEqual:@DMSH_CHAIN] || ![j[@"stage"] isEqual:@"gs"] ||
         ![j[@"msl_entry_kind"] isEqual:@"kernel"] || [geo[@"lean"] boolValue]) return 0;
@@ -3954,7 +3961,7 @@ static NvShader *shader_load(NSString *pc, int stage, int layer) {
             for (NSUInteger i = 0; i < reads.count; i++) { int k = [reads[i] intValue]; if (k >= 0 && k < GEO_CAPTURE_WORDS) o->geo_slot[k] = (int16_t)i; }
             o->geo_words = (uint32_t)reads.count;
         } }
-    if (stage == 2) o->geo_no_output = (uint8_t)geo_no_vertex_output(j, geo, &o->rf);
+    if (stage == 2) o->geo_no_output = (uint8_t)geo_no_vertex_output(j, &o->rf);
     o->fn = fn4_note([lib newFunctionWithName:entry], lib, entry, nil); o->stage = stage; strlcpy(o->key, pc.UTF8String, sizeof o->key); o->ventry = entry;
     // writes the layer (render_target_array_index, named in the library's metadata): its passes are layered and its pipelines get an input class (pso_desc). A library with layer entry points
     // names it for those alone: its main0 / main0_z write no layer
@@ -6561,6 +6568,17 @@ static _Atomic long g_warm_done;   // lines done (the prepare screen's count)
 // A line with a key the shader map does not have is dropped quietly (the keys are counted in the "prewarm done" line); the game never draws with it
 static int warm_stale(NSString *key, NSMutableSet<NSString *> *stale) {
     NSString *mk = [key hasSuffix:@"_b"] ? [key substringToIndex:key.length - 2] : key;   // library names are <map key>_b
+    // Geometry's compute variants and vertex reader retain the original control
+    // key in the shader map. Match only names emitted by dmsh_build.geometry_finish;
+    // stripping an arbitrary suffix would accept a different, unknown library.
+    const char *s = key.UTF8String;
+    if (strlen(s) == 20 && s[16] == '_' && s[17] == 'b' &&
+        ((s[18] == 'g' && ((s[19] >= '0' && s[19] <= '4') || s[19] == 'v')) ||
+         (s[18] == 'l' && (s[19] == '0' || s[19] == '1' || s[19] == '3')))) {
+        int hex = 1;
+        for (int i = 0; i < 16; i++) hex &= (s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f');
+        if (hex) mk = [key substringToIndex:16];
+    }
     if (g_shmap[mk]) return 0;
     if (![stale containsObject:key]) { [stale addObject:key]; g_warm_skip_stale++; }
     return 1;
@@ -11401,7 +11419,8 @@ static void present_gpu_note(double s, int fx) {
     n[fx] = 0;
 }
 static double g_link_it_tin;   // Enqueue time of the frame the display-link callback is presenting (read and written only on the display-link thread)
-static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t ticket, const int crop[4], double aspect, id<CAMetalDrawable> supplied, double target_ts) {
+static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t ticket, const int crop[4], double aspect, id<CAMetalDrawable> supplied, double target_ts, uint64_t epoch) {
+    if (!present_epoch_valid(epoch)) return 0;
     g_picture_aspect = aspect;
     if (g_present_stall_ns) { struct timespec ts = {0, (long)g_present_stall_ns}; nanosleep(&ts, NULL); }
     g_present_n++;
@@ -11462,10 +11481,11 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
 #endif
     present_pipeline(layer.pixelFormat);   // Same as the original path: the first frame compiles the pipeline before taking the drawable
     if (g_grab_cb) grab_present(src, crop, layer.drawableSize);   // Game picture needed by the whole-window screenshot (peek without the lock first; the real take locks inside the function)
+    if (!present_epoch_valid(epoch)) return 0;
     uint64_t dt0 = now_ns();
     id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
     if (!supplied) g_drawable_ns += now_ns() - dt0;
-    if (!dr) return 0;
+    if (!dr || !present_epoch_valid(epoch)) return 0;
     int alloc_i = (int)(ticket % 3);
     if (g_present_alloc_fence[alloc_i]) {
         pthread_mutex_lock(&g_pq_mu);
@@ -11484,10 +11504,14 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
     [o addFeedbackHandler:^(id<MTL4CommitFeedback> f) {
         if (f.error) MLOG("[RED] display command buffer error: %s", f.error.description.UTF8String);
         pthread_mutex_lock(&g_pq_mu); if (ticket > g_pq_done) g_pq_done = ticket; if (ticket > g_present_alloc_done[alloc_i]) g_present_alloc_done[alloc_i] = ticket; g_pq_inflight--; pthread_cond_broadcast(&g_pq_cv);
+        present_hidden_drop_locked();
         present_gpu_note(f.GPUEndTime - f.GPUStartTime, fx_kind); pthread_mutex_unlock(&g_pq_mu);
     }];
     id<MTL4CommandBuffer> buffers[] = {cb};
-    pthread_mutex_lock(&g_pq_mu); g_pq_inflight++; pthread_mutex_unlock(&g_pq_mu);
+    pthread_mutex_lock(&g_pq_mu);
+    if (!present_epoch_valid(epoch)) { pthread_mutex_unlock(&g_pq_mu); [g_q4 signalDrawable:dr]; return 0; }
+    g_pq_inflight++;
+    pthread_mutex_unlock(&g_pq_mu);
     [g_q4 commit:buffers count:1 options:o];
     if (target_ts > 0) {
         static double leads[300], e2e[300];   // e2e: game enqueue -> system-scheduled present (including the time waiting in the queue for the display-link callback), the full span of input latency that our side can read
@@ -11528,15 +11552,59 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
 // Swapchain texture return: before AcquireTexture gets a texture it waits for the ticket of that texture's previous present to be processed (mtl_present_wait), after which the commands the game draws into it
 // are necessarily ordered after that blit on the GPU queue.
 #define PQ 8
-typedef struct { tex_t t; double period; uint64_t frame; int crop[4]; double t_in; uint64_t ev_val, snap_v; double aspect; } pq_item;   // aspect is captured with the frame; scene transitions cannot re-label an older image
+typedef struct { tex_t t; double period; uint64_t frame; int crop[4]; double t_in; uint64_t ev_val, snap_v; double aspect; uint64_t epoch; } pq_item;   // aspect and visibility epoch belong to this frame
 // External producer (the Vulkan layer, dm/gfx/vk) renders on its own queue and signals this event when a frame's rendering is done: the present of that frame waits for the value on g_q4
 static id<MTLSharedEvent> g_ext_ev;
 static void ext_wait(uint64_t v) { if (v && g_ext_ev) [g_q4 waitForEvent:g_ext_ev value:v]; }
 static void snap_commit_wait(uint64_t v);
 static pq_item g_pq[PQ];
 static uint64_t g_pq_in;
-static int present_now(const tex_t *, double, uint64_t, uint64_t, const int[4], double, id<CAMetalDrawable>, double);
+static int present_now(const tex_t *, double, uint64_t, uint64_t, const int[4], double, id<CAMetalDrawable>, double, uint64_t);
 static double g_link_vperiod, g_link_vhalf;   // virtual ticks (link_range): seconds per counted tick (0 = every callback is a tick) and half a refresh of the screen
+static uint64_t g_present_abandoned;
+static void present_abandon_pending_locked(void) {
+    for (uint64_t k = g_pq_read + 1; k <= g_pq_in; ++k) g_pres[k % PRING] = (pres_ent){k, -1};
+    g_link_dropped += g_pq_in - g_pq_read; g_pq_read = g_pq_in;
+    if (g_pq_in > g_present_abandoned) g_present_abandoned = g_pq_in;
+}
+static void present_hidden_drop_locked(void) {
+    if (atomic_load(&g_present_hidden)) present_abandon_pending_locked();
+    // Already committed GPU readers retain their textures/allocators until
+    // feedback, even if the window was restored before that feedback arrives.
+    if (!g_pq_inflight && g_present_abandoned > g_pq_done) g_pq_done = g_present_abandoned;
+    pthread_cond_broadcast(&g_pq_cv);
+}
+void mtl_present_window_state(int visible, int focused) {
+#if TARGET_OS_OSX
+    pthread_mutex_lock(&g_pq_mu);
+    int was_hidden = atomic_exchange(&g_present_hidden, !visible);
+    int was_unfocused = atomic_exchange(&g_present_unfocused, !focused);
+    if (was_hidden != !visible || was_unfocused != !focused) {
+        atomic_fetch_add(&g_present_epoch, 1);
+        // The old owner's callback may already have stopped. Do not wait for
+        // an obsolete ticket before the enqueue thread can hand over the layer.
+        present_abandon_pending_locked();
+    }
+    present_hidden_drop_locked();
+    pthread_mutex_unlock(&g_pq_mu);
+    pthread_mutex_lock(&g_link_mu); pthread_cond_broadcast(&g_link_cv); pthread_mutex_unlock(&g_link_mu);
+#else
+    (void)visible; (void)focused; // iOS retains its existing lifecycle, clock and GPU gates.
+#endif
+}
+
+
+static void present_unsubmitted_locked(uint64_t ticket, uint64_t epoch) {
+    if (epoch != atomic_load(&g_present_epoch)) {
+        // An old CPU presenter can finish after visibility changed, while a
+        // different old present still has a real GPU reader in flight.
+        if (ticket > g_present_abandoned) g_present_abandoned = ticket;
+        present_hidden_drop_locked();
+    } else {
+        if (ticket > g_pq_done) g_pq_done = ticket;
+        pthread_cond_broadcast(&g_pq_cv);
+    }
+}
 
 @interface NvMetalDisplayLinkDelegate : NSObject <CAMetalDisplayLinkDelegate>
 @end
@@ -11563,6 +11631,7 @@ __attribute__((weak)) uint64_t dm_focus_in_since(void) { return 0; }
     (void)link;
     double cb = CACurrentMediaTime();
     pthread_mutex_lock(&g_pq_mu);
+    if (atomic_load(&g_present_hidden)) { present_hidden_drop_locked(); pthread_mutex_unlock(&g_pq_mu); return; }
     if (g_stall_t0) { uint64_t since = dm_focus_in_since(), t = now_ns();
         MLOG("display link recovered: stalled %.0f ms (%.0f ms of it active), fallback dropped %llu frames (stall #%llu)", (t - g_stall_t0) / 1e6, (t - (g_stall_t0 > since ? g_stall_t0 : since)) / 1e6, (unsigned long long)g_stall_drop, (unsigned long long)g_stall_n); g_stall_t0 = 0; }
     pthread_mutex_unlock(&g_pq_mu);
@@ -11601,12 +11670,11 @@ __attribute__((weak)) uint64_t dm_focus_in_since(void) { return 0; }
     pthread_mutex_unlock(&g_pq_mu);
     int submitted;
     ext_wait(it.ev_val); snap_commit_wait(it.snap_v);
-    @autoreleasepool { submitted = present_now(&it.t, it.period, it.frame, ticket, it.crop, it.aspect, update.drawable, update.targetPresentationTimestamp); }
+    @autoreleasepool { submitted = present_now(&it.t, it.period, it.frame, ticket, it.crop, it.aspect, update.drawable, update.targetPresentationTimestamp, it.epoch); }
     g_link_hold_until = submitted && it.period > 0.025 ? update.targetPresentationTimestamp + it.period : 0;
     if (!submitted) {
         pthread_mutex_lock(&g_pq_mu);
-        if (ticket > g_pq_done) g_pq_done = ticket;
-        pthread_cond_broadcast(&g_pq_cv);
+        present_unsubmitted_locked(ticket, it.epoch);
         pthread_mutex_unlock(&g_pq_mu);
     }
 }
@@ -11614,7 +11682,7 @@ __attribute__((weak)) uint64_t dm_focus_in_since(void) { return 0; }
 
 static CAMetalDisplayLink *g_link; static CFRunLoopRef g_link_rl; static int g_link_started;
 static int g_link_owns_layer, g_classic_busy;   // Under g_pq_mu: nextDrawable throws while the layer has the display link object attached, so the present thread that takes its own drawable and the display link object are mutually exclusive
-static int link_on(void) { return g_dm_present_link && !atomic_load(&g_rescue_mode) && g_link != nil; }
+static int link_on(void) { return !atomic_load(&g_present_hidden) && !atomic_load(&g_present_unfocused) && g_dm_present_link && !atomic_load(&g_rescue_mode) && g_link != nil; }
 // Screens whose refresh rate is not a multiple of the link's (144 or 165 Hz against 60 or 30): asked for 60 Hz, the system fires the link on every third refresh of a 165 Hz screen,
 // 55 Hz, and a game paced by the link runs at 55 fps (27.5 at 30). There the link runs at the screen's rate and only the refreshes nearest a steady clock of the wanted rate count as
 // ticks (g_link_vperiod, NvMetalDisplayLinkDelegate): 60 a second on average, each frame shown on the refreshes nearest its 1/60 s slot. DM_LINK_VTICK=0 keeps the system's choice.
@@ -11667,7 +11735,9 @@ static void link_sync(void) {   // Called every frame by the game's present thre
         g_rescue_mode = 0; g_stall_t0 = 0; __atomic_store_n(&g_link_tick_ns, now_ns(), __ATOMIC_RELAXED);
         MLOG("display link: rescue ended, trying pacing mode %d (frame %llu)", want, (unsigned long long)atomic_load(&g_cur_frame));
     }
-    if (g_rescue_mode) want = 0;
+    // macOS can throttle a visible non-key window's link too. Keep drawing
+    // through the classic presenter, paced by the existing monotonic fallback.
+    if (g_rescue_mode || atomic_load(&g_present_hidden) || atomic_load(&g_present_unfocused)) want = 0;
     pthread_mutex_unlock(&g_pq_mu);
     if (want && mtl_fps_target() == 30) want = 3;   // Power-saving mode: display link at 30 Hz
     if (want) front_screen_match(want == 3 ? 30 : want == 2 ? 120 : 60);
@@ -11721,12 +11791,11 @@ static void *present_main(void *arg) {
         pthread_mutex_unlock(&g_pq_mu);
         int submitted;
         ext_wait(it.ev_val); snap_commit_wait(it.snap_v);
-        @autoreleasepool { submitted = present_now(&it.t, it.period, it.frame, ticket, it.crop, it.aspect, nil, 0); }
+        @autoreleasepool { submitted = present_now(&it.t, it.period, it.frame, ticket, it.crop, it.aspect, nil, 0, it.epoch); }
         pthread_mutex_lock(&g_pq_mu); g_classic_busy = 0; pthread_cond_broadcast(&g_pq_cv); pthread_mutex_unlock(&g_pq_mu);
         if (!submitted) {
             pthread_mutex_lock(&g_pq_mu);
-            if (ticket > g_pq_done) g_pq_done = ticket;
-            pthread_cond_broadcast(&g_pq_cv);
+            present_unsubmitted_locked(ticket, it.epoch);
             pthread_mutex_unlock(&g_pq_mu);
         }
     }
@@ -11865,6 +11934,8 @@ static uint64_t snap_take(const tex_t *t) {
 static uint64_t present_enqueue(const tex_t *t, double period, const int crop[4], uint64_t ev_val) {
     atomic_store(&dm_present_ns, now_ns());
     if (g_classic || atomic_load(&g_present_discard)) return 0;   // Ticket number 0 = no pending present; the swapchain texture acquire does not wait (g_classic: no Metal 4 queue to present on)
+    uint64_t epoch = atomic_load(&g_present_epoch);
+    if (!present_epoch_valid(epoch)) return 0; // No drawable or snapshot work for an invisible desktop window.
     double aspect = dm_display_output_aspect();  // snapshot before this call can wait or enqueue GPU work
     if (t) { xv_check(t->serial, 0, 0, "present"); if (g_xv_npresent < 128) g_xv_present[g_xv_npresent++] = t->serial; }
     // A texture whose content comes from its storage is uploaded when it is first resolved (and again when its pages change), in an upload batch only the submit thread may open.
@@ -11886,8 +11957,9 @@ static uint64_t present_enqueue(const tex_t *t, double period, const int crop[4]
         if ((ss = snap_take(t))) { memset(&snap, 0, sizeof snap); snap.magic = MAGIC('T', 'E', 'X', 0); snap.serial = ss; t = &snap; }
     }
     pthread_mutex_lock(&g_pq_mu);
-    while (g_pq_in - g_pq_done >= PQ) pthread_cond_wait(&g_pq_cv, &g_pq_mu);   // Wait only when the queue is full; normally AcquireTexture blocks first
-    pq_item *it = &g_pq[g_pq_in % PQ]; *it = (pq_item){*t, period, atomic_load(&g_cur_frame), {0}, CACurrentMediaTime(), ev_val, ss ? g_snap[slot].ev : 0, aspect};
+    while (g_pq_in - g_pq_done >= PQ && present_epoch_valid(epoch)) pthread_cond_wait(&g_pq_cv, &g_pq_mu);
+    if (!present_epoch_valid(epoch)) { pthread_mutex_unlock(&g_pq_mu); return 0; }
+    pq_item *it = &g_pq[g_pq_in % PQ]; *it = (pq_item){*t, period, atomic_load(&g_cur_frame), {0}, CACurrentMediaTime(), ev_val, ss ? g_snap[slot].ev : 0, aspect, epoch};
     if (crop) memcpy(it->crop, crop, sizeof it->crop);   // The current frame's state is enqueued with the ticket number, rather than reading the mutable window late on the present thread
     uint64_t tk = ++g_pq_in;
     if (ss) { g_snap[slot].ticket = tk; atomic_fetch_add(&g_snap_next, 1); }
@@ -11900,6 +11972,11 @@ static uint64_t present_enqueue(const tex_t *t, double period, const int crop[4]
 void mtl_present_wait(uint64_t tk) {
     pthread_mutex_lock(&g_pq_mu);
     while (g_pq_done < tk && !atomic_load(&g_present_discard)) {
+        if (atomic_load(&g_present_hidden)) {
+            present_hidden_drop_locked();
+            if (g_pq_done >= tk) break;
+            pthread_cond_wait(&g_pq_cv, &g_pq_mu); continue; // Only real GPU work can still own this ticket.
+        }
         if (!g_link_owns_layer) { pthread_cond_wait(&g_pq_cv, &g_pq_mu); continue; }
         if (g_pq_read >= tk) { pthread_cond_wait(&g_pq_cv, &g_pq_mu); continue; }   // This one has already been taken by the display link and is being presented: wait for it to be handed to the GPU (the GPU completion callback will wake us)
         struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); ts.tv_nsec += (long)STALL_NS; if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
@@ -11967,7 +12044,8 @@ int mtl_link_wait_ticks(int ticks, uint64_t timeout_ns) {
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += timeout_ns / 1000000000ull; ts.tv_nsec += timeout_ns % 1000000000ull;
     if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
-    while (g_link_tick_n < started_tick + step) if (pthread_cond_timedwait(&g_link_cv, &g_link_mu, &ts) == ETIMEDOUT) { pthread_mutex_unlock(&g_link_mu); return 0; }
+    while (g_link_tick_n < started_tick + step && !atomic_load(&g_present_hidden) && !atomic_load(&g_present_unfocused)) if (pthread_cond_timedwait(&g_link_cv, &g_link_mu, &ts) == ETIMEDOUT) { pthread_mutex_unlock(&g_link_mu); return 0; }
+    if (atomic_load(&g_present_hidden) || atomic_load(&g_present_unfocused)) { pthread_mutex_unlock(&g_link_mu); return 0; }
     started_tick = g_link_tick_n;
     pthread_mutex_unlock(&g_link_mu); return 1;
 }
@@ -11982,7 +12060,8 @@ int mtl_link_wait_vsync(uint64_t *seen, uint64_t timeout_ns) {
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += timeout_ns / 1000000000ull; ts.tv_nsec += timeout_ns % 1000000000ull;
     if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
-    while (g_link_tick_n < *seen + step) if (pthread_cond_timedwait(&g_link_cv, &g_link_mu, &ts) == ETIMEDOUT) { pthread_mutex_unlock(&g_link_mu); return 0; }
+    while (g_link_tick_n < *seen + step && !atomic_load(&g_present_hidden) && !atomic_load(&g_present_unfocused)) if (pthread_cond_timedwait(&g_link_cv, &g_link_mu, &ts) == ETIMEDOUT) { pthread_mutex_unlock(&g_link_mu); return 0; }
+    if (atomic_load(&g_present_hidden) || atomic_load(&g_present_unfocused)) { pthread_mutex_unlock(&g_link_mu); return 0; }
     *seen += step;
     pthread_mutex_unlock(&g_link_mu); return 1;
 }
