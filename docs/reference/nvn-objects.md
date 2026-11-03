@@ -161,6 +161,22 @@ The game may also write into an NVN object directly, without an NVN call, throug
 
 ## Command memory
 
+### Control memory capacity queries
+
+- **Symptom:** `[RED] NVN unimplemented function called: nvnCommandBufferGetControlMemoryFree` (or `…GetControlMemorySize`) after a control-memory grant.
+- **Cause:** `AddControlMemory` discarded the grant, and both getters returned 0 through the unimplemented path. The host records commands in command memory and consumes no control-memory bytes, so the supplied control block remains free.
+- **Fix:** I integrated nxnative's [control-memory accounting](https://github.com/seedds/nxnative/commit/d138ee878104b027925e80b8a0b2d88efd72ef98): `cmd_t.ctl_size` keeps the last grant's size, size/free return that capacity, and used remains 0. A subsequent grant replaces the capacity; recording commands does not consume it.
+- **Found on:** upstream's South Park: The Fractured But Whole 1.05 investigation ([PR #662](https://github.com/seedds/nxnative/pull/662)); I have not qualified that game's port here.
+- **Check:** I exercise the production getters before a grant, after a grant, after recording and after a smaller replacement in `t_nvn`.
+
+### Compact state and single-texture records
+
+- **Symptom:** display-list heaps sized from `GetCommandMemoryUsed` fill, followed by null-pool grants and eventually `FATAL NVN command memory`.
+- **Cause:** the host recorded every state bind as 40 bytes even when the state needed only 4–10 payload bytes, and every single-texture bind included two zero pool bases. Those bytes also enlarged the game's own measured display lists.
+- **Fix:** I integrated nxnative's [compact records](https://github.com/seedds/nxnative/commit/0c6c55df3f59d8740086fd269de644e4514f3b11). State records use 16 or 24 bytes including their header; a single-texture record uses 24 bytes when both bases are 0 and retains the 32-byte form otherwise. `bind_rec` expands both forms into the existing replay state. The texture handle stays at record +0x10 for games that patch it in place. The capture layout fingerprint changes with the record layout, so old captures must be recorded again.
+- **Found on:** upstream's [Super Mario Odyssey](../../dm/games/0100000000010000/README.md) 1.4.1 investigation. Upstream reports that its 62 MB display-list heap filled with the larger records and stayed within capacity after this correction; I have not repeated that gameplay run here.
+- **Check:** I check state kinds and bytes, measured record sizes, nonzero descriptor bases and the patched texture-handle position in `t_nvn`: 223 checks passed normally and with ASan/UBSan plus Metal validation. The sanitizer run uses the repository's existing section-array registration exceptions. Capture serialization passed 77 checks, and two fresh offscreen GPU replays matched the synthetic live frame. The four changed production translation units also compiled for iPhoneOS arm64. This reduces logical record size; it does not reclaim a live command handle or establish long-running Splatoon 3 stability.
+
 ### Host-lent command memory segments
 
 - **Symptom:** `FATAL NVN command memory: the game's pool is empty…`.
