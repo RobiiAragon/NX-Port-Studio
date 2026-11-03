@@ -101,6 +101,7 @@ DM_NET_DISCOVERY_PEER	player	Optional discovery relay IPv4 endpoint; automatic l
 DM_NET_TRACE	diagnostic	Log native socket and local-network translation details
 DM_NEXTENDO_BCAT_DIR	path	Private title/version calendar recipe and validated seed snapshot; runtime checks for public HTTPS updates when online services are enabled
 DM_NEXTENDO_CLIENT_ID	switch	Public OAuth application identifier embedded in mobile account setup; never a client secret
+DM_NEXTENDO_PEER_COLLECTION	path	Optional iOS build-time directory of already-approved title/host peer certificates; defaults to Studio's local collection
 DM_NEXTENDO_ROUTES	path	Private reviewed Nextendo route-policy TSV with exact host and certificate constraints
 DM_NEXTENDO_SERVICES_DIR	path	Validated game service profile directory for Nextendo
 DM_NICK	switch	The account nickname the game sees (default `Player`)
