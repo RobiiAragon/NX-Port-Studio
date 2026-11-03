@@ -1,5 +1,7 @@
 # Splatoon 3: initial native runtime findings
 
+My separate [LAN/local-wireless audit](splatoon-3-local-network.md) records the title's actual network modes, imported ABI, native protocol-selector correction and outstanding physical peer tests. Those checks do not establish a local or online match.
+
 On November 2, 2026, I began a private macOS bring-up of my own Splatoon 3 **11.3.0** dump (`0100C2500FC20000`, main build `28c4287aee36f7499da60f3e68b54c70`, SDK **20.5.22**). This note records a backend finding; it does not register a complete game profile or establish a playable export.
 
 I compiled all 31,218 shader libraries with the existing translation chain `a7dbbce711c3`. A full pipeline-archive prebuild failed inside Apple's compiler. I therefore ran one private graphical diagnostic with the documented `--gpu none` and `DM_PSO_PREBUILD=0` options: the archive and eager prebuild were omitted, while normal Metal rendering and all shader libraries remained available. This diagnostic is not a correction or a stable release.
