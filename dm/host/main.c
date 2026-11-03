@@ -13,7 +13,9 @@
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <limits.h>
 #include "net_socket.h"
+#include "save_archive.h"
 void probe_install(void); void hid_keys_init(void); void stubs_report(void); void crash_install(void); void guest_thread_init(void); void guest_gate_stack(int own_stack); uint32_t svc_thread_main_init(void);
 typedef void (*fn0)(void); typedef void (*fn2)(uint64_t, uint64_t); typedef void (*fnp)(void *);
 static void *req(const char *n){ void *p=guest_sym(n); if(!p) die("missing symbol %s", n); return p; }
@@ -74,6 +76,16 @@ static pthread_key_t g_race_keys[512];
 static unsigned g_race_n, g_race_want;
 static void *keyrace_thread(void *unused);
 static void host_preload(int argc, char **argv) {
+    // Keep external restore/export exclusive while guest initialization and
+    // save transactions can run. Queueing an iOS import only copies its ZIP.
+    const char *save=getenv("DM_SAVE");
+    if(save&&*save){
+        char root[PATH_MAX];if(strlcpy(root,save,sizeof root)>=sizeof root)die("save path is too long");
+        char *leaf=strrchr(root,'/');if(!leaf||leaf==root)die("save path must have a parent directory");*leaf=0;
+        static int save_lease=-1;save_lease=dm_save_archive_lock(root,0);
+        if(save_lease<0)die("save management is active (errno %d); reopen the port after it finishes",-save_lease);
+        if(dm_save_archive_has_pending(root))die("a save import is pending; reopen the port to apply it before guest loading");
+    }
     g_t0_ns = proc_start_mono_ns();
     flags_init();
     if (argc < 2) die("usage: dmhost <dir> [mod...] [-- game arguments...]");

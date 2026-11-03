@@ -24,6 +24,7 @@ struct StudioView: View {
                         if let failure = model.failure { errorNotice(failure) }
                         switch model.page {
                         case .create: createPage
+                        case .saves: SavedGamesView(model: model)
                         case .devices: DevicesView(model: model)
                         case .firmware: FirmwareView(model: model)
                         case .localPlay: LocalPlayView(model: model)
@@ -109,6 +110,7 @@ struct StudioView: View {
     private var subtitle: String {
         switch model.page {
         case .create: t("From your game files to an Apple app.")
+        case .saves: t("Import and export JKSV backups for your native ports.")
         case .devices: t("Sign and install on your paired iPhone or iPad.")
         case .firmware: t("System data and fonts from your own console.")
         case .localPlay: t("Discover iPhone rooms on the same local network.")

@@ -8,6 +8,8 @@ Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour 
 
 > **1.6.0 RC7 :** j’ai corrigé la réception des sockets dans la mémoire suivie par le moteur graphique et la profondeur des pipelines préparés de Smash pendant mes essais de ports recompilés. J’ai mesuré environ 60 FPS dans une même scène d’entraînement de Smash, en fenêtre et en plein écran ; je n’ai pas encore validé de partie en ligne avec ce candidat. [Notes et limites du test](docs/releases/1.6.0-rc.7.md).
 
+J’intègre **l’importation et l’exportation des ZIP JKSV** dans Studio et les nouveaux portages Mac/iPhone, avec conservation des sauvegardes précédentes, accès aux dossiers et partage via Fichiers sur iOS. Voir [le transfert et ses limites de validation](docs/save-data.md).
+
 ## Dans l'application
 
 L’importation reconnaît ZIP/7z, les sous-dossiers et les extensions en majuscules, avec une extraction limitée et une vérification d’intégrité. Les erreurs connues proposent des étapes de résolution dans les cinq langues de l’interface.

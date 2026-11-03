@@ -92,16 +92,16 @@ def require_primary_host(host):
 
 
 def swift_sources():   # the settings window, with the iOS launcher's model and rows
-    return [HERE / 'Launcher.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift']
+    return [HERE / 'Launcher.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift', HERE.parent / 'ios/Sources/LauncherSavesView.swift']
 
 
 def build_launcher(out, minos, clang, swiftc, sdk):   # in-process C bootstrap + existing SwiftUI settings; no main or second NSApplication
     with tempfile.TemporaryDirectory(dir=out.parents[3]) as t:
-        objs = [Path(t) / 'launcher.o', Path(t) / 'save_supervisor_start.o']
-        for obj, src in zip(objs, (HERE / 'launcher.c', HERE / 'save_supervisor_start.c')):
+        objs = [Path(t) / 'launcher.o', Path(t) / 'save_supervisor_start.o', Path(t) / 'save_archive.o']
+        for obj, src in zip(objs, (HERE / 'launcher.c', HERE / 'save_supervisor_start.c', HERE.parent / 'host/save_archive.c')):
             run([clang, '-isysroot', sdk, '-arch', 'arm64', f'-mmacosx-version-min={minos}', '-O2', '-Wall', '-I', HERE.parent / 'host', '-c', '-o', obj, src])
         run([swiftc, '-sdk', sdk, '-target', f'arm64-apple-macos{minos}', '-O', '-swift-version', '5', '-parse-as-library', '-module-cache-path', Path(t) / 'module-cache',
-             '-emit-library', '-Xlinker', '-install_name', '-Xlinker', '@rpath/DMMacBootstrap.dylib',
+             '-import-objc-header', HERE.parent / 'host/save_archive.h', '-larchive', '-emit-library', '-Xlinker', '-install_name', '-Xlinker', '@rpath/DMMacBootstrap.dylib',
              '-o', out, *swift_sources(), *objs, '-framework', 'CoreFoundation', '-framework', 'AppKit', '-framework', 'SwiftUI'])
         helper = out.parent.parent / 'Helpers/dm-save-supervisor'; helper.parent.mkdir(exist_ok=True)
         run([clang, '-isysroot', sdk, '-arch', 'arm64', f'-mmacosx-version-min={minos}', '-O2', '-Wall', '-I', HERE.parent / 'host',
@@ -259,7 +259,7 @@ def _pack(a, nextendo):
         codesign = Path(codesign).resolve()
         require_primary_host(a.host)
         minos = min_os(a.host)
-        sources = [Path(__file__).resolve(), HERE / 'launcher.c', HERE / 'save_supervisor.c', HERE / 'save_supervisor_start.c', HERE / 'save_supervisor.h', HERE.parent / 'host/front.h', HERE.parent / 'host/romfs_image.h', HERE.parent / 'host/save_sync.c', HERE.parent / 'host/save_sync.h', HERE.parent / 'tools/romfs.py'] + swift_sources()
+        sources = [Path(__file__).resolve(), HERE / 'launcher.c', HERE / 'save_supervisor.c', HERE / 'save_supervisor_start.c', HERE / 'save_supervisor.h', HERE.parent / 'host/front.h', HERE.parent / 'host/romfs_image.h', HERE.parent / 'host/save_sync.c', HERE.parent / 'host/save_sync.h', HERE.parent / 'tools/romfs.py'] + swift_sources() + [HERE.parent / 'host/save_archive.c', HERE.parent / 'host/save_archive.h', *sorted((HERE.parent / 'third_party/libarchive-headers').glob('*')), HERE.parent / 'third_party/notices/libarchive/LICENSE.txt']
         if getattr(a, 'nextendo_bcat_dir', None):
             sources += [HERE.parent / p for p in ('tools/nextendo_bcat.py', 'tools/bcat_prepare.m', 'host/hle_bcat_apple.m', 'host/nextendo_bcat.h')]
         if nextendo:
@@ -318,7 +318,7 @@ def _pack(a, nextendo):
         nextendo_bcat.stage(HERE.parent.parent, a.nextendo_bcat_dir, dm / 'bcat', a.title_id, a.version, allow_missing=True)
     notices = Path(__file__).resolve().parents[1] / 'third_party/notices/OpenSSL'
     (res / 'Notices').mkdir(exist_ok=True)
-    copy([notices], res / 'Notices', False)
+    copy([notices, notices.parent / 'libarchive'], res / 'Notices', False)
     if a.settings: shutil.copyfile(a.settings, dm / 'launcher.json')
     step('shader libraries'); msl_dst = res / 'msl' / (a.msl_name or msl.name); msl_dst.mkdir(parents=True); copy(msls, msl_dst, clone['msl'])
     if aoc: step('add-on content'); copy([aoc], res / 'aoc', clone['aoc'])
