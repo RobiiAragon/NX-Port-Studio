@@ -78,6 +78,8 @@ rm -rf Gen && mkdir -p Gen/dm || die "mkdir Gen"
 python3 "$IOS_SOURCE/tools/nextendo_resources.py" "$(dirname "$DM")" Gen || die "prepare Nextendo mobile codecs"
 mkdir -p Gen/dm/Notices/OpenSSL || die "create dependency notices"
 cp "$DM/third_party/notices/OpenSSL/"* Gen/dm/Notices/OpenSSL/ || die "stage OpenSSL license and provenance"
+mkdir -p Gen/dm/Notices/libarchive || die "create libarchive notices"
+cp "$DM/third_party/notices/libarchive/"* Gen/dm/Notices/libarchive/ || die "stage libarchive public-header notices"
 if [ -n "${DM_NEXTENDO_SERVICES_DIR:-}" ]; then
   python3 - "$DM" "$DM_NEXTENDO_SERVICES_DIR" "$GAME" <<'PY' || die "stage the public Nextendo service profile"
 import sys

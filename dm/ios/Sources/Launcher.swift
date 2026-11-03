@@ -166,6 +166,8 @@ private struct LauncherView: View {
     @ObservedObject var m: LauncherModel
     @ObservedObject var nextendo: MobileNextendoModel
     let play: () -> Void
+    @State private var savesBusy = false
+    @State private var savesNeedRestart = false
     @State private var isStartingGame = false
     @State private var showingNextendo = false
     @State private var memory = os_proc_available_memory()
@@ -207,6 +209,7 @@ private struct LauncherView: View {
                         Text("Brings back all settings this game was tested with.")
                     }
                     CloudSavesSection()
+                    LauncherSavesSection(language: m.uiLanguage, busy: $savesBusy, needsRestart: $savesNeedRestart)
                     Section {
                         HStack {
                             Text("Memory available")
@@ -235,7 +238,7 @@ private struct LauncherView: View {
 
     @ViewBuilder var playButton: some View {
         let button = Button(action: attemptPlay) { Text("Play").font(.title3.weight(.semibold)).frame(maxWidth: 220) }
-            .controlSize(.large).disabled(m.networkValidationError != nil || isStartingGame ||
+            .controlSize(.large).disabled(savesBusy || savesNeedRestart || m.networkValidationError != nil || isStartingGame ||
                 (m.networkMode == .nextendo && (nextendo.isPreparingServices || nextendo.isLoading)))
         if #available(iOS 26.0, *) { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.borderedProminent) }
     }
@@ -248,7 +251,7 @@ private struct LauncherView: View {
     }
 
     private func attemptPlay() {
-        guard !isStartingGame, m.apply() else { return }
+        guard !savesBusy, !savesNeedRestart, nativeSaveImportCanSkipLauncher(), !isStartingGame, m.apply() else { return }
         isStartingGame = true
         if m.networkMode == .nextendo {
             Task {
@@ -282,7 +285,7 @@ public func dmShowLauncher(_ viewController: UnsafeMutableRawPointer, _ done: @c
     installMobileNextendoKeychain()
     guard let url = Bundle.main.resourceURL?.appendingPathComponent("dm/launcher.json"), let data = try? Data(contentsOf: url) else { return false }
     guard let file = try? JSONDecoder().decode(SettingsFile.self, from: data), !file.settings.isEmpty else { fputs("[RED] launcher: dm/launcher.json cannot be read; starting the game\n", stderr); return false }
-    if ProcessInfo.processInfo.environment["DM_LAUNCHER"] == "0" { LauncherModel(file.settings).applySaved(); fputs("launcher: off (DM_LAUNCHER=0)\n", stderr); return false }
+    if ProcessInfo.processInfo.environment["DM_LAUNCHER"] == "0" && nativeSaveImportCanSkipLauncher() { LauncherModel(file.settings).applySaved(); fputs("launcher: off (DM_LAUNCHER=0)\n", stderr); return false }
     let parent = Unmanaged<UIViewController>.fromOpaque(viewController).takeUnretainedValue()
     let model = LauncherModel(file.settings, maximumFramesPerSecond: parent.view.window?.windowScene?.screen.maximumFramesPerSecond ?? 0)
     let nextendo = MobileNextendoModel(browser: MobileNextendoBrowser())

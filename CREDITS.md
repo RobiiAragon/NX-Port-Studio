@@ -20,6 +20,7 @@ Preserve the exact license files and attribution in the source tree. This overvi
 | h1k421 / reconstructed NVN interface | MIT-licensed interface definitions in `dm/gfx/nvn/include/nvn.h`; preserve the file's original notice. These are not a redistributed original Nintendo SDK. |
 | deko3d | Texture layout work, including the separately credited zlib-licensed port in the NVN layer. |
 | SDL / Valve contributors | Joy-Con amplitude quantization adapted under the zlib license. The altered-source notice is retained in `joycon_rumble.h`. |
+| libarchive | Public BSD-licensed headers for the Apple SDK ZIP reader/writer; source pins and notices remain in `dm/third_party/libarchive-headers/`. No library implementation is vendored. |
 | libvpx / stb_vorbis | Video and audio decoding; their licenses remain beside the vendored sources. |
 | Vulkan-Headers / NVIDIA FLIP / MacNativeGames | Graphics interfaces, verification and individually attributed implementation components. |
 | Atmosphère / libnx / Switchbrew / Nintendo Switch reverse-engineering contributors | Primary references for observable platform structures, synchronization, hardware protocols and service semantics. |

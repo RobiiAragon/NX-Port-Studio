@@ -4,10 +4,10 @@ import PortCore
 import UniformTypeIdentifiers
 
 enum StudioPage: String, CaseIterable, Identifiable {
-    case create = "New port", devices = "Devices", firmware = "Firmware", localPlay = "Local play", nextendo = "Nextendo", environment = "Environment", log = "Activity"
+    case create = "New port", saves = "Saved games", devices = "Devices", firmware = "Firmware", localPlay = "Local play", nextendo = "Nextendo", environment = "Environment", log = "Activity"
     var id: Self { self }
     var icon: String {
-        switch self { case .create: "shippingbox"; case .devices: "ipad.and.iphone"; case .firmware: "shippingbox.and.arrow.backward"; case .localPlay: "point.3.connected.trianglepath.dotted"; case .nextendo: "network"; case .environment: "slider.horizontal.3"; case .log: "terminal" }
+        switch self { case .create: "shippingbox"; case .saves: "externaldrive"; case .devices: "ipad.and.iphone"; case .firmware: "shippingbox.and.arrow.backward"; case .localPlay: "point.3.connected.trianglepath.dotted"; case .nextendo: "network"; case .environment: "slider.horizontal.3"; case .log: "terminal" }
     }
 }
 
@@ -35,6 +35,14 @@ final class StudioModel {
     var personalMiis = MiiLibrarySummary.empty
     var miiLibraryError: String?
     var isLoadingMiis = false
+    var savePorts: [InstalledMacPort] = []
+    var selectedSavePortID = ""
+    var selectedSaveSlot: SaveSlot = .primary
+    var isLoadingSavePorts = false
+    var isManagingSaves = false
+    var saveArchiveMessage: String?
+    var saveArchiveError: String?
+    var lastSaveBackupURL: URL?
     @ObservationIgnored let miiRunner = ProcessRunner()
     var devices: [AppleDevice] = []
     var selectedDeviceID = ""
@@ -123,7 +131,7 @@ final class StudioModel {
     var missingRequirements: [DependencyStatus] { dependencies.filter { $0.isRequired && !$0.isAvailable } }
     var hasSigningTeam: Bool { teamID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil }
     var signingReady: Bool { destination != .iOS || (hasSigningTeam && selectedDevice?.canAttemptConnection == true) }
-    var canBuild: Bool { (selectedFirmwarePath.isEmpty || selectedFirmware != nil) && signingReady && !isBusy && !isLoadingMiis && !isPreparing && !isChecking && missingRequirements.isEmpty && !gameFiles.isEmpty && !keysPath.isEmpty && !repositoryPath.isEmpty }
+    var canBuild: Bool { (selectedFirmwarePath.isEmpty || selectedFirmware != nil) && signingReady && !isBusy && !isManagingSaves && !isLoadingMiis && !isPreparing && !isChecking && missingRequirements.isEmpty && !gameFiles.isEmpty && !keysPath.isEmpty && !repositoryPath.isEmpty }
     var approximateSpace: String { ByteCountFormatter.string(fromByteCount: estimatedInputSpace, countStyle: .file) }
 
     func initialize() async {
