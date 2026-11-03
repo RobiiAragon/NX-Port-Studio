@@ -20,7 +20,7 @@ HLE_FORCE("_ZN2nn5prepo28RequestImmediateTransmissionEv", "telemetry immediate u
 enum { SK_ENETDOWN = 100 };
 HLE_FORCE("_ZN2nn6socket10InitializeEPvmmi", "connects to the bsd socket service; offline, creates no session (cut)", Result, h_sk_Init4, void *mem, uint64_t sz, uint64_t alloc, int conc) { (void)mem; (void)sz; (void)alloc; (void)conc; return RES_OK; }
 HLE_FORCE_WAIT("_ZN2nn6socket8FinalizeEv", "release the host's LAN descriptors, if enabled", Result, h_sk_Fini, void) { dm_net_finalize(); return RES_OK; }
-HLE_FORCE("_ZN2nn6socket12GetLastErrnoEv", "Horizon Linux errno in LAN mode; ENETDOWN otherwise", int, h_sk_Errno, void) { return dm_net_enabled() ? dm_net_errno() : SK_ENETDOWN; }
+HLE_FORCE("_ZN2nn6socket12GetLastErrnoEv", "retained Horizon errno shared with the C entry, including offline local descriptors", int, h_sk_Errno, void) { return dm_net_errno(); }
 HLE_FORCE("_ZN2nn6socket6SocketEiii", "socket transport, offline by default", int, h_sk_Socket3i, int a, int b, int c) { return dm_net_socket(a, b, c); }
 HLE_FORCE("_ZN2nn6socket8ShutdownEii", "socket transport, offline by default", int, h_sk_Shutdown, int s, int h) { return dm_net_shutdown(s, h); }
 HLE_FORCE("_ZN2nn6socket4BindEiPK8sockaddrj", "socket transport, offline by default", int, h_sk_Bind, int s, const void *a, unsigned n) { return dm_net_bind(s, a, n); }

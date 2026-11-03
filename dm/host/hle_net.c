@@ -56,6 +56,13 @@ HLE_FORCE("_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE", "offline: 
 // ---------- socket: offline by default; explicit LAN translates the guest ABI to Darwin ----------
 // Not cut: Inet* / nnsocketInet* byte order and address text conversion (pure computation).
 #define SK_ENETDOWN 100                 // Horizon BSD IPC errno is returned unchanged by nn::socket (MK8 SDK 4 detail::Socket / GetLastErrno).
+// Socket replacement bypasses the SDK's write to C errno. Bind its pointer
+// getters to the same Horizon cell, including older SDK forwarding aliases.
+// All return int * with no arguments; no SDK ThreadLocalRegion offset is used.
+HLE_FORCE("__errno_location", "C errno and native socket errno must share one Horizon value per thread", int *, h_sk_CErrno, void) { return dm_net_errno_location(); }
+HLE_FORCE("___errno_location", "SDK alias of the C errno pointer getter", int *, h_sk_CErrnoAlias, void) { return dm_net_errno_location(); }
+HLE_FORCE("__pthread_errno", "older SDK C errno forwarding entry", int *, h_sk_PthreadErrno, void) { return dm_net_errno_location(); }
+HLE_FORCE("__nnmusl_ErrnoLocation", "older SDK shared errno pointer getter", int *, h_sk_MuslErrno, void) { return dm_net_errno_location(); }
 static int sk_fail(void) { dm_net_set_errno(dm_net_enabled() ? 95 : SK_ENETDOWN); return -1; }
 #define SKF(m, cname, ...) HLE_FORCE(m, "socket transport: unavailable by default, translated Darwin sockets in explicit Mac LAN mode", int, cname, __VA_ARGS__)
 #define SKW(m, cname, ...) HLE_FORCE_WAIT(m, "blocking socket transport with a pausable guest context", int, cname, __VA_ARGS__)

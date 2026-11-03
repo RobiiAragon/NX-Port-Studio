@@ -59,6 +59,8 @@ typedef long (*dm_net_test_discovery_sender)(int fd,const void *bytes,size_t siz
 void dm_net_test_set_discovery_sender(dm_net_test_discovery_sender sender);
 #endif
 int dm_net_errno(void);
+// Guest C/socket errno share this per-thread Horizon value, never Darwin errno.
+int *dm_net_errno_location(void);
 void dm_net_set_errno(int e);
 int dm_net_socket(int family, int type, int protocol);
 // Local counter descriptors remain available offline; typed helpers return 0 on
