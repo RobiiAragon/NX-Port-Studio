@@ -915,6 +915,14 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
   - Drawn unconditionally with no `render_cond`, nothing looked wrong in [Big Brain Academy: Brain vs. Brain](../../dm/games/0100620012D6E000/README.md) (no screen played looked wrong) or [DARK SOULS: REMASTERED](../../dm/games/01004AB00A260000/README.md) (nothing seen).
   - [Portal 2](../../dm/games/0100ABD01785C000/README.md) needs no `render_cond` and must not get it: NVIDIA's occlusion culling in its D3D9 layer (`IDirect3DDevice9::SetOcclusionShape`, `materialsystem.nro+0xc1130`) puts a mesh under `SetRenderEnableConditional(RENDER_IF_NOT_EQUAL, pair)` when its shape has a query, else `SetRenderEnable(true)`, so drawing everything only costs GPU time. With the key on, those conditions read 0 / 0 at replay (no report in the submission writes the pairs; memory later held `0xffff` / 0) and visible furniture vanished. **Open:** who writes those pairs and when.
 
+### Conditional reports dropped after fixed tracking limits
+
+- **Symptom:** timestamp-guarded clears can execute again after many query reports in the same submission, even though a timestamp's pending counter value is already known to be zero.
+- **Cause:** the pending-report table held only 256 entries shared by timestamps and occlusion queries. Once filled, later timestamps were forgotten and `rc_value` read the older CPU value. The separate fixed 4,096-address occlusion table could also forget later queries and treat their unfinished values as known.
+- **Fix:** I imported only the conditional-report tracking block from [seedds/nxnative `c8521eeb`](https://github.com/seedds/nxnative/commit/c8521eebf283d2fc4ad9e237d030b115c1b1ba47). Timestamp reports now use a growing per-submission vector, while occlusion addresses use a separate growing hash table. Unknown query values remain unknown; this does not force conditional rendering on for other games or change shader translation.
+- **Check:** I adapted the upstream `t_sbw` cases to real synthetic storage: 9,000 occlusion reports followed by a timestamp, more than 256 timestamps, unreported values and a submission reset. Four assertions fail with the old tables and pass with the imported block.
+- **Found on:** seedds reported 285 ink queries preceding conditional clears in Splatoon Raiders in that upstream commit. I have not qualified that game in Studio. I investigated the same limit during my [Splatoon 3 bring-up](../bringup/splatoon-3.md), but its ordinary diagnostic log did not measure table saturation; I have not established this as the cause of its plaza corruption.
+
 ## Vulkan layer
 
 The Vulkan layer (`dm/gfx/vk/hle_vk.m`) was written for Hades; Super Mario Galaxy needed the additions below, each found from a red line or a screenshot on the route to the Star Festival.
