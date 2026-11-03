@@ -1124,6 +1124,14 @@ This suspension path remains applicable to iOS and explicit host suspension. Mac
 - **Found on:** my [Splatoon 2 EUR](../../dm/games/0100F8F0000A2000/README.md) 5.5.2 bring-up, SDK 3.4.1. CURL uses the uncovered overload; measured GetAddrInfo calls come from other sites. My existing six transport-Poll records were all successful zero-count waits. No Poll behavior was changed.
 - **Primary contract:** Apple's public [DNS Service Discovery header](https://github.com/apple-oss-distributions/mDNSResponder/blob/main/mDNSShared/dns_sd.h) documents its deadline, callback flags and same-queue deallocation. I verified guest arguments, returns and hostent layout against my SDK module. The implementation contains no copied SDK code or fixed game addresses.
 
+### The C resolver fails when an SDK exports both C++ layouts
+
+- **Symptom:** an NPLN attempt returns `2321-4992` before a traced socket opens, despite a valid account and successful event-counter Poll waits. The C `nnsocketGetAddrInfo` hook returns `EAI_FAIL(4)` whenever both C++ resolver overloads are present.
+- **Cause:** the host inferred the C result layout from the presence of C++ symbols. SDK 20 exports both plain `struct addrinfo` and `nn::socket::AddrInfo`; that is a compatibility surface, not an ambiguous C ABI. I traced its C wrapper to the plain-struct overload, and the original gRPC consumer reads `ai_addr` at byte 32, `ai_addrlen` at 16 and `ai_next` at 40. The named C++ type instead puts `ai_addr` at 24.
+- **Fix:** the C entry always uses the plain-struct layout. Each C++ entry retains its own layout. Both use the same scoped DNS admission, result ownership and safe free registry; no endpoint, account, certificate or graphics change is needed for this correction. My synthetic provider/localhost fixture checks both/either/neither C++ export, distinct canonical-name and address pointers, the original C offsets and output guards. With the old hook the both-export case fails before resolution; the corrected hook resolves it.
+- **Diagnostics:** `DM_NET_TRACE=1` emits error-only GetAddrInfo metadata: numeric result, hint family, layout (`1` plain C/legacy, `0` named C++) and flags. Family `-1` means admission returned before hints were copied. Logging never rereads rejected hints or prints a host, address, service, token or guest pointer; results, output bytes and both error states are preserved.
+- **Found on:** my private [Splatoon 3](../bringup/splatoon-3.md) 11.3.0 diagnostic, main build `28c4287aee36f7499da60f3e68b54c70`, SDK 20.5.22. I have not yet repeated the online attempt with this correction; the fixture does not establish a working NPLN session or match.
+
 ### gRPC cannot create a local event-counter wakeup descriptor
 
 - **Symptom:** initial game startup aborts in the embedded gRPC poll-engine selector after both available poll factories reject their wakeup-descriptor capability check. Networking can be disabled when this happens.

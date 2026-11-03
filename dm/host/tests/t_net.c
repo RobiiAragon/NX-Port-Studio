@@ -47,7 +47,7 @@ static _Atomic int waits, wait_balance;
 static _Atomic int contexts_entered, contexts_left, invalid_contexts;
 static __thread int context_depth;
 static volatile sig_atomic_t sigpipe_count;
-static int resolver_abi;
+static unsigned resolver_exports, resolver_symbol_queries;
 static unsigned config_queries;
 // Only hle_net.c is compiled with this replacement. The real backend remains
 // unchanged; counting proves observation never adds another interface query.
@@ -71,8 +71,8 @@ uint64_t gate_dispatch(uint64_t ret, uint64_t *registers) { (void)ret; (void)reg
 uint64_t unimpl_c(unsigned index, uint64_t *registers) { (void)index; (void)registers; abort(); }
 void dm_thread_returned(void) { abort(); }
 void *guest_sym(const char *name) {
-    if (strstr(name, "GetAddrInfoEPKcS2_PK8addrinfoPPS3_")) return resolver_abi != 1 ? (void *)1 : NULL;
-    if (strstr(name, "GetAddrInfoEPKcS2_PKNS0_8AddrInfoEPPS3_")) return resolver_abi != 0 ? (void *)1 : NULL;
+    if (strstr(name, "GetAddrInfoEPKcS2_PK8addrinfoPPS3_")) { resolver_symbol_queries++; return resolver_exports & 1 ? (void *)1 : NULL; }
+    if (strstr(name, "GetAddrInfoEPKcS2_PKNS0_8AddrInfoEPPS3_")) { resolver_symbol_queries++; return resolver_exports & 2 ? (void *)1 : NULL; }
     return NULL;
 }
 
@@ -230,6 +230,10 @@ static void tcp(void) {
     n = 16; int accepted = GET(fn_name, "_ZN2nn6socket6AcceptEiP8sockaddrPj")(listener, &remote, &n); CHECK(accepted >= 0 && accepted != listener && remote.ip == htonl(0x7f000001), "guest accept allocates a separate owned descriptor");
     close(client); CLOSE(accepted); CLOSE(listener);
 }
+static int resolver_fixture_dns(const char *host, char *output, size_t capacity) {
+    if (strcmp(host, "abi-fixture.invalid")) return -1;
+    return snprintf(output, capacity, "127.0.0.1") == 9 ? 1 : -1;
+}
 static void errors_and_resolver(void) {
     CHECK(SOCKET(28, 2, 17) < 0 && dm_net_errno() == 97, "IPv6 rejected with correct family error");
     CHECK(SOCKET(2, 3, 0) < 0 && dm_net_errno() == 94, "raw socket rejected");
@@ -246,17 +250,37 @@ static void errors_and_resolver(void) {
     int64_t badtime[2] = {0, 1000000}; CHECK(SELECT(1, NULL, NULL, NULL, badtime) < 0 && dm_net_errno() == 22, "select invalid timeval rejected");
     CLOSE(guest);
     typedef int (*fn_gai)(const char *, const char *, const void *, void **);
+    resolver_exports = 3;
     dm_net_addrinfo hints = {.family = 2, .type = 2, .flags = 4 | 8}; void *out = NULL;
     CHECK(GET(fn_gai, "_ZN2nn6socket11GetAddrInfoEPKcS2_PK8addrinfoPPS3_")("127.0.0.1", "12345", &hints, &out) == 0 && out, "numeric getaddrinfo through guest hook");
     if (out) { dm_net_addrinfo_legacy *p = out; CHECK(p->family == 2 && p->type == 2 && p->addrlen == 16 && ((address *)p->addr)->port == htons(12345), "SDK4 addrinfo address pointer at32, wire port and address correct"); p->next = (void *)0xdeadbeef; dm_net_freeaddrinfo(out); dm_net_freeaddrinfo(out); CHECK(dm_net_errno() == 22, "resolver free uses owned allocations, ignores corrupted guest next and double free"); }
     CHECK(GET(fn_gai, "_ZN2nn6socket11GetAddrInfoEPKcS2_PKNS0_8AddrInfoEPPS3_")("127.0.0.1", "12345", &hints, &out) == 0 && out, "modern named AddrInfo uses its separate hook");
     if (out) { dm_net_addrinfo *p = out; CHECK(p->family == 2 && p->addrlen == 16 && ((address *)p->addr)->port == htons(12345), "modern AddrInfo address pointer at24 translated separately"); dm_net_freeaddrinfo(out); }
-    resolver_abi = 0;
-    CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("127.0.0.1", "1", &hints, &out) == 0 && out && ((dm_net_addrinfo_legacy *)out)->addr, "C resolver selects the exported legacy SDK ABI"); dm_net_freeaddrinfo(out);
-    resolver_abi = 1;
-    CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("127.0.0.1", "1", &hints, &out) == 0 && out && ((dm_net_addrinfo *)out)->addr, "C resolver selects the exported modern SDK ABI"); dm_net_freeaddrinfo(out);
-    resolver_abi = 2;
-    CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("127.0.0.1", "1", &hints, &out) == 4 && !out, "C resolver refuses ambiguous exported ABIs"); resolver_abi = 0;
+    const unsigned exports[] = {3, 1, 2, 0};
+    setenv("DM_NETWORK", "auto", 1);
+    setenv("DM_NEXTENDO_ROUTES", "synthetic-resolver-profile", 1);
+    dm_net_set_dns_provider(resolver_fixture_dns);
+    for (unsigned i = 0; i < sizeof exports / sizeof *exports; i++) {
+        resolver_exports = exports[i]; unsigned queries = resolver_symbol_queries;
+        struct { uint64_t before; void *value; uint64_t after; } guarded = {UINT64_C(0xabcdef1234567890), (void *)1, UINT64_C(0x0123456789abcdef)};
+        dm_net_addrinfo canonical = hints; canonical.flags = 2 | 8;
+        CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("abi-fixture.invalid", "12345", &canonical, &guarded.value) == 0 && guarded.value,
+              "C resolver succeeds when both, either or neither C++ ABI is exported");
+        CHECK(guarded.before == UINT64_C(0xabcdef1234567890) && guarded.after == UINT64_C(0x0123456789abcdef), "C resolver writes only its result pointer");
+        dm_net_addrinfo_legacy *p = guarded.value; void *wire = NULL; memcpy(&wire, (char *)p + 32, sizeof wire);
+        CHECK(wire && wire == p->addr && p->canonname && wire != p->canonname && p->addrlen == 16,
+              "plain C addrinfo keeps distinct canonical name at24 and address at32");
+        address copied; memcpy(&copied, wire, sizeof copied);
+        CHECK(copied.family == 2 && copied.port == htons(12345) && copied.ip == htonl(0x7f000001), "original C consumer reads the expected Horizon sockaddr through offset32");
+        GET(void (*)(void *), "nnsocketFreeAddrInfo")(guarded.value);
+        CHECK(resolver_symbol_queries == queries, "C ABI does not depend on unrelated C++ symbol presence");
+    }
+    resolver_exports = 0;
+    dm_net_set_dns_provider(NULL);
+    unsetenv("DM_NEXTENDO_ROUTES");
+    CHECK(GET(fn_gai, "nnsocketGetAddrInfo")("localhost", "12345", &(dm_net_addrinfo){.family = 2, .type = 1}, &out) == 0 && out && ((dm_net_addrinfo_legacy *)out)->addr,
+          "plain C localhost resolution also retains the same ABI without a synthetic provider");
+    GET(void (*)(void *), "nnsocketFreeAddrInfo")(out);
     CHECK(dm_net_getaddrinfo("127.0.0.1", "1", &(dm_net_addrinfo){.family = 28}, &out) == 5 && !out, "unsupported resolver family returns EAI_FAMILY");
     CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("127.0.0.1") != NULL, "automatic mode resolves a real numeric LAN peer through legacy hostent");
     uint32_t cancel_id=GET(uint32_t (*)(void), "nnsocketRequestCancelHandle")();
@@ -272,6 +296,47 @@ static void errors_and_resolver(void) {
     CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") != NULL, "automatic mode without an online profile retains local DNS");
     setenv("DM_NEXTENDO_ROUTES", "/nonexistent/explicit-service-policy", 1);
     CHECK(GET(void *(*)(const char *), "_ZN2nn6socket13GetHostByNameEPKc")("localhost") == NULL, "automatic mode with an explicit invalid service policy fails closed");
+    unsetenv("DM_NEXTENDO_ROUTES");
+}
+static void resolver_diagnostics(void) {
+    typedef int (*Gai)(const char *, const char *, const void *, void **);
+    Gai modern = GET(Gai, "_ZN2nn6socket11GetAddrInfoEPKcS2_PKNS0_8AddrInfoEPPS3_");
+    Gai plain = GET(Gai, "nnsocketGetAddrInfo");
+    struct observation { int result, host_error, guest_error; uint64_t before, after; int empty; } baseline[6];
+    setenv("DM_NEXTENDO_ROUTES", "synthetic-resolver-profile", 1);
+    for (int enabled = 0; enabled < 2; enabled++) {
+        setenv("DM_NET_TRACE", enabled ? "1" : "0", 1); TraceCapture capture = trace_capture_begin();
+        for (int i = 0; i < 6; i++) {
+            struct { uint64_t before; void *value; uint64_t after; } guarded = {UINT64_C(0x12345678), (void *)1, UINT64_C(0x87654321)};
+            dm_net_addrinfo hints = {.family = i < 2 ? 28 : 2, .type = 1, .flags = i == 2 ? 0x40000000 : i == 5 ? 4 : 0};
+            Gai call = i == 0 || i == 2 ? modern : plain;
+            setenv("DM_NETWORK", i == 4 ? "offline" : "auto", 1);
+            dm_net_set_errno(37); errno = E2BIG;
+            int result = call("private-fixture.invalid", "sensitive-service", i == 3 || i == 4 ? (void *)1 : &hints, i == 3 ? NULL : &guarded.value);
+            struct observation value = {result, errno, dm_net_errno(), guarded.before, guarded.after, i == 3 || !guarded.value};
+            if (!enabled) baseline[i] = value;
+            else CHECK(value.result == baseline[i].result && value.host_error == baseline[i].host_error && value.guest_error == baseline[i].guest_error &&
+                       value.before == baseline[i].before && value.after == baseline[i].after && value.empty == baseline[i].empty,
+                       "resolver diagnostics preserve Result, both errnos, output guards and early hint admission");
+        }
+        setenv("DM_NETWORK", "auto", 1);
+        void *out = NULL; dm_net_addrinfo hints = {.family = 2, .type = 1, .flags = 4 | 8};
+        CHECK(plain("127.0.0.1", "12345", &hints, &out) == 0 && out, "successful plain resolver remains silent"); dm_net_freeaddrinfo(out);
+        CHECK(modern("127.0.0.1", "12345", &hints, &out) == 0 && out, "successful modern resolver remains silent"); dm_net_freeaddrinfo(out);
+        char *text = trace_capture_end(capture);
+        if (!enabled) CHECK(!*text, "resolver tracing is absent by default/when disabled");
+        else {
+            unsigned lines = 0; for (char *p = text; (p = strstr(p, "net: getaddrinfo")); ++p) ++lines;
+            CHECK(lines == 6 && strstr(text, "result=5 family=28 layout=0 flags=0") && strstr(text, "result=5 family=28 layout=1 flags=0") &&
+                  strstr(text, "result=3 family=2 layout=0 flags=1073741824") && strstr(text, "result=11 family=-1 layout=1 flags=0") &&
+                  strstr(text, "result=4 family=-1 layout=1 flags=0") && strstr(text, "result=8 family=2 layout=1 flags=4"),
+                  "error-only resolver metadata distinguishes ABI, hints and pre-admission failures");
+            CHECK(!strstr(text, "private-fixture") && !strstr(text, "sensitive-service") && !strstr(text, "127.0.0.1") && !strstr(text, "12345") && !strstr(text, "0x"),
+                  "resolver diagnostics exclude hosts, addresses, services and guest pointers");
+        }
+        free(text);
+    }
+    unsetenv("DM_NET_TRACE");
     unsetenv("DM_NEXTENDO_ROUTES");
 }
 static void broadcast(void) {
@@ -358,8 +423,9 @@ static void poll_diagnostics(void) {
 }
 int main(int argc, char **argv) {
     unsetenv("DM_ACCOUNT_TRACE");
+    unsetenv("DM_NET_TRACE");
     struct sigaction sa = {.sa_handler = sigpipe}; sigemptyset(&sa.sa_mask); sigaction(SIGPIPE, &sa, NULL);
-    offline(); nifm(); nifm_trace(); udp(); concurrency(); tcp(); errors_and_resolver(); discovery_peer(); poll_diagnostics();
+    offline(); nifm(); nifm_trace(); udp(); concurrency(); tcp(); errors_and_resolver(); resolver_diagnostics(); discovery_peer(); poll_diagnostics();
     if (argc == 2 && !strcmp(argv[1], "--no-broadcast")) puts("broadcast test skipped explicitly (requires local-network permission for this test executable)"); else broadcast();
     GET(fn_vvoid, "_ZN2nn6socket8FinalizeEv")();
     CHECK(atomic_load(&waits) > 0 && atomic_load(&wait_balance) == 0, "all host waits yield and restore guest execution");
