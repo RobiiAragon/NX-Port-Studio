@@ -13,7 +13,11 @@ struct net_event {
 static void net_event_level(net_event *e, int side, int on) {
     if (e->signaled[side] == on) return;
     char byte = 1; ssize_t result;
-    do { result = on ? write(e->notify[side][1], &byte, 1) : read(e->notify[side][0], &byte, 1); } while (result < 0 && errno == EINTR);
+    do {
+        // Every pipe end passed F_SETFL(O_NONBLOCK) before publication. This
+        // one-byte notification transition never performs a blocking read.
+        result = on ? write(e->notify[side][1], &byte, 1) : read(e->notify[side][0], &byte, 1); // NOLINT(clang-analyzer-unix.BlockInCriticalSection)
+    } while (result < 0 && errno == EINTR);
     // A single byte is toggled under the lock; readers/pollers never consume it.
     if (result == 1) e->signaled[side] = on;
 }
