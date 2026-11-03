@@ -23,10 +23,68 @@ static int same(const float v[4], NSUInteger level, NSUInteger layer, const int 
     for (int c = 0; c < 4; c++) if (fabsf(v[c] - texel(level, layer, ch[c]) / 255.0f) > 1e-4f) return 0;
     return 1;
 }
+static void fill_faces(id<MTLTexture> t, NSUInteger faces) {
+    for (NSUInteger lv = 0; lv < t.mipmapLevelCount; lv++) for (NSUInteger face = 0; face < faces; face++) {
+        NSUInteger w = t.width >> lv; uint8_t px[W * W * 4];
+        for (NSUInteger i = 0; i < w * w; i++) for (int c = 0; c < 4; c++) px[4 * i + c] = texel(lv, face, c);
+        [t replaceRegion:MTLRegionMake2D(0, 0, w, w) mipmapLevel:lv slice:face withBytes:px bytesPerRow:4 * w bytesPerImage:4 * w * w];
+    }
+}
+static void sample_cube(id<MTLComputePipelineState> pipeline, id<MTLTexture> t, uint32_t level, NSUInteger baseLevel, NSUInteger firstFace, const int channels[4]) {
+    // Each axis selects the center of one of Metal's +X,-X,+Y,-Y,+Z,-Z faces, at array index zero.
+    id<MTLBuffer> b = [g_dev newBufferWithLength:6 * 16 options:MTLResourceStorageModeShared]; memset(b.contents, 0xcd, 6 * 16);
+    id<MTLCommandBuffer> cb = [g_q commandBuffer]; id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+    [e setComputePipelineState:pipeline]; [e setTexture:t atIndex:0]; [e setBytes:&level length:sizeof level atIndex:0]; [e setBuffer:b offset:0 atIndex:1];
+    [e dispatchThreadgroups:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(6, 1, 1)]; [e endEncoding]; [cb commit]; [cb waitUntilCompleted];
+    CHECK(cb.status == MTLCommandBufferStatusCompleted && !cb.error, "the GPU samples the cube-array view");
+    for (NSUInteger face = 0; face < 6; face++) CHECK(same((const float *)b.contents + 4 * face, baseLevel + level, firstFace + face, channels), "cube-array index zero preserves each face, mip and channel");
+}
+static void cube_array_views(id<MTLComputePipelineState> pipeline, MTLTextureSwizzleChannels sw) {
+    MTLTextureDescriptor *d = [MTLTextureDescriptor new]; d.width = d.height = W; d.mipmapLevelCount = LEVELS;
+    d.pixelFormat = MTLPixelFormatRGBA8Unorm; d.storageMode = MTLStorageModeShared; d.usage = MTLTextureUsageShaderRead;
+    d.textureType = MTLTextureType2DArray; d.arrayLength = 12;
+    id<MTLTexture> root = [g_dev newTextureWithDescriptor:d]; fill_faces(root, 12);
+    id<MTLTexture> cube = [root newTextureViewWithPixelFormat:root.pixelFormat textureType:MTLTextureTypeCube levels:NSMakeRange(1, 2) slices:NSMakeRange(6, 6) swizzle:sw];
+    CHECK(cube && cube.arrayLength == 1, "a cube view has one cube but six face slices");
+    uint64_t rid = 0, againRid = 0;
+    os_unfair_lock_lock(&g_rmu);
+    id<MTLTexture> array = tex_fit(TID, cube, MTLTextureTypeCubeArray, &rid);
+    id<MTLTexture> again = tex_fit(TID, cube, MTLTextureTypeCubeArray, &againRid);
+    os_unfair_lock_unlock(&g_rmu);
+    CHECK(array && array.textureType == MTLTextureTypeCubeArray, "a real cube fits a cube-array shader argument");
+    if (array) {
+        CHECK(array.parentTexture == root && array.parentRelativeLevel == 1 && array.parentRelativeSlice == 6, "cube adaptation keeps the root, mip and six-face offset");
+        CHECK(array.arrayLength == 1 && array.mipmapLevelCount == 2, "six face slices form exactly one cube, with both visible mips");
+        CHECK(array.swizzle.red == MTLTextureSwizzleBlue && array.swizzle.blue == MTLTextureSwizzleRed, "cube adaptation keeps the source swizzle");
+        CHECK(again == array && rid == againRid && rid == array.gpuResourceID._impl, "cube-array view and resource ID are cached for the same source");
+        const int channels[4] = {2, 1, 0, 3};
+        sample_cube(pipeline, array, 0, 1, 6, channels); sample_cube(pipeline, array, 1, 1, 6, channels);
+        os_unfair_lock_lock(&g_rmu); uint64_t backRid = 0;
+        id<MTLTexture> back = tex_fit(TID, array, MTLTextureTypeCube, &backRid);
+        os_unfair_lock_unlock(&g_rmu);
+        CHECK(back && back.textureType == MTLTextureTypeCube && back.parentTexture == root && back.parentRelativeSlice == 6 && back.parentRelativeLevel == 1, "reverse adaptation preserves the selected cube and mip");
+        CHECK(back && backRid == back.gpuResourceID._impl && backRid != rid, "changing the target type replaces the cached resource ID");
+    }
+    // A cube allocated directly, rather than as a view, has the same six-face contract.
+    d.textureType = MTLTextureTypeCube; d.arrayLength = 1;
+    id<MTLTexture> direct = [g_dev newTextureWithDescriptor:d]; fill_faces(direct, 6);
+    os_unfair_lock_lock(&g_rmu); uint64_t directRid = 0;
+    id<MTLTexture> directArray = tex_fit(TID, direct, MTLTextureTypeCubeArray, &directRid);
+    uint64_t unsupportedRid = 0x1234;
+    id<MTLTexture> unsupported = tex_fit(TID, direct, MTLTextureType3D, &unsupportedRid);
+    os_unfair_lock_unlock(&g_rmu);
+    CHECK(directArray && directArray.parentTexture == direct && directArray.arrayLength == 1, "a root cube is adapted without making six array elements");
+    CHECK(!unsupported && unsupportedRid == 0x1234, "an incompatible cube-to-volume request stays unsupported");
+    if (directArray) { const int channels[4] = {0, 1, 2, 3}; sample_cube(pipeline, directArray, 0, 0, 0, channels); sample_cube(pipeline, directArray, 2, 0, 0, channels); }
+}
 int main(void) { @autoreleasepool {
     mtl_init(); NSError *error = nil;
     NSString *source = @"#include <metal_stdlib>\nusing namespace metal;\n"
-        "kernel void rd(texture2d<float> t [[texture(0)]], constant uint& level [[buffer(0)]], device float4* out [[buffer(1)]]) { out[0] = t.read(uint2(0, 0), level); }\n";
+        "kernel void rd(texture2d<float> t [[texture(0)]], constant uint& level [[buffer(0)]], device float4* out [[buffer(1)]]) { out[0] = t.read(uint2(0, 0), level); }\n"
+        "kernel void cube(texturecube_array<float> t [[texture(0)]], constant uint& mip [[buffer(0)]], device float4* out [[buffer(1)]], uint face [[thread_position_in_grid]]) {\n"
+        "constexpr sampler s(coord::normalized, filter::nearest, mip_filter::nearest);\n"
+        "const float3 axes[6] = {float3(1,0,0),float3(-1,0,0),float3(0,1,0),float3(0,-1,0),float3(0,0,1),float3(0,0,-1)};\n"
+        "out[face] = t.sample(s, axes[face], 0, level(float(mip))); }\n";
     id<MTLLibrary> library = [g_dev newLibraryWithSource:source options:nil error:&error];
     id<MTLComputePipelineState> pipeline = library ? [g_dev newComputePipelineStateWithFunction:[library newFunctionWithName:@"rd"] error:&error] : nil;
     if (!pipeline) { fprintf(stderr, "%s\n", error.localizedDescription.UTF8String); return 2; }
@@ -57,5 +115,8 @@ int main(void) { @autoreleasepool {
     float v[4];
     read2d(pipeline, fit, 0, v); CHECK(same(v, 1, 2, swapped), "level 0 of the fitted view is level 1, layer 2, swizzled");
     read2d(pipeline, fit, 1, v); CHECK(same(v, 2, 2, swapped), "level 1 of the fitted view is level 2, layer 2, swizzled");
+    id<MTLComputePipelineState> cubePipeline = [g_dev newComputePipelineStateWithFunction:[library newFunctionWithName:@"cube"] error:&error];
+    if (!cubePipeline) { fprintf(stderr, "%s\n", error.localizedDescription.UTF8String); return 2; }
+    cube_array_views(cubePipeline, sw);
     printf("tex_fit views from the root: %d checks, %d failed\n", checks, failed); return failed != 0;
 } }

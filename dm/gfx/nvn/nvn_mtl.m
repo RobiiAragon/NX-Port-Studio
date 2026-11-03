@@ -1891,7 +1891,7 @@ static MTLTextureDescriptor *tex_desc(const tex_t *t, int packaged) {
         case 4: d.textureType = MTLTextureType2DArray; d.arrayLength = t->d.depth; break;
         case 5: d.textureType = MTLTextureType2DMultisample; d.sampleCount = t->d.samples; d.mipmapLevelCount = 1; break;
         case 6: d.textureType = MTLTextureType2DMultisampleArray; d.sampleCount = t->d.samples; d.arrayLength = t->d.depth; d.mipmapLevelCount = 1; break;
-        // Cube textures are created as 6-layer 2D arrays and sampled through cube / cube array views made by tex_fit: Metal only allows cube array views of a 2D array base texture (not of a cube base).
+        // Cube textures are created as 6-layer 2D arrays and sampled through cube / cube array views made by tex_fit; their storage and views share the same face-slice layout.
         // The Legend of Zelda: Breath of the Wild has 1512 shaders that sample the environment light probes as a cube array while a single cube texture is bound (texture ID 1064 onwards): with mismatched types the reads are undefined, and every lit surface came out black
         case 8: d.textureType = MTLTextureType2DArray; d.arrayLength = 6; break;
         // Cube arrays likewise, as a 2D array of all their faces: NVN gives a cube array's depth in layer-faces (a multiple of 6), where a Metal cube array's arrayLength counts cubes.
@@ -4504,7 +4504,7 @@ static inline __attribute__((always_inline)) void *tex_fast(int tid) {
 }
 // The texture type the shader declares differs from the one the descriptor gives: use a compatible view. Maxwell sample instructions carry their own dimension, and a non-array instruction reading a 2D array texture reads layer 0;
 // on Metal a 2D array bound to a texture2d argument is a type mismatch with undefined reads (measured: one fixed value). Super Mario 3D World + Bowser's Fury creates its pre-lighting buffer as a one-layer 2D array
-// and the deferred lighting shader samples it as 2D: the ambient light of the whole picture became one colour, washed out white. Supports 2D array <-> 2D, 2D array -> cube / cube array and cube -> 2D (its first face); a 2D texture in a cube or 3D slot reads zero; any other mismatch is reported once. Caller holds g_rmu
+// and the deferred lighting shader samples it as 2D: the ambient light of the whole picture became one colour, washed out white. Supports 2D array <-> 2D, 2D array -> cube / cube array, cube <-> cube array and cube -> 2D (its first face); a 2D texture in a cube or 3D slot reads zero; any other mismatch is reported once. Caller holds g_rmu
 #define DMY_NT 10   // one dummy per MTLTextureType value, 1D (0) to TextureBuffer (9)
 static id<MTLTexture> dummy_tex(int dtt, int dpf); static uint64_t g_dummy_tex_rid[DMY_NT][4];
 static id<MTLTexture> tex_fit(int tid, id<MTLTexture> t, MTLTextureType want, uint64_t *rid) {
@@ -4514,6 +4514,7 @@ static id<MTLTexture> tex_fit(int tid, id<MTLTexture> t, MTLTextureType want, ui
     else if (want == MTLTextureTypeCube && have == MTLTextureType2DArray && t.arrayLength >= 6) ns = 6;
     else if (want == MTLTextureTypeCubeArray && have == MTLTextureType2DArray && t.arrayLength >= 6) ns = t.arrayLength / 6 * 6;
     else if (want == MTLTextureTypeCube && have == MTLTextureTypeCubeArray) ns = 6;   // a cube array read as a cube: the first cube
+    else if (want == MTLTextureTypeCubeArray && have == MTLTextureTypeCube) ns = 6;   // one cube, six face slices (not six array elements)
     // A cube read as 2D: Maxwell keeps a cube's faces as six layers, and a non-array sample reads layer 0, as for a 2D array. Atelier Ryza DX leaves cube textures in slots that
     // its draws read as 2D (a compute shader of CLC.g1s, the PBB materials' pixel shaders, the river's vertex shader), a different texture from run to run: the face-0 view makes
     // those reads defined instead of a type mismatch
