@@ -62,4 +62,8 @@ uint32_t dm_ldn_filter_clear(dm_ldn_context *context);
 // Retain the requested console-radio controller policy. Apple IP transport has
 // no equivalent Switch LDN/Bluetooth radio budget to enforce on native devices.
 uint32_t dm_ldn_controller_restriction(dm_ldn_context *context, int restriction);
+// SDK20 Protocol::Default (0) selects NX (1) on the native NX bridge. Protocol
+// 3 is an alternate mode this transport has not implemented or qualified.
+// Selection is valid only while initialized, before opening either role.
+uint32_t dm_ldn_set_protocol(dm_ldn_context *context, int protocol);
 uint32_t dm_ldn_reject(dm_ldn_context *context, uint32_t ip);
