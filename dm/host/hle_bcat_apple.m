@@ -37,7 +37,7 @@ static NSString *const dummyHash = @"5feceb66ffc86f38d952786c6d696c79c2dbc239dd4
 static NSArray<NSString *> *titles(void) { return @[@"0100f8f0000a2000", @"01003bc0000a0000", @"01003c700009c800", @"0100c2500fc20000"]; }
 int dm_bcat_supported(const char *title) { if(!title)return 0;NSString *value=[NSString stringWithUTF8String:title];return value&&[titles() containsObject:value.lowercaseString]; }
 static BOOL splatoon3(NSString *title) { return [title isEqual:@"0100c2500fc20000"]; }
-static BOOL recipeVersion(NSString *title,NSString *version) { return [titles() containsObject:title]&&[version isEqual:(splatoon3(title)?@"11.3.0":@"5.5.2")]; }
+static BOOL recipeVersion(NSString *title,NSString *version) { return title&&version&&[titles() containsObject:title]&&[version isEqual:(splatoon3(title)?@"11.3.0":@"5.5.2")]; }
 static BOOL staticResources(NSString *title) { return !splatoon3(title)&&![title isEqual:@"01003c700009c800"]; }
 static NSString *digest(NSData *data) { uint8_t h[32]; CC_SHA256(data.bytes, (CC_LONG)data.length, h); NSMutableString *s = [NSMutableString new]; for (int i=0;i<32;i++) [s appendFormat:@"%02x",h[i]]; return s; }
 static BOOL fail(NSString **error, NSString *message) { if (error) *error = message; return NO; }
@@ -222,7 +222,7 @@ static BOOL scheduleFormat(NSString *title,NSString *path,NSData *data){
  * No symlinks, extras, duplicate/case-alias paths, ZIP64, encryption or overlap.
  * Deflate output and CRC are checked before any file becomes visible. */
 static NSDictionary<NSString *,NSData *> *unzip(NSData *zip, NSString *title, NSString **error){
-    if(![titles() containsObject:title]){fail(error,@"Unsupported calendar title");return nil;}
+    if(!title||![titles() containsObject:title]){fail(error,@"Unsupported calendar title");return nil;}
     const uint8_t *b=zip.bytes;NSUInteger n=zip.length;if(n<22||n>zipLimit){fail(error,@"Calendar archive exceeds its bounds");return nil;}
     NSUInteger end=NSNotFound;for(NSUInteger p=n-22;;p--){if(u32(b+p)==0x06054b50&&p+22+u16(b+p+20)==n){end=p;break;}if(!p||n-p>65557)break;}
     if(end==NSNotFound||u16(b+end+4)||u16(b+end+6)||u16(b+end+8)!=u16(b+end+10)){fail(error,@"Invalid calendar ZIP directory");return nil;}
