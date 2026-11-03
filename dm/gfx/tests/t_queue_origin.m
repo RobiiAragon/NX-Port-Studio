@@ -62,6 +62,27 @@ int main(void) { @autoreleasepool {
     CHECK(P(nvnQueueInitialize)(&queues[0],&fresh),"queue storage can be initialized again");
     mtl_queue_activate(((queue_t *)&queues[0])->serial);
     CHECK(((queue_t *)&queues[0])->serial != first_serial && !S.bst[0] && !S.prog && !R.has_sc,"reinitializing a queue never inherits finalized program pointers");
+    // A program finalized while queues still have it bound (Fortune's Weave's title screen to opening demo): it leaves the active queue's bindings and every saved
+    // queue state, so switching back to a queue never combines stages from its reused memory
+    NVNprogram bound; P(nvnProgramInitialize)(&bound,&device);
+    const prog_t *bp = (const prog_t *)&bound;
+    mtl_queue_activate(((queue_t *)&queues[1])->serial); S.bst[0] = S.bst[1] = S.prog = bp;
+    mtl_queue_activate(((queue_t *)&queues[0])->serial); S.bst[0] = S.prog = bp;
+    h_nvnProgramFinalize(&bound);
+    CHECK(!S.bst[0] && !S.prog,"finalizing a program unbinds it from the active queue");
+    memset(&bound,0xa5,sizeof bound);
+    mtl_queue_activate(((queue_t *)&queues[1])->serial);
+    CHECK(!S.bst[0] && !S.bst[1] && !S.prog,"finalizing a program unbinds it from a saved queue state");
+    // Stages bound from two programs make a composite: finalizing the fragment program takes the effective program again, the vertex stage alone
+    static prog_t pf = {.serial=920003}; static NvProg *fprogram; fprogram = [NvProg new]; fprogram->sh[1] = fs; serial_put(pf.serial,fprogram);
+    S.prog = bind_stages(&pg,1); S.prog = bind_stages(&pf,2);
+    NvProg *composite = S.prog ? serial_get(S.prog->serial) : nil;
+    CHECK(S.prog != &pg && composite && composite->sh[0] == vs && composite->sh[1] == fs,"a vertex and a fragment program bound apart make a composite");
+    h_nvnProgramFinalize((NVNprogram *)&pf);
+    composite = S.prog ? serial_get(S.prog->serial) : nil;
+    CHECK(!S.bst[1] && composite && composite->sh[0] == vs && !composite->sh[1],"finalizing a composite's fragment program drops its stage from the effective program");
+    fprogram = nil;
+    memset(S.bst,0,sizeof S.bst); S.prog = NULL;
     // Native GPU state: matching queue/device origins keep NVN's NDC facing;
     // differing origins reverse it. CW and CCW expectations are explicit here.
     const int front_in_clip[2][2][2] = {{{0,1},{1,0}},{{1,0},{0,1}}};
@@ -98,6 +119,8 @@ int main(void) { @autoreleasepool {
         if (!good) fprintf(stderr,"queue origin=%d device origin=%d front=%d cull=%d triangle CCW=%d\n",queue,current,winding,cull,ccw);
         CHECK(good,"queue-latched culling and front_facing match native GPU state");
     }
+    P(nvnQueueFinalize)(&queues[0]); P(nvnQueueFinalize)(&queues[1]);
+    h_nvnProgramFinalize((NVNprogram *)&pg);
     mtl_pool_del(vertices); free(vertices);
     printf("queue origin: %d checks, %d failed\n",checks,fails); return fails != 0;
 } }
