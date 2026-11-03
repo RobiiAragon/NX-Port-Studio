@@ -653,12 +653,14 @@ static int net_resolver_name(const char *host, int flags, char expanded[DM_NSD_F
     }
     return 0;
 }
-static int net_getaddrinfo(const char *host, const char *service, const void *hints, void **result, int legacy) {
+typedef struct { int family; unsigned flags; } net_gai_metadata;
+static int net_getaddrinfo_impl(const char *host, const char *service, const void *hints, void **result, int legacy, net_gai_metadata *metadata) {
     if (!result) { net_error(14); return 11; }
     *result = NULL;
     if (!net_gate()) return 4;
     struct addrinfo h = {.ai_family = AF_INET}, *native = NULL;
     dm_net_addrinfo input = {0}; if (hints) memcpy(&input, hints, sizeof input);
+    *metadata = (net_gai_metadata){input.family, (unsigned)input.flags};
     if (input.family != 0 && input.family != 2) return 5;
     if (input.type && input.type != 1 && input.type != 2) return 10;
     if (input.protocol && input.protocol != 6 && input.protocol != 17) return 13;
@@ -698,6 +700,16 @@ static int net_getaddrinfo(const char *host, const char *service, const void *hi
     if (!first) { net_ai_destroy(allocation); return 7; }
     allocation->root = first; pthread_mutex_lock(&g_net_lock); allocation->next = g_ai; g_ai = allocation; pthread_mutex_unlock(&g_net_lock);
     *result = first; return 0;
+}
+static int net_getaddrinfo(const char *host, const char *service, const void *hints, void **result, int legacy) {
+    net_gai_metadata metadata = {.family = -1};
+    int code = net_getaddrinfo_impl(host, service, hints, result, legacy, &metadata), saved = errno;
+    const char *flag = getenv("DM_NET_TRACE");
+    // Observe only already-copied numeric hints. Early failures never dereference
+    // the hints again, and DNS names, addresses and credentials are not logged.
+    if (code && flag && atoi(flag))
+        fprintf(stderr, "net: getaddrinfo result=%d family=%d layout=%d flags=%u\n", code, metadata.family, legacy, metadata.flags);
+    errno = saved; return code;
 }
 int dm_net_getaddrinfo(const char *host, const char *service, const void *hints, void **result) { return net_getaddrinfo(host, service, hints, result, 0); }
 int dm_net_getaddrinfo_legacy(const char *host, const char *service, const void *hints, void **result) { return net_getaddrinfo(host, service, hints, result, 1); }
