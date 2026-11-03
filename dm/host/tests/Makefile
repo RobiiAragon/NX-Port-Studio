@@ -134,7 +134,7 @@ $(B)/net_hle.o: $(NET_TRACE_DEPS) | $(B)
 $(B)/net_hle_asan.o: $(NET_TRACE_DEPS) | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer $(GINC) -Ddm_net_ipconfig=fixture_ipconfig -c ../hle_net.c -o $@
 NET_TEST_SOURCES = t_net.c ../hle_offline.c ../hle_net_backend.c ../hle_nsd_backend.c ../hle_account_trace.c ../hle_bigstack.c ../entry.S t_net_write_stub.c
-NET_TEST_DEPS = $(NET_TEST_SOURCES) t_trace_capture.h ../account_trace.h ../nsd.h ../net_socket.h ../net_eventfd.inc ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h ../hle.h $(GAME_H)
+NET_TEST_DEPS = $(NET_TEST_SOURCES) t_trace_capture.h ../account_trace.h ../nsd.h ../net_socket.h ../net_eventfd.inc ../net_message.inc ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h ../hle.h $(GAME_H)
 $(B)/t_net: $(NET_TEST_DEPS) $(B)/net_hle.o | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -o $@ $(NET_TEST_SOURCES) $(B)/net_hle.o
 $(B)/t_net_asan: $(NET_TEST_DEPS) $(B)/net_hle_asan.o | $(B)
@@ -168,16 +168,18 @@ friends-history: $(B)/t_friends_history
 	$(B)/t_friends_history
 friends-history-sanitize: $(B)/t_friends_history_asan
 	$(B)/t_friends_history_asan
-net: $(B)/t_net $(B)/t_poll_trace $(B)/t_resolver_cancel
+net: $(B)/t_net $(B)/t_poll_trace $(B)/t_resolver_cancel $(B)/t_message_io
 	$(B)/t_net --no-broadcast
 	$(B)/t_poll_trace
 	$(B)/t_resolver_cancel
+	$(B)/t_message_io
 net-broadcast: $(B)/t_net
 	$(B)/t_net
-net-sanitize: $(B)/t_net_asan $(B)/t_poll_trace_asan $(B)/t_resolver_cancel_asan
+net-sanitize: $(B)/t_net_asan $(B)/t_poll_trace_asan $(B)/t_resolver_cancel_asan $(B)/t_message_io_asan
 	$(B)/t_net_asan --no-broadcast
 	$(B)/t_poll_trace_asan
 	$(B)/t_resolver_cancel_asan
+	$(B)/t_message_io_asan
 DISCOVERY_SOURCES = t_net_discovery.c ../hle_net_backend.c ../hle_nsd_backend.c t_net_write_stub.c
 DISCOVERY_HEADERS = ../nsd.h ../net_socket.h ../net_eventfd.inc ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h
 $(B)/t_net_discovery: $(DISCOVERY_SOURCES) $(DISCOVERY_HEADERS) | $(B)
@@ -612,12 +614,13 @@ include ../../sanitizers/sanitizers.mk
 asan:
 	@$(call san_fresh,$(B)/asan,$(ASAN_FLAGS))
 	$(ASAN_ENV) $(MAKE) B=$(B)/asan SAN="$(ASAN_FLAGS)" run
-TSAN_T = t_eventfd t_audio t_audio_stats t_audio_device t_thread_leak t_oe t_fs_commit_list t_fs_case t_save_sync t_condvar t_condvar_old t_preempt t_system_event t_notify_sched t_altstack
+TSAN_T = t_message_io t_eventfd t_audio t_audio_stats t_audio_device t_thread_leak t_oe t_fs_commit_list t_fs_case t_save_sync t_condvar t_condvar_old t_preempt t_system_event t_notify_sched t_altstack
 tsan-threads:
 	@$(call san_fresh,$(B)/tsan,$(TSAN_FLAGS))
 	$(TSAN_ENV) $(MAKE) B=$(B)/tsan SAN="$(TSAN_FLAGS)" tsan-threads-run
 tsan-threads-run: $(addprefix $(B)/,$(TSAN_T))
 	$(B)/t_eventfd
+	$(B)/t_message_io
 	$(B)/t_audio
 	$(B)/t_audio_stats
 	$(B)/t_audio_device
@@ -700,4 +703,16 @@ eventfd: $(B)/t_eventfd
 run: eventfd
 # Backend includes are part of every direct networking test build, including
 # fixture translation units that include hle_net_backend.c themselves.
-$(addprefix $(B)/,t_net t_net_asan t_net_discovery t_net_discovery_asan t_net_interface t_net_interface_asan t_ldn t_ldn_asan t_ssl t_ssl_asan t_nextendo_routes t_nextendo_routes_asan t_net_write_prepare t_eventfd t_resolver_live t_online_policy t_online_policy_asan t_nextendo_preflight_capability t_nextendo_preflight_capability_asan): ../net_eventfd.inc
+$(addprefix $(B)/,t_net t_net_asan t_net_discovery t_net_discovery_asan t_net_interface t_net_interface_asan t_ldn t_ldn_asan t_ssl t_ssl_asan t_nextendo_routes t_nextendo_routes_asan t_net_write_prepare t_eventfd t_resolver_live t_online_policy t_online_policy_asan t_nextendo_preflight_capability t_nextendo_preflight_capability_asan): ../net_eventfd.inc ../net_message.inc
+
+MESSAGE_IO_SOURCES = t_message_io.c $(filter-out t_net.c,$(NET_TEST_SOURCES))
+$(B)/t_message_io: $(MESSAGE_IO_SOURCES) $(NET_TEST_DEPS) $(B)/net_hle.o | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -o $@ $(MESSAGE_IO_SOURCES) $(B)/net_hle.o
+$(B)/t_message_io_asan: $(MESSAGE_IO_SOURCES) $(NET_TEST_DEPS) $(B)/net_hle_asan.o | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer $(GINC) -o $@ $(MESSAGE_IO_SOURCES) $(B)/net_hle_asan.o
+.PHONY: message-io message-io-sanitize
+message-io: $(B)/t_message_io
+	$(B)/t_message_io
+message-io-sanitize: $(B)/t_message_io_asan
+	$(B)/t_message_io_asan
+run: message-io
