@@ -257,6 +257,7 @@ int nvn_tex_mirror_t2t(const tex_t *s, unsigned sl, unsigned ss, const NVNcopyRe
 int prog_key(const prog_t *p, unsigned stage, uint8_t key[8]);
 void mtl_reg_samp(int id, const samp_par *p);
 void mtl_prog_release(prog_t *p);
+void mtl_prog_forget(const prog_t *p);   // program finalize, submit lock held: drop it from every queue's bindings
 // New serial (> 0, globally increasing)
 uint64_t nvn_new_serial(void);
 // Serials handed out from now on are above s (dm/gfx/tests/nvn_replay.m: the objects of a capture keep the live run's serials)

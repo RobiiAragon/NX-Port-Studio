@@ -118,6 +118,14 @@ The game may also write into an NVN object directly, without an NVN call, throug
 - **Fix:** index descriptors by texture serial and retire their cached base, compatible-type and image views at `mtl_tex_release`, through deferred release behind the GPU fence. Preserve the descriptor metadata: a late read resolves it through `tex_mtl` and caches its views for that submission, then retires them at commit. `t_cpu_tex` checks multiple descriptors, ID replacement and pixel-correct recorded replay after finalization and API-object reuse.
 - **Found on:** [Xenoblade Chronicles: Definitive Edition](../../dm/games/0100FF500E34A000/README.md#memory).
 
+### Texture descriptors outlive their memory-pool objects
+
+- **Symptom:** a registered texture resolves after its memory pool was finalized, and an upload or sparse refresh reads a page-table pointer from reused pool-object memory.
+- **Cause:** a descriptor retains a copy of `tex_t`, including the guest's `pool_t` pointer. The host already marked descriptors `gone` on pool finalization, but texture resolution and image preparation did not consistently honor that state; a new pool could also reuse the old object's address.
+- **Fix:** mark the pool's descriptors gone and clear its magic before tearing down its storage. Descriptor and image paths honor `gone`; direct texture resolution checks the pool magic. An already-created host texture is retained without refreshing from dead storage, while an uncreated texture remains an empty slot. Re-registering an ID against a new live pool permits resolution again.
+- **Found on:** seedds reported this lifetime failure in FINAL FANTASY RESONANCE and Mario Party Superstars in upstream [commit 54ab7b10](https://github.com/seedds/nxnative/commit/54ab7b1059eae8524ff60a320ea66f6ebac16506). I imported that backend correction while investigating [Splatoon 3](../bringup/splatoon-3.md); I have not established this mechanism as its color-corruption cause.
+- **Check:** `t_readback` reuses finalized physical and sparse pool objects, exercises descriptor and direct-object resolution, checks that no upload occurs, and registers a replacement texture at the reused pool address. Existing direct-upload, image-alias, linear-readback and cube-view fixtures retain initialized pool magic.
+
 ### Memory-pool tracking table grows in blocks
 
 - **Cause:** the memory-pool tracking table had a fixed 4,096 slots; a pool past the end would have its textures re-uploaded at every use.
@@ -223,6 +231,14 @@ Games read this count as a position in their own command memory and size their h
 - **Fix:** give every queue initialization a serial. Save and restore draw state and render-target state when submissions switch queues, resolve composite programs again, and invalidate encoder caches. Finalization discards that queue's saved state. Reusing the queue's storage starts with defaults and cannot recover old guest pointers.
 - **Found on:** [FINAL FANTASY X/X-2 HD Remaster](../../dm/games/0100BC300CB48000/README.md), launcher-to-X-2 handoff.
 - **Check:** `t_queue_origin` tests independent state, switching back, finalization and address reuse with a poisoned old program pointer, alongside its real GPU culling tests.
+
+### Finalized programs leave every queue's bindings
+
+- **Symptom:** switching back to a queue after a scene transition hashes a finalized program's reused object memory, or a composite program retains a finalized shader stage.
+- **Cause:** NVN reads a program when it is bound. The host retained pointers in the active queue and saved queue states after `nvnProgramFinalize`, so reactivation could combine stages from memory the game had reused. Composite programs also retained their own copies of the removed stage.
+- **Fix:** `mtl_prog_forget` removes the program from active bindings and every saved queue state under the submission lock. The active effective program is recomputed from its remaining bound stages; saved effective programs are resolved when their queues become active again. Pipeline and argument state are invalidated when the effective binding changes.
+- **Found on:** seedds and liunice reported Fire Emblem Fortune's Weave's title-to-demo failure and its before/after game checks in upstream [commit 1440a736](https://github.com/seedds/nxnative/commit/1440a736860e45c7722f7bd803a0fc74ff62c69f). I imported the correction during [Splatoon 3](../bringup/splatoon-3.md) investigation; I have not reproduced that game's visual symptom through program finalization.
+- **Check:** `t_queue_origin` finalizes a program retained by active and saved queues, poisons the freed object's storage, switches queues, and checks removal of a composite's fragment stage while preserving its vertex stage. Its real-GPU queue-origin checks run with Metal API validation and both encoding-thread modes.
 
 ### Fence syncs recorded in command buffers
 
