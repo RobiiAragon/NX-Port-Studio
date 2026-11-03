@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC7:** I corrected native socket receives into graphics-tracked memory and Smash’s offline pipeline depth metadata while testing freshly rebuilt ports. I measured approximately 60 FPS in one fixed Smash training scene in window and fullscreen; current online play remains unqualified. [Candidate notes and test limits](docs/releases/1.6.0-rc.7.md).
+> **1.6.0 RC8:** I added JKSV save ZIP transfer in Studio and native Apple port launchers, with retained previous saves and safe cold-launch imports on iOS. My earlier game/network results keep their documented scope. [Candidate notes and test limits](docs/releases/1.6.0-rc.8.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 

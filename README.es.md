@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC7:** corregí la recepción de sockets en memoria supervisada por el motor gráfico y la profundidad de los pipelines preparados de Smash al probar ports recién recompilados. Medí unos 60 FPS en una misma escena de entrenamiento de Smash en ventana y pantalla completa; todavía no he validado una partida online con este candidato. [Notas y límites de la prueba](docs/releases/1.6.0-rc.7.md).
+> **1.6.0 RC8:** agregué la transferencia de partidas ZIP de JKSV en Studio y en los launchers de los ports nativos de Apple, conservando la partida anterior y aplicando las importaciones de iOS antes de cargar el juego. Mis pruebas anteriores de juegos y red conservan su alcance documentado. [Notas y límites](docs/releases/1.6.0-rc.8.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 
