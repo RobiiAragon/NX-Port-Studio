@@ -15,9 +15,12 @@ REPO = Path(__file__).resolve().parents[3]
 for folder in ('scripts', 'dm/games', 'dm/tools', 'dm/ios/tools'):
     sys.path.insert(0, str(REPO / folder))
 import build_ipa_from_nsp as build
+import apple_crypto
 import game
 import gen_resources
 import nacp
+import nextendo_patches
+import nextendo_services
 import profile_guess
 import xcode_projects
 
@@ -66,6 +69,15 @@ class XcodePipelineTests(unittest.TestCase):
             stack.enter_context(patch.object(game, 'by_title', return_value=registered))
             stack.enter_context(patch.object(game, 'load', return_value=profile))
             stack.enter_context(patch.object(profile_guess, 'build_sources', return_value=sources))
+            # This fixture exercises pipeline options, not live provider policy
+            # or a downloadable toolchain. Keep those boundaries deterministic.
+            services = root / 'public-services'
+            crypto = root / 'crypto'
+            catalog = {'games': [{'title_ids': [registered.id], 'protocol': 'nex'}]}
+            stack.enter_context(patch.object(nextendo_patches, 'verified_catalog', return_value=catalog))
+            prepare_services = stack.enter_context(patch.object(nextendo_services, 'prepare', return_value=services))
+            stack.enter_context(patch.object(apple_crypto, 'prepare', return_value=crypto))
+            stack.enter_context(patch('urllib.request.urlopen', side_effect=AssertionError('pipeline fixture must not access the network')))
             stack.enter_context(patch.object(nacp, 'name', return_value='Fixture Game'))
             stack.enter_context(patch.object(nacp, 'version', return_value='1.0.0'))
             stack.enter_context(patch.object(nacp, 'languages', return_value=['en-US', 'ja']))
@@ -96,6 +108,10 @@ class XcodePipelineTests(unittest.TestCase):
             self.assertEqual(environment['GFXAPI'], graphics)
             self.assertEqual(environment['DM_BUNDLE_ID'], 'com.example.saved')
             self.assertEqual(environment['DM_TEAM_ID'], 'ABCDEFGHIJ')
+            self.assertEqual(environment['DM_NEXTENDO_SERVICES_DIR'], str(services))
+            self.assertEqual(environment['DM_NEXTENDO_ROUTES'], str(services / 'routes.tsv'))
+            self.assertEqual(environment['DM_OPENSSL_ROOT'], str(crypto))
+            prepare_services.assert_called_once_with(REPO, registered.id.lower(), root / f'{registered.id}_build/nextendo-services', 'nex')
             self.assertEqual(Path(environment['DM_XCODE_PROJECT_DIR']), root / f'{registered.id}_build/xcode')
             register.assert_called_once()
             self.assertEqual(mocks['derive_profile'].call_count, int(derived))
