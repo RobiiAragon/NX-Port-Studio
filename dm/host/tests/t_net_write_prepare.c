@@ -138,9 +138,9 @@ static void event_counter_outputs(void) {
  nvn_dirty_add_range(mem,page*2);
  for(int delayed=0;delayed<2;++delayed) {
   memset(mem,0xa5,page*2);nvn_dirty_protect(mem,page*2);uint64_t stamp=nvn_dirty_now();
-  int fd=dm_net_eventfd(delayed?0:42,0);assert(fd>=0);uint64_t *out=(uint64_t*)(mem+page-4);
+  int fd=dm_net_eventfd(delayed?0:42,0);assert(fd>=0);void *out=mem+page-4;
   if(delayed){event_wait_fd=fd;event_wait_output=mem;event_wait_page=page*2;wait_begin_hook=event_reprotect;}
-  unsigned before=preps;CHECK(!dm_net_eventfd_read(fd,out));uint64_t actual;memcpy(&actual,out,8);
+  unsigned before=preps;CHECK(dm_net_read(fd,out,8)==8);uint64_t actual;memcpy(&actual,out,8);
   CHECK(actual==42&&mem[page-5]==0xa5&&mem[page+4]==0xa5);CHECK(preps==before+1&&last_prep==out&&last_len==8);
   CHECK(nvn_dirty_since(mem,page,stamp)&&nvn_dirty_since(mem+page,page,stamp));
   CHECK(!dm_net_close(fd));CHECK(!wait_begin_hook);
