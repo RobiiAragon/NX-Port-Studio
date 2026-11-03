@@ -5,7 +5,7 @@ before the guest starts on every online launch. I use the same original importer
 on macOS and iOS. A download, catalog entry or successful bootstrap does not prove
 an online match.
 
-## Current resource adapter
+## Current resource adapters
 
 I implemented the documented Splatoon 2 BCAT layout for the provider's exact EUR
 `0100f8f0000a2000`, USA `01003bc0000a0000` and published Japanese
@@ -20,6 +20,18 @@ I place these files at `DebugUnderPilot/bcat` in a read-only RomFS overlay. For
 EUR/USA I also obtain the configuration and dummy resource from the pinned
 Prelude revision and require their exact SHA-256 values. I keep these payloads
 in private local caches and game apps; none belongs in this source repository.
+
+I added a separate Splatoon 3 **11.3.0** recipe for global identity
+`0100c2500fc20000`, following Prelude's
+[Splatoon 3 installation layout](https://github.com/NextendoNetwork/Prelude-Nextendo/blob/482c182917228d69ebbbabfea44fffa4a44051be/source/nextendo_bcat.c#L457).
+It uses the same HTTPS title endpoint and `DebugUnderPilot/bcat` overlay, with
+24 required files: `base`, `bh`, `wa`, `wb` and `wc.pack.zs.enc`, plus
+`summary.yml`, in each `ap-default`, `eu-default`, `jp-default` and `us-default`
+directory. I retain the encrypted pack payloads for the game's decoder. I check
+their length/block envelope and the bounded three-field summary, rather than
+claiming to decrypt or validate the internal pack schema. This recipe imports
+neither Splatoon 2's static configuration nor its BYAML calendars. Each title
+and exact recipe version remains separate, including staging and runtime startup.
 
 I did not import Prelude implementation code. The importer and SDK adapters are
 original implementations. Resource provenance refers to the provider's data and
@@ -40,7 +52,7 @@ digest**. I authenticate its transport with normal HTTPS certificate/hostname
 verification. I do not call its payload signed. A local SHA-256 inventory detects
 cache corruption; ZIP CRCs, resource headers, safe paths and explicit size limits
 are additional checks. I reject redirects, cookies, stored URL credentials,
-encryption, symlinks, traversal, duplicate/case-alias names, overlapping entries,
+ZIP encryption, symlinks, traversal, duplicate/case-alias names, overlapping entries,
 unsupported compression, invalid BYAML offsets and incomplete required data. I
 accept highly compressible valid textures using absolute bounds rather than a
 compression-ratio cutoff. Per-service game TLS exceptions are not used by the
@@ -100,6 +112,27 @@ including its `x0`/`x1` return registers and guest-to-host stack transition. The
 unopened size, digest and directory-count getters retain the SDK's abort
 precondition. A successful repeated synchronization request replaces its old
 observer; a failed request preserves it. Startup accepts its identity only once.
+I also checked the SDK 20 imports and directory-scoped request in my Splatoon 3
+dump. That overload enters its own IPC service instead of delegating to the older
+whole-cache request. I implement it as a native observer of the requested
+`DirectoryName` (1–31 ASCII letters, digits, underscores or hyphens), pinned to
+the refresh job it accepted. Only the requested directory's validated files
+contribute to its downloaded-byte count; another region or a later job cannot
+satisfy it. Invalid names, a completed failed refresh and an absent directory
+leave the prior observer intact. A request accepted while a job is pending
+remains pending, then reports failure if the completed snapshot lacks that
+directory. Offline requests still fail without downloading.
+
+The provider exposes one archive, so I validate and publish its complete immutable
+snapshot even for a scoped request. The observer reports only its selected
+directory; this does not add a server-side partial-download endpoint. Progress
+objects remain host-owned. I hook every progress operation imported by this
+Splatoon 3 build, so the SDK never interprets a guessed mutex, event or private
+progress structure. The SDK lifecycle fixture checks both the small legacy
+storage slot and a guarded SDK 20-sized object, and calls the scoped request
+through the actual registered guest entry. Other administrative/ApplicationId
+overloads are not covered by this implementation.
+
 The tests use original synthetic resources and keys, never Nintendo files.
 `test_bcat_launch.py` runs new processes through the production startup selector,
 HTTPS downloader and atomic publisher with an isolated `NSURLProtocol` transport.
@@ -109,6 +142,18 @@ open must see changed data, 304 must retain validated bytes, every online proces
 must requery, and timeout/error/corrupt/ineligible responses must preserve the
 entire last-valid cache. A delayed catalog followed by a stalled archive checks
 the shared network budget. Offline cases make zero requests.
+
+The same launch fixture also runs for the Splatoon 3 recipe with original
+synthetic opaque envelopes. It checks that the first file open sees changed
+data, every new online process rechecks the provider, failed refreshes preserve
+the complete prior snapshot, offline starts make no requests and no Splatoon 2
+static files are needed. Separate ZIP cases reject missing regions, wrong-title
+resources, malformed length/block envelopes and duplicate or unsupported summary
+fields. These tests do not establish that the game decrypts or accepts a schedule.
+Both recipe runs also request a real directory from the published snapshot and
+check its exact file-byte total. Missing/invalid directories and failed refreshes
+cannot report delivery success, retain old data as fresh data or initiate extra
+requests during the existing in-session refresh window.
 
 ## Validation and remaining bring-up
 

@@ -42,4 +42,15 @@ class CalendarSeeds(unittest.TestCase):
         with self.assertRaises(ValueError): bcat.recipe(link/'child','0100f8f0000a2000','5.5.2')
         self.assertFalse((self.source/'child').exists())
 
+    def test_splatoon3_recipe_keeps_its_own_version_and_incomplete_seed(self):
+        source=bcat.recipe(self.root/'s3','0100c2500fc20000','11.3.0')
+        for title,version in (('0100c2500fc20000','5.5.2'),('0100c2500fc20000','11.2.0'),('0100f8f0000a2000','11.3.0'),('0100152000022000',None)):
+            with self.subTest(title=title,version=version):
+                with self.assertRaises(ValueError): bcat.recipe(self.root/'invalid',title,version)
+        with mock.patch.object(bcat,'helper',return_value=Path('/original-test-verifier')), \
+             mock.patch.object(bcat.subprocess,'run',return_value=subprocess.CompletedProcess([],1)):
+            output=bcat.stage(self.repo,source,self.root/'s3-retry','0100c2500fc20000','11.3.0',allow_missing=True)
+        self.assertEqual({p.name for p in output.iterdir()},{'setup.json'})
+        self.assertEqual(json.loads((output/'setup.json').read_text())['version'],'11.3.0')
+
 if __name__ == '__main__': unittest.main()

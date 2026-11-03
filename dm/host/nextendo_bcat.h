@@ -19,6 +19,20 @@ int dm_bcat_copy_delivery(char *out, size_t size);
 int dm_bcat_request_sync(void);
 int dm_bcat_sync_status(unsigned *result, uint64_t *downloaded);
 void *dm_bcat_sync_observe(void);
+/* DirectoryName is the SDK's 1..31-byte ASCII [A-Za-z0-9_-] component,
+ * not a filesystem path. A scoped observer reports only that directory's
+ * validated delivery bytes, pinned to the refresh job it accepted. */
+static inline int dm_bcat_directory_name_valid(const char *name) {
+    if (!name) return 0;
+    for (size_t i = 0; i < 32; i++) {
+        unsigned char c = (unsigned char)name[i];
+        if (!c) return i != 0;
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '-')) return 0;
+    }
+    return 0;
+}
+void *dm_bcat_sync_observe_directory(const char *directory);
 int dm_bcat_sync_observer_status(const void *observer, unsigned *result, uint64_t *downloaded);
 void dm_bcat_sync_release(void *observer);
 void dm_bcat_digest(const void *bytes, size_t length, unsigned char out[16]);

@@ -9,10 +9,12 @@ struct dm_flags g_flag;uint64_t g_t0_ns;uint64_t now_ns(void){return 0;}
 static uintptr_t guest_begin,guest_end;static int guest_routes;
 int dm_guest_as_contains(uintptr_t p){int guest=p>=guest_begin&&p<guest_end;if(guest)guest_routes++;return guest;}
 extern void bcat_guest_digest_call(void *top,void *entry,void *object,uint64_t out[2],uintptr_t *returned_sp);
+extern void bcat_guest_sync_call(void *top,void *entry,void *object,const char *directory,unsigned *out,uintptr_t *returned_sp);
 static char delivery[1024];static int available=1,phase=2,allowed=1;static unsigned outcome=1;static uint64_t transferred;static int observers;
 int dm_bcat_copy_delivery(char *out,size_t n){if(!available)return 0;return strlcpy(out,delivery,n)<n;}
 int dm_bcat_request_sync(void){return allowed;}
 void *dm_bcat_sync_observe(void){if(!allowed)return NULL;observers++;return &available;}
+void *dm_bcat_sync_observe_directory(const char *directory){if(!allowed||strcmp(directory,"vsdata"))return NULL;observers++;return &available;}
 void dm_bcat_sync_release(void *observer){if(observer)observers--;}
 int dm_bcat_sync_observer_status(const void *observer,unsigned *result,uint64_t *bytes){(void)observer;*result=outcome;*bytes=transferred;return phase;}
 int dm_bcat_sync_status(unsigned *result,uint64_t *bytes){*result=outcome;*bytes=transferred;return phase;}
@@ -35,7 +37,27 @@ int main(void){char temp[]="/tmp/nx-bcat-sdk-XXXXXX";CHECK(mkdtemp(temp));strlcp
     size_t page=(size_t)sysconf(_SC_PAGESIZE);void *mapping=mmap(NULL,page*4,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);CHECK(mapping!=MAP_FAILED);
     CHECK(!mprotect(mapping,page,PROT_NONE)&&!mprotect((char*)mapping+page*3,page,PROT_NONE));guest_begin=(uintptr_t)mapping+page;guest_end=(uintptr_t)mapping+page*3;
     uint64_t registers[2]={0};uintptr_t after_sp=0;bcat_guest_digest_call((void*)guest_end,hle_force_h_bcat_FileDigest.fn,&object,registers,&after_sp);
-    CHECK(!memcmp(registers,expected,16)&&guest_routes==1&&after_sp==guest_end-16);guest_begin=guest_end=0;CHECK(!munmap(mapping,page*4));
+    CHECK(!memcmp(registers,expected,16)&&guest_routes==1&&after_sp==guest_end-16);
+    // The SDK 20 object embeds private state beyond the initial slot. Every
+    // progress API imported by S3 is host-backed; none may read that poison or
+    // write a guessed SDK mutex, event or IPC object into it.
+    struct {uint64_t before;unsigned char object[0x258];uint64_t after;} modern;
+    memset(&modern,0xa5,sizeof modern);h_bcat_ProgressCtor(modern.object);
+    CHECK(*(uint64_t *)modern.object==0&&modern.before==UINT64_C(0xa5a5a5a5a5a5a5a5)&&modern.after==modern.before);
+    int privateUntouched=1;for(size_t i=8;i<sizeof modern.object;i++)if(modern.object[i]!=0xa5)privateUntouched=0;CHECK(privateUntouched);
+    CHECK(h_bcat_ProgressStatus(modern.object)==0);
+    unsigned syncResult=123;bcat_guest_sync_call((void*)guest_end,hle_force_h_bcat_SyncDirectory.fn,modern.object,"vsdata",&syncResult,&after_sp);
+    if(syncResult||guest_routes!=2||after_sp!=guest_end-16||observers!=1)fprintf(stderr,"scoped call: result=%u guestRoutes=%d stackRestored=%d observers=%d\n",syncResult,guest_routes,after_sp==guest_end-16,observers);
+    CHECK(syncResult==0&&guest_routes==2&&after_sp==guest_end-16&&observers==1);
+    CHECK(h_bcat_ProgressStatus(modern.object)==2&&h_bcat_ProgressDownloaded(modern.object)==0);
+    CHECK(h_bcat_SyncDirectory(modern.object,"missing")!=0&&observers==1&&h_bcat_ProgressStatus(modern.object)==2);
+    const char *invalid[]={NULL,"","../vsdata","vs/data","vs.data","vs data","vs:data","vs\\data","12345678901234567890123456789012"};
+    for(size_t i=0;i<sizeof invalid/sizeof *invalid;i++)CHECK(h_bcat_SyncDirectory(modern.object,invalid[i])==0x27au&&observers==1);
+    CHECK(dm_bcat_directory_name_valid("1234567890123456789012345678901")&&dm_bcat_directory_name_valid("ap-default")&&dm_bcat_directory_name_valid("A_0"));
+    phase=9;outcome=0;transferred=8;h_bcat_ProgressUpdate(modern.object);
+    CHECK(h_bcat_ProgressStatus(modern.object)==9&&h_bcat_ProgressResult(modern.object)==0&&h_bcat_ProgressDownloaded(modern.object)==8);
+    h_bcat_ProgressDtor(modern.object);CHECK(observers==0&&modern.after==modern.before);phase=2;outcome=1;transferred=0;
+    guest_begin=guest_end=0;CHECK(!munmap(mapping,page*4));
     CHECK(unopened_getter_fails(0)&&unopened_getter_fails(1)&&unopened_getter_fails(2));
     h_bcat_DirCtor(&dir);BcatEntry unopened;int missing=123;CHECK(h_bcat_DirRead(&dir,&missing,&unopened,1)!=0);CHECK(!h_bcat_DirOpen(&dir,"vsdata"));BcatEntry entry;int n=123;
     CHECK(!h_bcat_DirRead(&dir,&n,NULL,0)&&n==0);CHECK(h_bcat_DirRead(&dir,&n,NULL,1)!=0);
