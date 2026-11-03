@@ -1188,6 +1188,14 @@ This suspension path remains applicable to iOS and explicit host suspension. Mac
 - **Fix:** I report `IsGamePlayRecordingSupported=false` and handle its void enable/pause/restart controls without claiming a recording or consuming the supplied buffer. This is an explicit platform capability limit, separate from game rendering or a memory allocation fix.
 - **Found on:** [Splatoon 2 EUR 5.5.2](../../dm/games/0100F8F0000A2000/README.md), SDK 3.4.1; after this change my bounded headless bootstrap reached its frame loop for 15 seconds. A later private Mac candidate rendered character creation; [bring-up evidence and remaining qualification](nextendo-bcat.md#validation-and-remaining-bring-up).
 
+### A newer BCAT directory-scoped request enters unavailable SDK IPC
+
+- **Symptom:** a game's imports include `RequestSyncDeliveryCache(progress, const char*)`, but the existing whole-cache request hook does not intercept it.
+- **Cause:** SDK 20 validates the directory and opens an independent IPC progress service, then attaches it to a private progress object with embedded mutex/event/state. It does not delegate to the older single-argument overload. Reusing the private object layout from another SDK would not supply that service.
+- **Fix:** hook the public directory overload and keep its progress in host-owned state. Validate the SDK's directory-name grammar and pin the observer to one real refresh job and directory. Its completed success and byte count require that directory in the validated immutable snapshot; pending, missing and failed delivery remain distinct. A rejected request preserves the previous observer. No original private Attach is called, and no constructor writes a guessed SDK layout. The provider still downloads a complete archive; only the observer's report is directory-scoped.
+- **Checks:** a synthetic guest calls the registered BIG entry with both parameters and checks the result and restored stack. Guarded legacy/SDK 20-sized object tests check lifecycle, invalid names, byte counts and rejected-request preservation. The production HTTPS/store fixture verifies exact scope bytes for separate S2/S3 recipes and rejects missing directories, failed refreshes and offline requests; retained observers stay attached to their original job.
+- **Found on:** [my Splatoon 3 11.3.0 bring-up](../bringup/splatoon-3.md), through static import and SDK-call analysis. The first runtime attempt is still blocked earlier by gRPC's missing wakeup descriptor; a native schedule-consumer test remains open. [Calendar implementation and limits](nextendo-bcat.md).
+
 ### Game startup waits in Keychain before its first shader draw
 
 - **Symptom:** with automatic connections enabled, the game remains black before any shader library or draw while audio and AppKit continue running. A guest worker waits inside `IsNetworkServiceAccountAvailable` → `SecItemCopyMatching` → SecurityServer; the main guest waits for that worker.
