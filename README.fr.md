@@ -6,7 +6,7 @@
 
 Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour ce projet indépendant. Je préserve les crédits des auteurs du moteur et leurs avis de copyright : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **1.6.0 RC7 :** j’ai corrigé la réception des sockets dans la mémoire suivie par le moteur graphique et la profondeur des pipelines préparés de Smash pendant mes essais de ports recompilés. Je distingue les parties terminées, l’accès aux salons et les tests synthétiques ; la validation actuelle du jeu en ligne et du plein écran reste ouverte. [Notes du candidat](docs/releases/1.6.0-rc.7.md).
+> **1.6.0 RC7 :** j’ai corrigé la réception des sockets dans la mémoire suivie par le moteur graphique et la profondeur des pipelines préparés de Smash pendant mes essais de ports recompilés. J’ai mesuré environ 60 FPS dans une même scène d’entraînement de Smash, en fenêtre et en plein écran ; je n’ai pas encore validé de partie en ligne avec ce candidat. [Notes et limites du test](docs/releases/1.6.0-rc.7.md).
 
 ## Dans l'application
 
