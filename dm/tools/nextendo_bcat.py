@@ -14,7 +14,9 @@ import tempfile
 import uuid
 import warnings
 
-TITLES = {'0100f8f0000a2000', '01003bc0000a0000', '01003c700009c800'}
+RECIPES = {'0100f8f0000a2000': '5.5.2', '01003bc0000a0000': '5.5.2',
+           '01003c700009c800': '5.5.2', '0100c2500fc20000': '11.3.0'}
+TITLES = set(RECIPES)
 
 
 def helper(repository):
@@ -50,7 +52,7 @@ def private_directory(path):
 
 def recipe(source, title_id, version):
     """A recipe descriptor is not a successful or populated delivery cache."""
-    if title_id.lower() not in TITLES or version != '5.5.2': raise ValueError('Unsupported calendar recipe version')
+    if title_id.lower() not in RECIPES or RECIPES[title_id.lower()] != version: raise ValueError('Unsupported calendar recipe version')
     source = private_directory(source)
     setup = {'formatVersion': 1, 'titleID': title_id.lower(), 'version': version}
     temporary = source / ('.setup-' + uuid.uuid4().hex)
@@ -85,7 +87,7 @@ def stage(repository, source, destination, title_id, version=None, allow_missing
     if type(setup.get('formatVersion')) is not int or setup['formatVersion'] != 1 or setup.get('titleID') != title_id.lower() or setup.get('version') != (version or setup.get('version')):
         raise ValueError('Calendar belongs to another game/version')
     version = setup['version']
-    if title_id.lower() not in TITLES or version != '5.5.2': raise ValueError('Unsupported calendar recipe')
+    if title_id.lower() not in RECIPES or RECIPES[title_id.lower()] != version: raise ValueError('Unsupported calendar recipe')
     validated = subprocess.run([str(helper(repository)), 'validate', title_id.lower(), version, str(source)], capture_output=True).returncode == 0
     if not validated and not allow_missing: raise ValueError('No complete validated calendar snapshot')
     pointer: str | None = None
