@@ -83,9 +83,17 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
 ### Cube textures held as 6-layer 2D arrays
 
 - **Symptom:** shaders that sample a cube texture as `texturecube_array` get a type mismatch.
-- **Cause:** Metal can make a cube-array view only of a 2D-array base texture.
+- **Cause:** the shader can declare an array of cubes while the bound descriptor describes one cube; Metal requires a view of the declared type. The host keeps cube storage as 2D-array face slices so either view can share that allocation.
 - **Fix:** NVN cube textures are created as 6-layer 2D arrays and bound through cube / cube-array views by `tex_fit`, which also maps a cube array read as a cube to its first cube.
 - **Found on:** [The Legend of Zelda: Breath of the Wild](../../dm/games/01007EF00011E000/README.md): 1,512 shaders sample the environment probes as `texturecube_array` while a single cube texture is bound.
+
+### A cube view read as a one-element cube array
+
+- **Symptom:** `texture type mismatch: shader … declares slot … as Metal type 6, texture … type 5 … bound as is`, even though the texture holds all six cube faces.
+- **Cause:** `tex_fit` adapted cube arrays to cubes and 2D arrays to either type, but omitted the reverse cube-to-cube-array case. A descriptor can already have a cube view when the shader requests `texturecube_array`. A cube's `arrayLength` is one, while Metal's texture-view slice range counts six faces per cube, as specified by [Apple's texture-view contract](https://developer.apple.com/documentation/metal/mtltexture/newtextureviewwithpixelformat:texturetype:levels:slices:).
+- **Fix:** create the one-element cube-array view from six face slices, preserving the source view's root storage, mip range, first face and swizzle. Existing cache identity and incompatible-type rejection remain in use; no shader or translation-chain change is needed.
+- **Check:** `t_tex_fit_root` samples six distinct faces at cube-array index zero, at two mips, from both a root cube and a cube subview of a 12-face allocation. It also checks the swizzle, resource-ID cache, reverse adaptation and rejection of a cube-to-volume request. On an M5 Max with Metal API validation, the expanded fixture fails twice before the fix and passes all 47 checks afterward.
+- **Found on:** [Splatoon 3](../bringup/splatoon-3.md), during the first graphical startup attempt. This binding warning is separate from that run's subsequent gRPC wakeup-descriptor initialization abort; removing it does not establish rendered-scene or online compatibility.
 
 ### Cube map arrays count layer-faces
 
