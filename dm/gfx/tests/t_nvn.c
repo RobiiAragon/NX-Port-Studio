@@ -516,6 +516,51 @@ int main(void) {
         P(nvnCommandBufferFinalize)(&c4); P(nvnCommandBufferFinalize)(&c5); P(nvnMemoryPoolFinalize)(&dp);
     }
 
+    // Tiny prerecorded lists retain their overflow until the game retires the source bytes. Reserve a small bucket, not 256 KB for each 512-byte list;
+    // keep all handles live across command-buffer finalization, then replay widely separated lists after thousands of other recordings.
+    {
+        enum { N = 2048, SLOT = 512 };
+        static uint8_t lists[N * SLOT + 4096] __attribute__((aligned(4096)));
+        NVNcommandHandle handles[N]; NVNcommandBuffer cc; NVNmemoryPoolBuilder lb; NVNmemoryPool lp;
+        P(nvnMemoryPoolBuilderSetDefaults)(&lb); P(nvnMemoryPoolBuilderSetStorage)(&lb, lists, sizeof lists); P(nvnMemoryPoolInitialize)(&lp, &lb);
+        uint64_t before = g_hostseg_bytes;
+        for (int i = 0; i < N; i++) {
+            P(nvnCommandBufferInitialize)(&cc, &dev); P(nvnCommandBufferAddCommandMemory)(&cc, &lp, i * SLOT, SLOT);
+            P(nvnCommandBufferBeginRecording)(&cc);
+            for (int k = 0; k < 40; k++) P(nvnCommandBufferBarrier)(&cc, 0);
+            P(nvnCommandBufferSignalEvent)(&cc, &ev, NVN_EVENT_SIGNAL_MODE_WRITE, NVN_EVENT_SIGNAL_LOCATION_BOTTOM, 0, i + 17);
+            handles[i] = P(nvnCommandBufferEndRecording)(&cc);
+            if (!i) {
+                EXPECT("512-byte guest grant remains known after host jumps", SLOT, CB(&cc)->grant_size);
+                EXPECT("512-byte guest grant: overflow capacity is 4 KB", HOSTSEG_SMALL, hostseg_size(CB(&cc), 0, 40));
+            }
+            P(nvnCommandBufferFinalize)(&cc);
+        }
+        EXPECT("2048 cached small-list overflows reserve at most 8 MB", 1, g_hostseg_bytes - before <= (uint64_t)N * HOSTSEG_SMALL);
+        P(nvnCommandBufferInitialize)(&cc, &dev);
+        P(nvnCommandBufferAddCommandMemory)(&cc, &lp, N * SLOT, 4096);   // an unrelated, non-contiguous range must not retire these handles
+        const int picks[] = {0, 127, N - 1};
+        for (unsigned i = 0; i < sizeof picks / sizeof *picks; i++) {
+            int k = picks[i]; P(nvnQueueSubmitCommands)(&q, 1, &handles[k]); P(nvnQueueFinish)(&q);
+            EXPECT("cached handle survives other lists / command-buffer finalization", k + 17, P(nvnEventGetValue)(&ev));
+        }
+        EXPECT("small bucket still holds a larger individual record", 12288, hostseg_size(CB(&cc), 0, 9000));
+        CB(&cc)->nvn_flag10 = UINT64_C(0xaabbccddeeff0011);
+        P(nvnCommandBufferBeginRecording)(&cc);
+        uint8_t *large = cmd_alloc(CB(&cc), 9000);
+        EXPECT("a 9000-byte record fits after a 4 KB guest grant", 1, CB(&cc)->end - large >= 9000 + OP_RESERVE);
+        EXPECT("a larger host bucket does not replace the real grant size", 4096, CB(&cc)->grant_size);
+        EXPECT("following small overflow still uses the original grant's bucket", HOSTSEG_SMALL, hostseg_size(CB(&cc), 0, 40));
+        EXPECT("host accounting preserves the SDK-reserved +0x10 word", UINT64_C(0xaabbccddeeff0011), CB(&cc)->nvn_flag10);
+        P(nvnCommandBufferEndRecording)(&cc);
+        size_t capacity = 123;
+        EXPECT("segment-size arithmetic rejects SIZE_MAX", 0, hostseg_capacity(CB(&cc), 0, SIZE_MAX, &capacity));
+        EXPECT("rejected capacity does not wrap to a small allocation", 123, capacity);
+        EXPECT("segment-size arithmetic accepts the last roundable size", 1, hostseg_capacity(CB(&cc), 0, SIZE_MAX - 16 - 0xfff, &capacity));
+        EXPECT("last roundable size retains its high bits", 1, capacity > SIZE_MAX - 0x2000);
+        P(nvnCommandBufferFinalize)(&cc); P(nvnMemoryPoolFinalize)(&lp);
+    }
+
     // 5b. Sync must hold the CPU back: first queue 24 copies of 64 MiB to keep the GPU busy, with the last one copying src to dst;
     //     the CPU rewrites src only after the fence wait returns. If the wait is released early, that last copy reads the rewritten src.
     {
@@ -560,6 +605,8 @@ int main(void) {
     EXPECT("WindowInitialize with null first texture", 1, P(nvnWindowInitialize)(&win, &wb));
     P(nvnWindowBuilderSetTextures)(&wb, 2, scp); EXPECT("WindowInitialize succeeds", 1, P(nvnWindowInitialize)(&win, &wb));
     int idx[4];
+    unsigned bi = 0; while (strcmp(nvn_names[bi], "nvnCommandBufferBarrier")) bi++;
+    uint64_t barrier_before = nvn_slot[bi].cnt;
     for (int f = 0; f < 4; f++) {
         P(nvnWindowAcquireTexture)(&win, &s2, &idx[f]);
         for (int b = 0; b < 5; b++) P(nvnCommandBufferBarrier)(&cb, 0);
@@ -567,8 +614,7 @@ int main(void) {
     }
     EXPECT("swapchain rotates 0,1,0,1", 0x0101, idx[0] << 12 | idx[1] << 8 | idx[2] << 4 | idx[3]);
     EXPECT("sync signaled after acquire (0)", 0, P(nvnSyncWait)(&s2, 0));
-    unsigned bi = 0; while (strcmp(nvn_names[bi], "nvnCommandBufferBarrier")) bi++;
-    EXPECT("Barrier count = 4 frames × 5", 20, nvn_slot[bi].cnt);
+    EXPECT("Barrier count = 4 frames × 5", 20, nvn_slot[bi].cnt - barrier_before);
 
     // 6b. Readback: pixel (x,y) = {x*16+y, y*16+x, 0x55, 0xAA} (expected values computed directly from the formula)
     {
