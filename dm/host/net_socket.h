@@ -61,6 +61,13 @@ void dm_net_test_set_discovery_sender(dm_net_test_discovery_sender sender);
 int dm_net_errno(void);
 void dm_net_set_errno(int e);
 int dm_net_socket(int family, int type, int protocol);
+// Local counter descriptors remain available offline; typed helpers return 0 on
+// success while generic Read/Write return the eight-byte transfer size.
+int dm_net_eventfd(uint64_t value, int flags);
+int dm_net_eventfd_read(int fd, uint64_t *value);
+int dm_net_eventfd_write(int fd, uint64_t value);
+long dm_net_read(int fd, void *buffer, unsigned long size);
+long dm_net_write(int fd, const void *buffer, unsigned long size);
 int dm_net_close(int fd);
 void dm_net_finalize(void);
 int dm_net_bind(int fd, const void *addr, unsigned len);
