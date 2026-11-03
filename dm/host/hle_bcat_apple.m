@@ -366,9 +366,10 @@ static uint64_t snapshotBytes(NSString *root,NSDictionary **directoryBytes){
     *directoryBytes=[scopes copy];
     return bytes;
 }
-static void refresh(void) {
+static DmBcatRefresh *refresh(void) {
     pthread_mutex_lock(&refreshLock);
-    if(!startOnline||!activeVersion||refreshRunning||NSDate.date.timeIntervalSince1970-lastRefresh<300){pthread_mutex_unlock(&refreshLock);return;}
+    if(!startOnline||!activeVersion){pthread_mutex_unlock(&refreshLock);return nil;}
+    if(refreshRunning||NSDate.date.timeIntervalSince1970-lastRefresh<300){DmBcatRefresh *job=activeRefresh;pthread_mutex_unlock(&refreshLock);return job;}
     DmBcatRefresh *job=[DmBcatRefresh new];job.status=2;job.result=1;activeRefresh=job;
     refreshRunning=YES;lastRefresh=NSDate.date.timeIntervalSince1970;
     pthread_mutex_unlock(&refreshLock);
@@ -378,6 +379,7 @@ static void refresh(void) {
         pthread_mutex_lock(&refreshLock);if(delivered)latestRoot=selected;refreshRunning=NO;job.status=9;job.result=delivered?0:1;job.bytes=delivered?bytes:0;job.directoryBytes=directoryBytes;pthread_mutex_unlock(&refreshLock);
         fprintf(stderr,"BCAT: %s\n",delivered?"calendar refresh validated; delivery opens use the new snapshot, RomFS overlay remains fixed for this session":"refresh unavailable or invalid; previous validated calendar retained");
     }});
+    return job;
 }
 // Runs on the pre-guest boot thread after the front end is available, never on
 // its UI thread or during rendering. Every new process checks again, even when
@@ -438,12 +440,14 @@ int dm_bcat_copy_delivery(char *out,size_t size){@autoreleasepool{
     if(!root||!out||!size)return 0;NSString *path=[[root stringByAppendingPathComponent:@"files"] stringByAppendingPathComponent:@"DebugUnderPilot/bcat"];
     return strlcpy(out,path.fileSystemRepresentation,size)<size;
 }}
-int dm_bcat_request_sync(void){if(!startOnline||!activeVersion)return 0;refresh();return 1;}
+int dm_bcat_request_sync(void){@autoreleasepool{return refresh()!=nil;}}
 static int refreshStatus(DmBcatRefresh *job,unsigned *result,uint64_t *downloaded){int status=job?(int)job.status:0;if(result)*result=job?job.result:1;if(downloaded)*downloaded=job?job.bytes:0;return status;}
 int dm_bcat_sync_status(unsigned *result,uint64_t *downloaded){pthread_mutex_lock(&refreshLock);int status=refreshStatus(activeRefresh,result,downloaded);pthread_mutex_unlock(&refreshLock);return status;}
 static void *observeDirectory(NSString *directory){
-    if(!dm_bcat_request_sync())return NULL;
-    pthread_mutex_lock(&refreshLock);DmBcatRefresh *job=activeRefresh;
+    // Keep the exact job returned by the refresh request, rather than re-reading
+    // activeRefresh after a scheduling gap that could span a later refresh.
+    DmBcatRefresh *job=refresh();if(!job)return NULL;
+    pthread_mutex_lock(&refreshLock);
     // Completed failure or absence of this directory cannot become a successful
     // scoped request merely because another region's calendar was delivered.
     if(!job||(directory&&job.status==9&&(job.result||!job.directoryBytes[directory]))){pthread_mutex_unlock(&refreshLock);return NULL;}
