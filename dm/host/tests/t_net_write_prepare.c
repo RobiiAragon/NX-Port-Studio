@@ -15,7 +15,8 @@ static void *last_prep;static size_t last_len;
 void dm_fault_hook_register(int (*fn)(void*,int,void*)) {(void)fn;}
 void dm_guest_write_prep_register(void (*fn)(void*,size_t)) {assert(fn&&!prepare_hook);prepare_hook=fn;}
 void dm_guest_write_prepare(void *p,size_t n) {++preps;last_prep=p;last_len=n;if(prepare_hook)prepare_hook(p,n);}
-void dm_guest_host_wait_begin(void) {} void dm_guest_host_wait_end(void) {}
+static void (*wait_begin_hook)(void);
+void dm_guest_host_wait_begin(void) {if(wait_begin_hook)wait_begin_hook();} void dm_guest_host_wait_end(void) {}
 static int wait_sender=-1;static void *wait_destination;static size_t wait_size;static int wait_hits;
 static struct sockaddr_in wait_address;static int wait_udp;
 static const char *wait_bytes="DATA";static size_t wait_count=4;
@@ -55,9 +56,10 @@ static void trial(int udp,int delayed,int invalid) {
 static void stream_partial(void);
 static void invalid_and_empty(void);
 static void socket_options(void);
+static void event_counter_outputs(void);
 int main(void) {setenv("DM_NETWORK","auto",1);setenv("DM_NEXTENDO_ROUTES","/synthetic/profile.tsv",1);
  for(int udp=0;udp<=1;++udp){trial(udp,0,0);trial(udp,1,0);trial(udp,0,1);}
- stream_partial();invalid_and_empty();socket_options();
+ stream_partial();invalid_and_empty();socket_options();event_counter_outputs();
  printf("socket write prepare: %u checks,%u failed\n",checks,failures);return failures!=0;
 }
 static void stream_partial(void) {
@@ -121,4 +123,27 @@ static void socket_option_input(void) {
 static void socket_options(void) {
  for(int kind=0;kind<3;kind++)socket_option_output(kind);
  socket_option_invalid();socket_option_input();
+}
+
+// Event counter copyout must prepare the exact result span on every attempt,
+// including a destination protected again while the guest was blocked.
+static int event_wait_fd; static void *event_wait_output; static size_t event_wait_page;
+static void event_reprotect(void) {
+ wait_begin_hook=NULL; nvn_dirty_protect(event_wait_output,event_wait_page);
+ assert(!dm_net_eventfd_write(event_wait_fd,42));
+}
+static void event_counter_outputs(void) {
+ unsetenv("DM_NETWORK");size_t page=(size_t)getpagesize();
+ uint8_t *mem=mmap(NULL,page*2,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);assert(mem!=MAP_FAILED);
+ nvn_dirty_add_range(mem,page*2);
+ for(int delayed=0;delayed<2;++delayed) {
+  memset(mem,0xa5,page*2);nvn_dirty_protect(mem,page*2);uint64_t stamp=nvn_dirty_now();
+  int fd=dm_net_eventfd(delayed?0:42,0);assert(fd>=0);uint64_t *out=(uint64_t*)(mem+page-4);
+  if(delayed){event_wait_fd=fd;event_wait_output=mem;event_wait_page=page*2;wait_begin_hook=event_reprotect;}
+  unsigned before=preps;CHECK(!dm_net_eventfd_read(fd,out));uint64_t actual;memcpy(&actual,out,8);
+  CHECK(actual==42&&mem[page-5]==0xa5&&mem[page+4]==0xa5);CHECK(preps==before+1&&last_prep==out&&last_len==8);
+  CHECK(nvn_dirty_since(mem,page,stamp)&&nvn_dirty_since(mem+page,page,stamp));
+  CHECK(!dm_net_close(fd));CHECK(!wait_begin_hook);
+ }
+ nvn_dirty_remove_range(mem);CHECK(!munmap(mem,page*2));
 }
