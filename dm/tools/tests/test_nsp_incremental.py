@@ -502,6 +502,19 @@ class SplitShaders(Base):
         k2 = self.go(g)
         self.assertEqual((self.splits, k2), (1, k1))   # the key stored after the tables were written: the second run sees the same inputs
 
+    def test_documentation_does_not_resplit_but_semantic_content_does(self):
+        g = self.own(); note=g.dir/'README.md';note.write_text('I tested the first build.\n');first=self.go(g)
+        for name in ('README.md','README.es.md','NOTES.MD'):
+            doc=g.dir/name;doc.write_text('I checked the next scene.\n');self.redump(doc)
+            self.assertEqual(self.go(g),first);self.assertEqual(self.splits,1)
+        table=g.table('shader_facts_manual.tsv');self.redump(table);self.go(g);self.assertEqual(self.splits,1)
+        # Content, rather than the metadata, controls a profile table's key.
+        before=table.stat();table.write_text('k\t{"manual": 2}\n');os.utime(table,ns=(before.st_atime_ns,before.st_mtime_ns))
+        self.go(g);self.assertEqual(self.splits,2)
+        nsp.set_keys(g,{'mem_used':('0x5800000','')},'After the rewrite');self.go(g);self.assertEqual(self.splits,3)
+        main=self.ex/'ExeFS/main';before=main.stat();data=bytearray(main.read_bytes());data[-1]^=1;main.write_bytes(data);os.utime(main,ns=(before.st_atime_ns,before.st_mtime_ns))
+        self.go(g);self.assertEqual(self.splits,4)
+
     def test_redumped_inputs_invalidate_only_own_split(self):
         for n in self.NAMES[:3]: (self.src / n).write_text(self.table(n))
         captures = [self.ex / 'glslc_capture/a.glslc', self.ex / 'ue_shaders/a.ushaderbytecode']
@@ -609,6 +622,21 @@ class SplitShaders(Base):
 
 
 class RewriteWorkers(Base):
+    def test_documentation_does_not_rewrite_but_patch_and_binary_content_do(self):
+        repo=self.tmp/'repo';tools=repo/'dm/tools';tools.mkdir(parents=True);(tools/'sdk_patches.py').write_text('CUTS = {}\n')
+        patch=self.src/'patches.py';patch.write_text(f'CUTS = {{"{BID2}": []}}\n');g=game.Game(self.src);out=self.tmp/'patched';runs=[]
+        def rewrite(cmd,**kw):
+            runs.append(cmd);(Path(cmd[3])/(cmd[4]+'.patched.bin')).write_bytes(b'original synthetic rewritten module')
+            return mock.Mock(returncode=0,poll=lambda:0)
+        def go():nsp.rewrite(Path(sys.executable),repo,self.ex/'ExeFS',out,{'DM_GAME':str(self.src)},self.tmp/'logs',g)
+        with mock.patch.object(nsp.subprocess,'Popen',side_effect=rewrite),mock.patch.object(nsp.time,'sleep'):
+            go();go();self.assertEqual(len(runs),1)
+            (self.src/'README.md').write_text('I documented this build.\n');self.redump(patch);go();self.assertEqual(len(runs),1)
+            before=patch.stat();patch.write_text(patch.read_text()+'# Updated rule source\n');os.utime(patch,ns=(before.st_atime_ns,before.st_mtime_ns))
+            go();self.assertEqual(len(runs),2)
+            main=self.ex/'ExeFS/main';before=main.stat();data=bytearray(main.read_bytes());data[-1]^=1;main.write_bytes(data);os.utime(main,ns=(before.st_atime_ns,before.st_mtime_ns))
+            go();go();self.assertEqual(len(runs),3)
+
     def test_explicit_workers_override_the_automatic_module_budget(self):
         g = game.Game(self.src)
         for value, expected in (('1', '1'), ('3', '3'), ('', '14')):
@@ -632,6 +660,19 @@ class RewriteWorkers(Base):
 
 
 class LayerShaders(Base):
+    def test_documentation_keeps_vulkan_and_gl_libraries(self):
+        g=game.Game(self.src);logs=self.tmp/'logs';logs.mkdir();runs=[]
+        def translate(cmd,log,**kw):
+            api=Path(cmd[1]).stem.split('_')[0];lib=Path(cmd[-1])/api/f'{api}_shaders.metallib';lib.parent.mkdir(parents=True);lib.write_bytes(b'original fixture library');Path(log).write_text('macosx: 1\n');runs.append(api)
+        with mock.patch.object(nsp,'run',side_effect=translate),mock.patch.object(nsp,'toolchain',return_value=()),mock.patch.object(nsp.shutil,'which',return_value='/glslangValidator'),mock.patch.object(nsp.subprocess,'run',return_value=mock.Mock(stdout='compiler',stderr='')):
+            for api,build in (('vk',nsp.build_vk_shaders),('gl',nsp.build_gl_shaders)):
+                sh=self.tmp/api;roots=[self.ex/'RomFS']+([self.ex/'ExeFS/main'] if api=='gl' else [])
+                def go():build(sys.executable,REPO,roots,sh,{'WORK':str(self.tmp),'PATH':''},logs,g,mac=True)
+                before=len(runs);go();self.assertEqual(len(runs),before+1)
+                for name in ('README.md','README.es.md','NOTES.MD'):
+                    (g.dir/name).write_text('I documented this scene.\n');go();self.assertEqual(len(runs),before+1)
+                config=g.dir/'game.tsv';config.write_text(config.read_text()+'# Updated profile input\n');go();self.assertEqual(len(runs),before+2)
+
     def test_redumped_romfs_and_captures_invalidate_only_own_libraries(self):
         cap = self.ex / 'capture'; cap.mkdir(); (cap / 'shader.bin').write_bytes(b'shader')
         self.derive(); g = game.Game(self.pdir)

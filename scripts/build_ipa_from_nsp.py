@@ -1066,9 +1066,9 @@ def package_key(pkg):   # the shader package's content (file names and bytes): w
     return fingerprint(fs, ('files', [pkg / f for f in fs]))
 
 
-def profile_files(g):   # every file of the game profile (game.tsv and its tables) but the c1 / uniform extent tables, which the iOS shader step makes (chain_tables): no step reads them,
-    out = {name for name, _, _ in CHAIN_TABLES} | {'patches.py'}   # and the rewriter's patches, which only the rewrite step reads (patch_files)
-    return sorted(p for p in g.dir.iterdir() if p.is_file() and p.name not in out)
+def profile_files(g):   # split / NVN / Vulkan / GL inputs: retain every data/code file except the outputs named below; no consumer reads the profile's Markdown notes
+    out = {name for name, _, _ in CHAIN_TABLES} | {'patches.py'}   # generated shader tables, plus patches read only by the rewrite step's own patch_files key
+    return sorted(p for p in g.dir.iterdir() if p.is_file() and p.name not in out and p.suffix.lower() != '.md')
 
 
 # ---- Steps ----
