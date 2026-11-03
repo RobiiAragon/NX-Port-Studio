@@ -143,6 +143,7 @@ int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan
     int saved=t_net_errno,result=!net_discovery_unicast_plan(plan);t_net_errno=saved;return result;
 }
 int dm_net_errno(void) { return t_net_errno; }
+int *dm_net_errno_location(void) { return &t_net_errno; }
 void dm_net_set_errno(int e) { t_net_errno = e; }
 static int net_error(int e) { t_net_errno = e; return -1; }
 static int net_gate(void) { return dm_net_enabled() ? 1 : (net_error(100), 0); }

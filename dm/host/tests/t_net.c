@@ -76,9 +76,13 @@ void *guest_sym(const char *name) {
     return NULL;
 }
 
-static void *hook(const char *name) {
+static void *optional_hook(const char *name) {
     unsigned long bytes; const hle_force_ent *p = (const hle_force_ent *)getsectiondata(&_mh_execute_header, "__DATA", "swforce", &bytes);
     for (unsigned long i = 0; p && i < bytes / sizeof *p; i++) if (!strcmp(p[i].name, name)) return p[i].fn;
+    return NULL;
+}
+static void *hook(const char *name) {
+    void *fn = optional_hook(name); if (fn) return fn;
     fprintf(stderr, "Missing hook: %s\n", name); abort();
 }
 typedef int (*fn_socket)(int, int, int);
@@ -113,6 +117,92 @@ static int native_udp(address *a) {
     int fd = socket(AF_INET, SOCK_DGRAM, 0); struct sockaddr_in in = {.sin_len = sizeof in, .sin_family = AF_INET, .sin_addr.s_addr = a->ip, .sin_port = a->port};
     CHECK(fd >= 0 && bind(fd, (struct sockaddr *)&in, sizeof in) == 0, "native UDP peer bound");
     socklen_t n = sizeof in; CHECK(getsockname(fd, (struct sockaddr *)&in, &n) == 0, "native peer port"); a->port = in.sin_port; return fd;
+}
+// An original synthetic stand-in for an unbound SDK getter. Before the fix,
+// socket HLE updates its own cell while the caller still reads this other one.
+// No original SDK instructions or game data are needed for the control build.
+static __thread int separate_c_errno;
+static int *caller_errno(void) {
+    int *(*getter)(void) = (int *(*)(void))optional_hook("__errno_location");
+    return getter ? getter() : &separate_c_errno;
+}
+typedef struct {
+    pthread_mutex_t mutex; pthread_cond_t changed; int ready, release;
+    int *pointer[2]; int network_value[2], c_value[2], host_value[2];
+} errno_threads;
+typedef struct { errno_threads *state; int index; } errno_thread_arg;
+static void *errno_worker(void *arg) {
+    errno_thread_arg *a = arg; errno_threads *s = a->state; int index = a->index;
+    errno = ERANGE;
+    int *value = GET(int *(*)(void), "__errno_location")();
+    *value = 200 + index;
+    s->network_value[index] = GET(fn_void, "nnsocketGetLastErrno")();
+    GET(void (*)(int), "nnsocketSetLastErrno")(300 + index);
+    s->c_value[index] = *value; s->host_value[index] = errno;
+    pthread_mutex_lock(&s->mutex); s->pointer[index] = value; s->ready++;
+    pthread_cond_broadcast(&s->changed);
+    while (!s->release) pthread_cond_wait(&s->changed, &s->mutex);
+    pthread_mutex_unlock(&s->mutex); return NULL;
+}
+static void c_errno(void) {
+    setenv("DM_NETWORK", "lan", 1);
+    int *value = caller_errno(); *value = 92;
+    int server = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in a = {.sin_len = sizeof a, .sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+    CHECK(server >= 0 && !bind(server, (struct sockaddr *)&a, sizeof a) && !listen(server, 1), "errno fixture binds a real loopback TCP listener");
+    socklen_t size = sizeof a; CHECK(!getsockname(server, (struct sockaddr *)&a, &size), "errno fixture obtains the loopback port");
+    address destination = addr(a.sin_addr.s_addr, 0); destination.port = a.sin_port;
+    int fd = GET(fn_socket, "nnsocketSocket")(2, 1, 6);
+    CHECK(fd >= 0 && GET(fn_fcntl, "nnsocketFcntl")(fd, 4, 0x800) == 0, "errno fixture creates and configures a nonblocking C TCP socket");
+    int result = GET(fn_bind, "nnsocketConnect")(fd, &destination, sizeof destination);
+    CHECK(result == -1 && dm_net_errno() == 115, "real nonblocking connect returns Horizon EINPROGRESS");
+    CHECK(*caller_errno() == 115, "C caller observes EINPROGRESS in the same errno cell");
+    CHECK(*caller_errno() == 11 || *caller_errno() == 115, "C caller retains the asynchronous connect path instead of taking a terminal error");
+    dm_net_pollfd pending = {fd, 4, 0};
+    CHECK(POLL(&pending, 1, 1000) == 1 && (pending.revents & 4), "C errno path registers and receives writable TCP readiness");
+    int error = -1; unsigned n = sizeof error;
+    CHECK(GETOPT(fd, 0xffff, 0x1007, &error, &n) == 0 && error == 0, "asynchronous TCP completion reports actual SO_ERROR");
+    int peer = accept(server, NULL, NULL); CHECK(peer >= 0, "native peer accepts the C connect path");
+    close(peer); CLOSE(fd); close(server);
+    value = GET(int *(*)(void), "__errno_location")();
+    const char *aliases[] = {"___errno_location", "__pthread_errno", "__nnmusl_ErrnoLocation"};
+    for (unsigned i = 0; i < sizeof aliases / sizeof aliases[0]; i++)
+        CHECK(GET(int *(*)(void), aliases[i])() == value, "every verified SDK errno getter alias returns the same full-width pointer");
+    CHECK(value == dm_net_errno_location(), "C getter returns the backend's per-thread cell");
+    errno = ERANGE; *value = 71;
+    CHECK(GET(fn_void, "nnsocketGetLastErrno")() == 71 && GET(fn_void, "_ZN2nn6socket12GetLastErrnoEv")() == 71,
+          "writes through the C pointer reach both socket error getters");
+    CHECK(errno == ERANGE, "guest pointer writes and getter calls do not modify Darwin errno");
+    GET(void (*)(int), "nnsocketSetLastErrno")(73);
+    CHECK(*value == 73 && errno == ERANGE, "C socket setter updates the C pointer without changing Darwin errno");
+    CHECK(SOCKET(28, 1, 6) == -1 && *value == 97, "family failure exposes Horizon EAFNOSUPPORT rather than Darwin's numeric value");
+    CHECK(GET(int *(*)(void), "__errno_location")() == value, "errno pointer remains stable after a failed operation");
+    *value = 74; fd = SOCKET(2, 2, 17);
+    CHECK(fd >= 0 && *value == 74 && CLOSE(fd) == 0 && *value == 74, "successful socket operations retain the previous guest errno");
+    unsetenv("DM_NETWORK");
+    CHECK(SOCKET(2, 1, 6) == -1 && *value == 100 && GET(fn_void, "_ZN2nn6socket12GetLastErrnoEv")() == 100,
+          "offline network failure updates C and C++ getters to actual ENETDOWN");
+    fd = GET(int (*)(unsigned long,int), "_ZN2nn6socket7EventFdEmNS0_12EventFdFlagsE")(0, 4);
+    unsigned long counter = 55;
+    CHECK(fd >= 0 && GET(int (*)(int,unsigned long *), "_ZN2nn6socket11EventFdReadEiPm")(fd, &counter) == -1 && *value == 11 &&
+          counter == 55 && GET(fn_void, "_ZN2nn6socket12GetLastErrnoEv")() == 11,
+          "offline event-counter EAGAIN is not replaced by a fabricated ENETDOWN getter");
+    CHECK(CLOSE(fd) == 0 && *value == 11, "offline event-counter close preserves actual errno");
+    *value = 75; errno = ERANGE;
+    CHECK(GET(fn_void, "_ZN2nn6socket12GetLastErrnoEv")() == 75 && errno == ERANGE, "offline getter retains C writes and host errno");
+    errno_threads s = {.mutex = PTHREAD_MUTEX_INITIALIZER, .changed = PTHREAD_COND_INITIALIZER};
+    errno_thread_arg args[2] = {{&s,0},{&s,1}}; pthread_t threads[2];
+    for (int i = 0; i < 2; i++) CHECK(!pthread_create(&threads[i], NULL, errno_worker, &args[i]), "errno worker starts");
+    pthread_mutex_lock(&s.mutex); while (s.ready < 2) pthread_cond_wait(&s.changed, &s.mutex);
+    CHECK(s.pointer[0] != s.pointer[1] && s.pointer[0] != value && s.pointer[1] != value, "live guest threads have independent errno addresses");
+    for (int i = 0; i < 2; i++) {
+        CHECK(s.network_value[i] == 200 + i && s.c_value[i] == 300 + i && *s.pointer[i] == 300 + i, "each thread observes both directions through its own cell");
+        CHECK(s.host_value[i] == ERANGE, "each worker keeps Darwin errno separate");
+    }
+    CHECK(*value == 75, "worker errors never replace the main guest thread's errno");
+    s.release = 1; pthread_cond_broadcast(&s.changed); pthread_mutex_unlock(&s.mutex);
+    for (int i = 0; i < 2; i++) CHECK(!pthread_join(threads[i], NULL), "errno worker exits normally");
+    pthread_cond_destroy(&s.changed); pthread_mutex_destroy(&s.mutex);
 }
 static void offline(void) {
     unsetenv("DM_NETWORK");
@@ -425,7 +515,7 @@ int main(int argc, char **argv) {
     unsetenv("DM_ACCOUNT_TRACE");
     unsetenv("DM_NET_TRACE");
     struct sigaction sa = {.sa_handler = sigpipe}; sigemptyset(&sa.sa_mask); sigaction(SIGPIPE, &sa, NULL);
-    offline(); nifm(); nifm_trace(); udp(); concurrency(); tcp(); errors_and_resolver(); resolver_diagnostics(); discovery_peer(); poll_diagnostics();
+    c_errno(); offline(); nifm(); nifm_trace(); udp(); concurrency(); tcp(); errors_and_resolver(); resolver_diagnostics(); discovery_peer(); poll_diagnostics();
     if (argc == 2 && !strcmp(argv[1], "--no-broadcast")) puts("broadcast test skipped explicitly (requires local-network permission for this test executable)"); else broadcast();
     GET(fn_vvoid, "_ZN2nn6socket8FinalizeEv")();
     CHECK(atomic_load(&waits) > 0 && atomic_load(&wait_balance) == 0, "all host waits yield and restore guest execution");
