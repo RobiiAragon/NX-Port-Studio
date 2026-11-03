@@ -11,6 +11,7 @@ import io
 import json
 import os
 import shlex
+import struct
 import subprocess
 import tempfile
 import time
@@ -23,7 +24,9 @@ PIN = 'xI+atR6VesrCH89ZDZD4t3WQLcYOFEhk5F0HLMzgWk4='
 XML = b'<setting><original-fixture/></setting>'
 
 
-def run():
+def run(title='0100f8f0000a2000'):
+    s3=title=='0100c2500fc20000'
+    version='11.3.0' if s3 else '5.5.2'
     with tempfile.TemporaryDirectory(prefix='bcat-launch-') as temp:
         root = Path(temp).resolve()
         crypto = subprocess.check_output([os.environ.get('PYTHON', 'python3'), str(REPO / 'dm/tools/apple_crypto.py'), 'macos'], text=True).strip()
@@ -37,8 +40,8 @@ def run():
                 return datetime.fromtimestamp(value, timezone.utc).isoformat().replace('+00:00', 'Z')
             payload = json.dumps({'document_type': 'game_catalog', 'schema_version': 1, 'revision': 4,
                                  'issued_at': fmt(now - 60), 'expires_at': fmt(now + 3600),
-                                 'games': [{'title_ids': ['0100f8f0000a2000'], 'enabled': enabled,
-                                            'required_capabilities': ['versions.exact.v1'], 'versions': {'policy': 'exact', 'accepted': ['5.5.2']}}]}, separators=(',', ':')).encode()
+                                 'games': [{'title_ids': [title], 'enabled': enabled,
+                                            'required_capabilities': ['versions.exact.v1'], 'versions': {'policy': 'exact', 'accepted': [version]}}]}, separators=(',', ':')).encode()
             (root / 'payload').write_bytes(payload)
             sig = subprocess.check_output([openssl, 'pkeyutl', '-sign', '-rawin', '-keyform', 'DER', '-inkey', str(root / 'key.der'), '-in', str(root / 'payload')])
             return json.dumps({'key_id': 'catalog-key-1', 'payload': base64.b64encode(payload).decode(), 'signature': base64.b64encode(sig).decode()}).encode()
@@ -47,14 +50,25 @@ def run():
         (root / 'static.xml').write_bytes(XML)
         (root / 'dummy.txt').write_bytes(b'0')
         names = ['coopdata/CoopSetting.byaml', 'vsdata/VSSetting_0.byaml', 'vsdata/VSSetting_1.byaml', 'fesdata/Festival.byaml', 'fesdata/HapTexture.bfres', 'fesdata/IconTexture.bfres', 'fesdata/PanelTexture.bfres']
+        if s3:
+            names=[f'{region}/{name}' for region in ('ap-default','eu-default','jp-default','us-default')
+                   for name in ('base.pack.zs.enc','bh.pack.zs.enc','wa.pack.zs.enc','wb.pack.zs.enc','wc.pack.zs.enc','summary.yml')]
         for marker in [1, 2]:
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
                 for name in names:
-                    data = (b'YB\x02\0' + bytes(27) if name.endswith('.byaml') else b'FRES' + bytes(27)) + bytes([marker])
+                    if s3:
+                        # Only a synthetic opaque envelope, not an encrypted game payload.
+                        data=(b'FestID: ORIGINAL-1\nFestResourceID: original-001\nFestResourceRevision: abcdef\n'
+                              if name.endswith('.yml') else struct.pack('<I',17)+bytes(31)+bytes([marker]))
+                    else:
+                        data = (b'YB\x02\0' + bytes(27) if name.endswith('.byaml') else b'FRES' + bytes(27)) + bytes([marker])
                     archive.writestr(name, data)
             (root / f'v{marker}.zip').write_bytes(buf.getvalue())
         (root / 'corrupt.zip').write_bytes(b'not a ZIP')
+        scope = 'us-default' if s3 else 'vsdata'
+        with zipfile.ZipFile(root / 'v1.zip') as archive:
+            expected_scope_bytes = sum(f.file_size for f in archive.infolist() if f.filename.startswith(scope + '/'))
         source = SOURCE.read_text()
         old_xml = '8d8d21a93dce2f8eab1659a3bf5cdca10f61df83d50bc0a34784b1629dd215fa'
         assert source.count(PIN) == source.count(old_xml) == 1
@@ -78,12 +92,17 @@ def run():
                 runtime_env[option] = runtime_env.get(option, '') + ':halt_on_error=1'
         cache = root / 'cache'
         def launch(mode, expected, *, use_cache=cache):
-            completed = subprocess.run([str(binary), str(root), mode, str(use_cache)], capture_output=True, text=True, timeout=20, env=runtime_env)
+            completed = subprocess.run([str(binary), str(root), mode, str(use_cache),title], capture_output=True, text=True, timeout=20, env=runtime_env)
             assert completed.returncode == 0, (mode, completed.returncode, completed.stderr)
             value = json.loads(completed.stdout)
             assert value['firstCalendarMarker'] == expected, (mode, value, completed.stderr)
+            assert not value['acceptedMissingScope'] and not value['acceptedInvalidScope'] and value['scopeExtraRequests'] == (2 if mode == 'scoped-refresh' else 0), (mode, value)
+            if mode in ('v1', 'v2', '304', 'noetag', 'scoped-refresh'):
+                assert value['hasScopedObserver'] and value['scopeStatus'] == 9 and value['scopeResult'] == 0 and value['scopeBytes'] == expected_scope_bytes, (mode, value)
+            else:
+                assert not value['hasScopedObserver'] and value['scopeBytes'] == 0, (mode, value)
             if mode != 'offline':
-                assert value['catalogRequests'] == 1, (mode, value)
+                assert value['catalogRequests'] == (2 if mode == 'scoped-refresh' else 1), (mode, value)
             else:
                 assert value['requests'] == 0 and not value['freshAttempt'], value
             print(mode, json.dumps(value, sort_keys=True), flush=True)
@@ -94,6 +113,8 @@ def run():
         assert again['result'] == 0 and again['conditionalRequests'] == 1
         changed = launch('v2', 2)
         assert changed['result'] == 0 and changed['conditionalRequests'] == 1
+        scoped = launch('scoped-refresh', 1, use_cache=root / 'scoped-cache')
+        assert scoped['asyncScopePassed'] and scoped['archiveRequests'] == 2, scoped
         plain_cache = root / 'cache-without-etag'
         for _ in range(2):
             plain = launch('noetag', 1, use_cache=plain_cache)
@@ -110,7 +131,7 @@ def run():
             assert {str(p.relative_to(cache)): hashlib.sha256(p.read_bytes()).hexdigest() for p in cache.rglob('*') if p.is_file()} == inventory
         launch('offline', 2)
         launch('offline', 0, use_cache=root / 'empty-cache')
-        process = subprocess.Popen([str(binary), str(root), 'interrupt', str(cache)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=runtime_env)
+        process = subprocess.Popen([str(binary), str(root), 'interrupt', str(cache),title], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=runtime_env)
         try:
             deadline = time.monotonic() + 5
             while not (root / 'interrupt-ready').exists():
@@ -125,8 +146,9 @@ def run():
             if process.poll() is None:
                 process.kill()
                 process.communicate(timeout=3)
-        print('BCAT launch refresh: 12 new-process scenarios passed; first open/fallback/304/no-ETag/shared deadline/interruption validated')
+        print(f'BCAT launch refresh {title}: 13 new-process scenarios passed; first open/scoped async refresh/fallback/304/no-ETag/shared deadline/interruption validated')
 
 
 if __name__ == '__main__':
     run()
+    run('0100c2500fc20000')
