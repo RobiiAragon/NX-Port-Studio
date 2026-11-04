@@ -10,6 +10,7 @@
 #endif
 #include <CommonCrypto/CommonDigest.h>
 #include "nextendo_account.h"
+#include "account_local.h"
 #include "account_trace.h"
 #import "nextendo_api_apple.h"
 #include "net_socket.h"
@@ -167,6 +168,17 @@ static void social_remember(DmNextendoCredential *credential, uint64_t generatio
     if (generation == socialGeneration) socialCredential = credential;
     pthread_mutex_unlock(&socialCredentialLock);
 }
+bool dm_nextendo_account_cached_nickname(char nickname[33]) { @autoreleasepool {
+    if(!nickname)return false;
+    memset(nickname,0,33);social_lock();
+    if(socialCredential) {
+        NSTimeInterval now=NSDate.date.timeIntervalSince1970;
+        if(!isfinite(now) || !isfinite(socialCredential.expiry) || socialCredential.expiry<=now)social_reset_locked();
+    }
+    const char *name=socialCredential.username.UTF8String;
+    BOOL copied=name && *name && dm_account_copy_nickname(nickname,name);
+    pthread_mutex_unlock(&socialCredentialLock);return copied;
+} }
 NSString *dm_nextendo_api_passive_bearer(uint64_t *generation) {
     if (!generation) return nil;
     *generation = 0;

@@ -55,3 +55,5 @@ While investigating unavailable credentials, I reproduced and corrected [game si
 I also added [read-versus-decoder rejection metadata](../../../docs/reference/services.md#account-credential-acquisition-fails-without-identifying-read-or-decode-rejection), tested with fake Security and synthetic providers. I have not captured the game's resulting reason or qualified an online session with it.
 
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition or tested its correction in the game; this result does not qualify the lobby return or establish its cause.
+
+I reproduced [the local nickname hook ignoring a validated identity snapshot](../../../docs/reference/services.md#local-nickname-ignores-an-already-validated-account-snapshot) with synthetic profiles and real HLE hooks. I have not tested the change in this game or claimed that its current in-game name has changed.
