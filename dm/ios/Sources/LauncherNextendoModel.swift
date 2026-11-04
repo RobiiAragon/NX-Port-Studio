@@ -34,6 +34,7 @@ import Combine
     private var requestTask: Task<Void, Never>?
     private var cancellationTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
+    private var renewalTask: Task<Void, Never>?
     private var operationID = UUID()
 
     init(bundle: Bundle = .main, preferences: UserDefaults = .standard,
@@ -79,14 +80,31 @@ import Combine
         do {
             let summary = try await accountService.currentAccount()
             if operation == operationID, !Task.isCancelled { account = summary }
+            let renewed = try await accountService.prepareGameAccount()
+            if operation == operationID, !Task.isCancelled { account = renewed; accountError = nil; scheduleRenewal() }
         } catch {
-            if operation == operationID { accountError = (error as? NextendoError) ?? .requestFailed }
+            if operation == operationID {
+                accountError = (error as? NextendoError) ?? .requestFailed
+                if accountError?.permitsBackgroundRetry == true { scheduleRenewal(retry: true) }
+            }
         }
         isLoading = false
         catalog = await catalogService.snapshot()
         routesState = mobileNextendoRoutesState()
         if catalog?.freshness() != .fresh { await refreshCatalog() }
         await prepareServices()
+    }
+    private func scheduleRenewal(retry: Bool = false) {
+        renewalTask?.cancel(); renewalTask = nil
+        guard let check = account?.renewalCheckAt else { return }
+        let delay = retry ? 300 : max(30,check.timeIntervalSinceNow)
+        renewalTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self else { return }
+            await self.cancellationTask?.value
+            guard !Task.isCancelled else { return }
+            await self.load()
+        }
     }
     func prepareServices() async {
         guard !isPreparingServices, routesState != 0 else { return }
@@ -120,6 +138,7 @@ import Combine
     }
     func signIn() {
         guard !accountBusy else { return }
+        renewalTask?.cancel(); renewalTask = nil
         let configuration: NextendoOAuthConfiguration
         do { configuration = try self.configuration() }
         catch { accountError = (error as? NextendoError) ?? .invalidConfiguration; return }
@@ -143,6 +162,7 @@ import Combine
                 let summary = try await accountService.finishSignIn(request.id, forGames: true)
                 guard operation == operationID, !Task.isCancelled else { return }
                 account = summary
+                scheduleRenewal()
             } catch is CancellationError { }
             catch { if operation == operationID { accountError = (error as? NextendoError) ?? .requestFailed } }
             guard operation == operationID else { return }
@@ -189,6 +209,7 @@ import Combine
     func updateRoutes(_ value: Int) { routesState = Int32(value) }
     func signOut() async {
         guard !isSigningOut else { return }
+        renewalTask?.cancel(); renewalTask = nil
         cancel(); isSigningOut = true; accountError = nil
         await cancellationTask?.value
         do { try await accountService.signOut(); account = nil }
@@ -201,6 +222,6 @@ import Combine
     private func configuration() throws -> NextendoOAuthConfiguration {
         // Match the publisher's registered grant used by the verified desktop flow.
         // Consent remains on Nextendo's own website; this app never adds a secret.
-        try NextendoOAuthConfiguration(clientID: clientID, scopes: ["identity", "friends"])
+        try NextendoOAuthConfiguration(clientID: clientID, scopes: ["identity", "friends", "game.matchmaking"])
     }
 }

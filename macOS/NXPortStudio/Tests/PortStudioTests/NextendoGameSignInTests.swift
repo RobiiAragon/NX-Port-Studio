@@ -250,6 +250,85 @@ final class NextendoGameSignInTests: XCTestCase {
         XCTAssertEqual(paths.count,6)
     }
     func testRequestedScopesMatchReviewedProviderContract() {
-        XCTAssertEqual(StudioModel.nextendoScopes,["identity","friends"])
+        XCTAssertEqual(StudioModel.nextendoScopes,["identity","friends","game.matchmaking"])
+    }
+    func testDocumentedSignInRetainsTheRotatingRefreshGrant() async throws {
+        let now = Date(), store = GameSignInStore(previous(now: now))
+        var responses = try replies(now: now)
+        responses[0] = .init(data: Data(#"{"access_token":"synthetic-oauth-grant","refresh_token":"synthetic-refresh-grant","token_type":"Bearer","scope":"identity friends game.matchmaking","expires_in":3600}"#.utf8),statusCode: 200)
+        let http = GameSignInHTTP(responses), model = model(store: store,http: http,now: now)
+        model.beginNextendoSignIn(); await model.nextendoAuthorizationTask?.value
+        let saved = try XCTUnwrap(store.load())
+        let record = try XCTUnwrap(JSONSerialization.jsonObject(with: saved.encodedForStorage()) as? [String:Any])
+        let renewal = try XCTUnwrap(record["renewal"] as? [String:Any],"The documented refresh credential must survive the game-proof exchange")
+        XCTAssertEqual(renewal["refresh_token"] as? String,"synthetic-refresh-grant")
+        XCTAssertEqual(renewal["client_id"] as? String,"nxnative-own-test-client")
+        XCTAssertEqual(saved.tokenKind,.nex)
+    }
+    func testInitialOAuthMayOmitUnchangedScopesButCannotEscalateThem() async throws {
+        for escalated in [false,true] {
+            let now = Date(), old = previous(now:now), store = GameSignInStore(old)
+            var token: [String:Any] = ["access_token":"synthetic-access","refresh_token":"synthetic-refresh","token_type":"Bearer","expires_in":3600]
+            if escalated { token["scope"] = "identity friends game.matchmaking presence" }
+            var responses = try replies(now:now)
+            responses[0] = .init(data:try JSONSerialization.data(withJSONObject:token),statusCode:200)
+            let http = GameSignInHTTP(responses), model = model(store:store,http:http,now:now)
+            model.beginNextendoSignIn(); await model.nextendoAuthorizationTask?.value
+            let saved = try XCTUnwrap(store.load()), paths = await http.requestedPaths()
+            if escalated {
+                XCTAssertEqual(saved,old)
+                XCTAssertEqual(store.writeCount(),0)
+                XCTAssertEqual(paths.count,1)
+                XCTAssertNotNil(model.nextendoAccountError)
+            } else {
+                XCTAssertEqual(saved.renewal?.scopes,["identity","friends","game.matchmaking"])
+                XCTAssertEqual(saved.tokenKind,.nex)
+                XCTAssertNil(model.nextendoAccountError)
+            }
+            model.nextendoRenewalTask?.cancel()
+        }
+    }
+    func testHTTPFailureIdentifiesTheActualAccountStepWithoutTheBody() async throws {
+        let now = Date()
+        for (index,step) in [NextendoAccountStep.codeExchange,.identity,.gameProof].enumerated() {
+            var responses = try replies(now: now)
+            responses[index] = .init(data:Data("DO_NOT_DISPLAY_BODY_OR_CREDENTIAL".utf8),statusCode:403)
+            let http = GameSignInHTTP(responses), callback = GameSignInCallback()
+            let service = NextendoAccountService(store:GameSignInStore(previous(now:now)),http:http,makeReceiver:{ callback },now:{ now })
+            let request = try await service.beginSignIn(configuration:.init(clientID:"nxnative-own-test-client"))
+            let state = URLComponents(url:request.authorizationURL,resolvingAgainstBaseURL:false)!.queryItems!.first { $0.name == "state" }!.value!
+            await callback.resolve(URL(string:"http://127.0.0.1:41923/callback?code=synthetic&state="+state)!)
+            do { _ = try await service.finishSignIn(request.id,forGames:true); XCTFail("HTTP403 accepted") }
+            catch {
+                XCTAssertEqual(error as? NextendoError,.accountHTTPStatus(step,403))
+                XCTAssertFalse(error.localizedDescription.contains("DO_NOT_DISPLAY"))
+            }
+        }
+    }
+    func testExpiredIdentityStaysVisibleWhileRenewingAndAfterRenewalIsRefused() async throws {
+        for status in [200,403] {
+            let now = Date(timeIntervalSince1970:floor(Date().timeIntervalSince1970))
+            let grant = NextendoRenewalGrant(clientID:"nxnative-own-test-client",accessToken:"synthetic-old-access",refreshToken:"synthetic-old-refresh",expiresAt:now.addingTimeInterval(-1),scopes:["identity","friends","game.matchmaking"])
+            let old = NextendoSession(tokenKind:.nex,token:proof(42,"synthetic_new",now:now.addingTimeInterval(-7200)),identity:.init(pid:42,username:"synthetic_new"),scopes:[],createdAt:now.addingTimeInterval(-10800),expiresAt:now.addingTimeInterval(-3600)).withRenewal(grant)
+            let store = GameSignInStore(old)
+            var responses = try replies(now:now)
+            responses[0] = .init(data:Data(#"{"access_token":"synthetic-new-access","refresh_token":"synthetic-new-refresh","token_type":"Bearer","expires_in":3600}"#.utf8),statusCode:status)
+            let http = GameSignInHTTP(responses,holdAt:0), model = model(store:store,http:http,now:now)
+            let loading = Task { await model.reloadNextendoAccount() }
+            try await waitUntilHeld(http)
+            XCTAssertEqual(model.nextendoAccount?.identity?.pid,42)
+            XCTAssertTrue(model.nextendoAccount?.isExpired == true)
+            await http.release(); await loading.value
+            XCTAssertEqual(model.nextendoAccount?.identity?.pid,42)
+            if status == 200 {
+                XCTAssertTrue(model.nextendoAccount?.hasNEXCredential == true)
+                XCTAssertNil(model.nextendoAccountError)
+            } else {
+                XCTAssertTrue(model.nextendoAccount?.isExpired == true)
+                XCTAssertNotNil(model.nextendoAccountError)
+                XCTAssertEqual(try store.load(),old)
+            }
+            model.nextendoRenewalTask?.cancel()
+        }
     }
 }

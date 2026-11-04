@@ -54,6 +54,7 @@ jobs:
           dm.tools.tests.test_nextendo_local_peers
           dm.tools.tests.test_env_switches
           dm.tools.tests.test_nextendo_patches
+          dm.tools.tests.test_nextendo_renewal
           dm.tools.tests.test_dotnet_environment
           dm.tools.tests.test_nsp_nsz
           dm.tools.tests.test_nso_syms
