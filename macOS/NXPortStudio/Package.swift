@@ -7,7 +7,8 @@ let package = Package(
     products: [.executable(name: "NXPortStudio", targets: ["PortStudio"])],
     targets: [
         .target(name: "CLANRelay", publicHeadersPath: "include"),
-        .target(name: "PortCore", dependencies: ["CLANRelay"]),
+        .target(name: "CSaveArchive", publicHeadersPath: "include", linkerSettings: [.linkedLibrary("archive")]),
+        .target(name: "PortCore", dependencies: ["CLANRelay", "CSaveArchive"]),
         .executableTarget(name: "PortStudio", dependencies: ["PortCore"], resources: [.copy("Resources")]),
         .testTarget(name: "PortCoreTests", dependencies: ["PortCore"]),
         .testTarget(name: "PortStudioTests", dependencies: ["PortStudio", "PortCore"])

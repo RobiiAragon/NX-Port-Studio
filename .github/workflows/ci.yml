@@ -69,6 +69,14 @@ jobs:
           tools.maintainers.test_prepare_export
       - name: Display geometry and build policy / synthetic modules
         run: make -C dm/host/tests display display-sanitize
+      - name: JKSV ZIP interoperability and atomic save restore
+        run: |
+          python3 dm/host/tests/test_save_archives.py
+          DM_SAVE_ARCHIVE_SANITIZE=1 python3 dm/host/tests/test_save_archives.py
+      - name: Native save controls / both Apple SDKs
+        run: |
+          xcrun swiftc -typecheck -swift-version 5 -target arm64-apple-macos26.0 -import-objc-header dm/host/save_archive.h dm/mac/Launcher.swift dm/ios/Sources/LauncherSettings.swift dm/ios/Sources/LauncherRow.swift dm/ios/Sources/LauncherLocalization.swift dm/ios/Sources/LauncherSavesView.swift
+          xcrun --sdk iphoneos swiftc -typecheck -swift-version 5 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" -target arm64-apple-ios26.0 -import-objc-header dm/ios/Sources/DmIOS-Bridging-Header.h dm/ios/Sources/LauncherLocalization.swift dm/ios/Sources/LauncherSavesView.swift
       - name: Personal Mii database / synthetic records and sanitizers
         run: make -C dm/host/tests GAME=0100152000022000 mii mii-sanitize
   networking:

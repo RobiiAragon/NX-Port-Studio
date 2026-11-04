@@ -37,6 +37,20 @@ int main(void){@autoreleasepool{
     uint64_t done=g_done;gw_commit(done+1000);
     CHECK("a running submission's wide write is seen by the next",gw_live(base+0x41000,base+0x41010));
     CHECK("and not elsewhere",!gw_live(ub,ub+0x100));
+    // Adapted from seedds/nxnative c8521eeb: keep query and timestamp reports beyond the former fixed tables.
+    // Real synthetic storage keeps the pre-fix fallback readable too, so failures are assertions rather than invalid-address crashes.
+    {static uint64_t rec[2]={1,0},queries[9000][2],timestamps[300][2];uint64_t x=~0ull;
+    for(int i=0;i<9000;i++){queries[i][0]=i+1;rc_note((uint64_t)&queries[i][0],2);}
+    rc_note((uint64_t)&rec[0],1);
+    CHECK("a timestamp after 9000 query reports counts as zero",rc_value((uint64_t)&rec[0],&x)&&x==0);
+    CHECK("unreported counter still reads its synthetic storage",rc_value((uint64_t)&rec[1],&x)&&x==0);
+    CHECK("early and late occlusion reports both stay unknown",!rc_value((uint64_t)&queries[0][0],&x)&&!rc_value((uint64_t)&queries[8999][0],&x));
+    for(int i=0;i<300;i++){timestamps[i][0]=1;rc_note((uint64_t)&timestamps[i][0],1);}
+    CHECK("early and late timestamps survive more than 256 reports",rc_value((uint64_t)&timestamps[0][0],&x)&&x==0&&rc_value((uint64_t)&timestamps[299][0],&x)&&x==0);
+    rc_note((uint64_t)&timestamps[0][0],1);
+    g_rc_npend=0;
+    CHECK("submission reset forgets pending timestamp values",rc_value((uint64_t)&rec[0],&x)&&x==1);
+    CHECK("occlusion reports remain unknown across submissions",!rc_value((uint64_t)&queries[8999][0],&x));}
     pend_reset();
     printf("t_sbw: %d checks, %d failed\n",checks,failed);return failed!=0;
 }}

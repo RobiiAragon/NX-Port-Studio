@@ -1,6 +1,7 @@
 // iOS App entry: set the environment (game files, saves, shader libraries), write the host log to Documents/log.txt, create the window (front_ios.m), then run the host's dm_main on a big-stack thread.
 // The game files (RomFS) ship inside the App at <App>/romfs; Documents/romfs.img (one image, scripts/push_romfs.sh; its name in any letter case) or a Documents/romfs folder is also accepted (lets you swap them without reinstalling). The DLC folder aoc/ likewise: Documents/aoc, else <App>/aoc.
 #import <UIKit/UIKit.h>
+#include "../../host/save_archive.h"
 #import <Metal/Metal.h>
 #include <pthread.h>
 #include <signal.h>
@@ -15,6 +16,7 @@
 #include "romfs_image.h"
 #include "romfs_identity.h"
 #include "player_env.h"
+#include "LauncherNextendoProfiles.h"
 #ifndef DM_PLAYER_BUILD
 #define DM_PLAYER_BUILD 0
 #endif
@@ -180,6 +182,12 @@ static int boot_env(void) {
     fprintf(stderr, "boot: game files %s\n", romfs.fileSystemRepresentation);
     setenv("DM_ROMFS", romfs.fileSystemRepresentation, 0);
     setenv("DM_SAVE", [doc stringByAppendingPathComponent:@"save"].fileSystemRepresentation, 0);
+    // Apply queued ZIPs before any guest preload can mount a save. If a
+    // restore fails, retain its ZIP and show the launcher so it can be canceled.
+    NSString *saveRoot=[[NSString stringWithUTF8String:getenv("DM_SAVE")] stringByDeletingLastPathComponent];
+    dm_save_archive_operation restored={0};
+    int restore_error=dm_save_archive_has_pending(saveRoot.fileSystemRepresentation)?dm_save_archive_apply_pending(saveRoot.fileSystemRepresentation,strtoull(DM_GAME_ID,NULL,16),&restored):0;
+    if(restore_error)fprintf(stderr,"[RED] boot: save import: %s (published=%d)\n",dm_save_archive_error(restore_error),restored.installed);
     // Apps without an App Group cannot access another port's private Documents.
     // A build-time personal snapshot seeds this app once; later imports persist.
     setenv("DM_MII_DATABASE", [doc stringByAppendingPathComponent:@"miis.dmii"].fileSystemRepresentation, 0);
@@ -187,8 +195,7 @@ static int boot_env(void) {
     if ([fm fileExistsAtPath:miiSeed]) setenv("DM_MII_SEED", miiSeed.fileSystemRepresentation, 0);
     setenv("DM_TEMP", [doc stringByAppendingPathComponent:@"temp"].fileSystemRepresentation, 0);
     NSString *dm = [res stringByAppendingPathComponent:@"dm"];
-    NSString *nextendoRoutes = [dm stringByAppendingPathComponent:@"nextendo/routes.tsv"];
-    if ([fm fileExistsAtPath:nextendoRoutes]) setenv("DM_NEXTENDO_ROUTES", nextendoRoutes.fileSystemRepresentation, 0);
+    dm_launcher_configure_nextendo_routes(dm.fileSystemRepresentation);
     setenv("DM_NVN_SHMAP", [dm stringByAppendingPathComponent:@"shader_map.tsv"].fileSystemRepresentation, 0);
     setenv("DM_MSL_DIR", [res stringByAppendingPathComponent:@"msl"].fileSystemRepresentation, 0);
     setenv("DM_FONT_DIR", [dm stringByAppendingPathComponent:@"font"].fileSystemRepresentation, 0);   // Shared-font stand-ins (standard.ttf / nintendo_ext.ttf): iOS lacks the macOS font path
@@ -205,7 +212,7 @@ static int boot_env(void) {
     g_argv[0] = strdup("dmhost"); g_argv[1] = strdup(dm.fileSystemRepresentation); g_argc = 2;
     // A signed online variant must be selected after the launcher applies its
     // final mode. Other games retain parallel early loading.
-    if (![fm fileExistsAtPath:[dm stringByAppendingPathComponent:@"nextendo/main.fixups.tsv"]])
+    if (!dm_save_archive_has_pending(saveRoot.fileSystemRepresentation) && ![fm fileExistsAtPath:[dm stringByAppendingPathComponent:@"nextendo/main.fixups.tsv"]])
         dm_host_preload_start(g_argc, g_argv);
     return 1;
 }

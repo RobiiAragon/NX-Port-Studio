@@ -12,7 +12,9 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC6:** I reached Splatoon 2’s online lobby and Territorial matchmaking queue on Mac, and checked continued frame progression when the game loses focus or is covered. I distinguish this from a completed match, my verified Smash arena round and historical Mario Kart LAN tests. Splatoon character colors and the original firmware Mii editor remain open. [Candidate notes](docs/releases/1.6.0-rc.6.md).
+> **1.6.0 RC8:** I added JKSV save ZIP transfer in Studio and native Apple port launchers, with retained previous saves and safe cold-launch imports on iOS. My earlier game/network results keep their documented scope. [Candidate notes and test limits](docs/releases/1.6.0-rc.8.md).
+
+I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 
 ## Inside Studio
 
@@ -57,7 +59,7 @@ These mechanisms have different validation milestones. They do not establish tha
 | macOS Studio | I ran the build, configuration, process handling, resource import and Xcode signing tests successfully. | Apple silicon; the Studio interface requires macOS 14+. Individual games can require newer macOS/Metal features. |
 | Mac ↔ Switch LAN | I **completed a full Mario Kart 8 Deluxe 3.0.5 race** between an earlier Mac build and my physical Switch. | Historical baseline for matching versions and the game's LAN mode. I have not repeated that race with the current candidate. |
 | LDN bridge | On October 31, I tested Mario Kart 3.0.5 LAN and LDN play across native macOS/iOS ports and my physical Switch. I also ran the protocol and peer fixtures successfully. | Hardware result from the pre-sync ports; I still need a fresh game test with the new engine. IP LDN requires a compatible console module; built-in LAN is a separate path. |
-| Mario Kart 8 Deluxe 4.0.1 | I have a current private Mac candidate and measured its primary-process fullscreen pacing. | My 3.0.5 LAN/LDN results above remain historical. I have not completed a Nextendo race or requalified physical LAN/LDN with the 4.0.1 candidate. |
+| Mario Kart 8 Deluxe 4.0.1 | I completed **one Worldwide Nextendo race on Mac**, through the Excitebike Arena results, with my current RC7 host. [Exact build and limits](dm/games/0100152000022000/README.md#nextendo-race-validation-2026-11-02). | Other modes and iOS online remain unqualified. I have not repeated physical LAN/LDN with 4.0.1; the 3.0.5 results remain historical. |
 | Smash 13.0.5 — Nextendo | I verified account integration and **one real arena round on Mac**. | I explicitly approved the service's exact certificate. Quickplay's unstable-network rejection and a later spectator disconnect remain open; iOS online is unqualified. |
 | Splatoon 2 EUR 5.5.2 — Nextendo | On November 2, I entered the **online lobby and Territorial matchmaking queue on Mac**, after completing the tutorial and reaching the plaza. | I postponed the match test because too few players were available. I have not qualified a completed match, peer-to-peer gameplay, LAN/LDN or iOS for this title. |
 | iPhone/iPad | I checked that a signed Mario Kart 3.0.5 build joins LAN lobbies with my physical Switch, with each device as host. | I verified lobby entry; I have not verified a completed race on iPhone. Device, signing and platform restrictions still apply. |
@@ -119,7 +121,7 @@ For rooms hosted on iPhone/iPad, Studio's **Local play → Start bridge** enable
 
 ### Current game-service blockers
 
-My October 31 TLS probes recorded both successful scoped-CA handshakes and unresolved NEX hostname/device-authentication chain failures. I preserve that evidence and keep unresolved trust checks failing. My current private Mario Kart candidate is **4.0.1**, matching the catalog's version requirement; I have not qualified its remaining TLS/authentication, NAT or online-race paths. For Smash, Quickplay and later-session stability remain open. For Splatoon 2, two verified TLS connections reached the lobby and queue, but I deferred the match test; that does not qualify peer-to-peer play. The [coverage inventory](docs/nextendo-coverage.md) separates these three titles' actual results from all 58 catalog entries, 62 regional service profiles and 22 exact-build patch plans.
+My October 31 TLS probes recorded both successful scoped-CA handshakes and unresolved NEX hostname/device-authentication chain failures. I preserve that evidence and keep unresolved trust checks failing. My current private Mario Kart **4.0.1** Mac port completed the [single Worldwide race recorded above](dm/games/0100152000022000/README.md#nextendo-race-validation-2026-11-02); I keep that tested route separate from unresolved trust checks and untested modes. For Smash, Quickplay and later-session stability remain open. For Splatoon 2, two verified TLS connections reached the lobby and queue, but I deferred the match test; that does not qualify peer-to-peer play. The [coverage inventory](docs/nextendo-coverage.md) separates these three titles' actual results from all 58 catalog entries, 62 regional service profiles and 22 exact-build patch plans.
 
 ## What belongs in this repository
 

@@ -118,6 +118,14 @@ The game may also write into an NVN object directly, without an NVN call, throug
 - **Fix:** index descriptors by texture serial and retire their cached base, compatible-type and image views at `mtl_tex_release`, through deferred release behind the GPU fence. Preserve the descriptor metadata: a late read resolves it through `tex_mtl` and caches its views for that submission, then retires them at commit. `t_cpu_tex` checks multiple descriptors, ID replacement and pixel-correct recorded replay after finalization and API-object reuse.
 - **Found on:** [Xenoblade Chronicles: Definitive Edition](../../dm/games/0100FF500E34A000/README.md#memory).
 
+### Texture descriptors outlive their memory-pool objects
+
+- **Symptom:** a registered texture resolves after its memory pool was finalized, and an upload or sparse refresh reads a page-table pointer from reused pool-object memory.
+- **Cause:** a descriptor retains a copy of `tex_t`, including the guest's `pool_t` pointer. The host already marked descriptors `gone` on pool finalization, but texture resolution and image preparation did not consistently honor that state; a new pool could also reuse the old object's address.
+- **Fix:** mark the pool's descriptors gone and clear its magic before tearing down its storage. Descriptor and image paths honor `gone`; direct texture resolution checks the pool magic. An already-created host texture is retained without refreshing from dead storage, while an uncreated texture remains an empty slot. Re-registering an ID against a new live pool permits resolution again.
+- **Found on:** seedds reported this lifetime failure in FINAL FANTASY RESONANCE and Mario Party Superstars in upstream [commit 54ab7b10](https://github.com/seedds/nxnative/commit/54ab7b1059eae8524ff60a320ea66f6ebac16506). I imported that backend correction while investigating [Splatoon 3](../bringup/splatoon-3.md); I have not established this mechanism as its color-corruption cause.
+- **Check:** `t_readback` reuses finalized physical and sparse pool objects, exercises descriptor and direct-object resolution, checks that no upload occurs, and registers a replacement texture at the reused pool address. Existing direct-upload, image-alias, linear-readback and cube-view fixtures retain initialized pool magic.
+
 ### Memory-pool tracking table grows in blocks
 
 - **Cause:** the memory-pool tracking table had a fixed 4,096 slots; a pool past the end would have its textures re-uploaded at every use.
@@ -161,12 +169,29 @@ The game may also write into an NVN object directly, without an NVN call, throug
 
 ## Command memory
 
+### Control memory capacity queries
+
+- **Symptom:** `[RED] NVN unimplemented function called: nvnCommandBufferGetControlMemoryFree` (or `…GetControlMemorySize`) after a control-memory grant.
+- **Cause:** `AddControlMemory` discarded the grant, and both getters returned 0 through the unimplemented path. The host records commands in command memory and consumes no control-memory bytes, so the supplied control block remains free.
+- **Fix:** I integrated nxnative's [control-memory accounting](https://github.com/seedds/nxnative/commit/d138ee878104b027925e80b8a0b2d88efd72ef98): `cmd_t.ctl_size` keeps the last grant's size, size/free return that capacity, and used remains 0. A subsequent grant replaces the capacity; recording commands does not consume it.
+- **Found on:** upstream's South Park: The Fractured But Whole 1.05 investigation ([PR #662](https://github.com/seedds/nxnative/pull/662)); I have not qualified that game's port here.
+- **Check:** I exercise the production getters before a grant, after a grant, after recording and after a smaller replacement in `t_nvn`.
+
+### Compact state and single-texture records
+
+- **Symptom:** display-list heaps sized from `GetCommandMemoryUsed` fill, followed by null-pool grants and eventually `FATAL NVN command memory`.
+- **Cause:** the host recorded every state bind as 40 bytes even when the state needed only 4–10 payload bytes, and every single-texture bind included two zero pool bases. Those bytes also enlarged the game's own measured display lists.
+- **Fix:** I integrated nxnative's [compact records](https://github.com/seedds/nxnative/commit/0c6c55df3f59d8740086fd269de644e4514f3b11). State records use 16 or 24 bytes including their header; a single-texture record uses 24 bytes when both bases are 0 and retains the 32-byte form otherwise. `bind_rec` expands both forms into the existing replay state. The texture handle stays at record +0x10 for games that patch it in place. The capture layout fingerprint changes with the record layout, so old captures must be recorded again.
+- **Found on:** upstream's [Super Mario Odyssey](../../dm/games/0100000000010000/README.md) 1.4.1 investigation. Upstream reports that its 62 MB display-list heap filled with the larger records and stayed within capacity after this correction; I have not repeated that gameplay run here.
+- **Check:** I check state kinds and bytes, measured record sizes, nonzero descriptor bases and the patched texture-handle position in `t_nvn`: 223 checks passed normally and with ASan/UBSan plus Metal validation. The sanitizer run uses the repository's existing section-array registration exceptions. Capture serialization passed 77 checks, and two fresh offscreen GPU replays matched the synthetic live frame. The four changed production translation units also compiled for iPhoneOS arm64. This reduces logical record size; it does not reclaim a live command handle or establish long-running Splatoon 3 stability.
+
 ### Host-lent command memory segments
 
 - **Symptom:** `FATAL NVN command memory: the game's pool is empty…`.
-- **Cause:** our command records are larger than real NVN commands, so command buffers the game sizes for hardware overflow; when the game's out-of-memory callback declines to add memory, the host lends a segment. Many small command buffers each overflowing once per frame exhausted a fixed pool of 64 × 1 MB.
-- **Fix** (`hle_nvn.c`): the pool now grows on demand (256 KB segments, abort only beyond 1 GB; `hostseg_take`). A segment is released only when the game re-grants memory overlapping the guest bytes of the recording that jumped into it (`hostseg_release` in `AddCommandMemory`): the game records setup blocks once and keeps `CallCommands`-ing them for many frames, so recycling segments after a fixed number of frames would overwrite live recordings. An empty-pool grant of at most 4 KB outside a recording gets a 4 KB segment, a record larger than 256 KB gets a segment that holds it, and the cap counts every segment's bytes (`hostseg_size`).
-- **Found on:** [Super Mario Bros. Wonder](../../dm/games/010015100B514000/README.md) (the many small command buffers: its opening course, per the comment at `HOSTSEG_SZ` in `hle_nvn.c`), [Super Mario Odyssey](../../dm/games/0100000000010000/README.md) (it hands out many 512-byte grants before recording, and with no recording to reclaim them by, 256 KB each reached the cap entering the Wooded Kingdom: the 4 KB segments).
+- **Cause:** our command records are larger than real NVN commands, so command buffers the game sizes for hardware overflow; when the game's out-of-memory callback declines to add memory, the host lends a segment. Many small command buffers each overflowing once per frame exhausted a fixed pool of 64 × 1 MB. Thousands of live small prerecorded lists can also exhaust a larger pool when each overflow reserves 256 KB despite the game's 512-byte grant.
+- **Fix** (`hle_nvn.c`): the pool grows on demand, with the same 1 GB cap (`hostseg_take`). An overflow from a real grant of at most 4 KB now uses a 4 KB bucket; larger grants retain the 256 KB bucket. `cmd_t.grant_size` retains the last real grant's capacity across host jumps, and an individual larger record gets page-rounded space for the record, alignment and the next jump, with checked size arithmetic. The empty-pool special case outside a recording remains. Free segments are reused only at the same size, and the cap counts all allocated bytes. A segment is still released only when the game re-grants memory overlapping its recorded guest anchor (`hostseg_release`): cached setup handles may be called for many frames, so neither a frame count nor command-buffer finalization proves they are dead. Pool retirement and exact anchor ownership remain separate open lifetime questions; the capacity correction does not change reclamation.
+- **Check:** `t_nvn` records 2,048 live lists from 512-byte grants with at most 8 MB of additional host capacity, then replays separated handles after other recordings and command-buffer finalization. It also checks a 9,000-byte record after a 4 KB grant, preservation of that grant across larger host segments, the SDK-reserved word at `+0x10`, and size-rounding overflow boundaries.
+- **Found on:** [Super Mario Bros. Wonder](../../dm/games/010015100B514000/README.md) (the many small command buffers: its opening course, per the comment at `HOSTSEG_SZ` in `hle_nvn.c`), [Super Mario Odyssey](../../dm/games/0100000000010000/README.md) (many empty-pool 512-byte grants entering the Wooded Kingdom), [Splatoon 3](../bringup/splatoon-3.md#small-prerecorded-list-capacity) (11.3.0 private macOS diagnostic, November 3).
 
 ### What `GetCommandMemoryUsed` counts
 
@@ -206,6 +231,14 @@ Games read this count as a position in their own command memory and size their h
 - **Fix:** give every queue initialization a serial. Save and restore draw state and render-target state when submissions switch queues, resolve composite programs again, and invalidate encoder caches. Finalization discards that queue's saved state. Reusing the queue's storage starts with defaults and cannot recover old guest pointers.
 - **Found on:** [FINAL FANTASY X/X-2 HD Remaster](../../dm/games/0100BC300CB48000/README.md), launcher-to-X-2 handoff.
 - **Check:** `t_queue_origin` tests independent state, switching back, finalization and address reuse with a poisoned old program pointer, alongside its real GPU culling tests.
+
+### Finalized programs leave every queue's bindings
+
+- **Symptom:** switching back to a queue after a scene transition hashes a finalized program's reused object memory, or a composite program retains a finalized shader stage.
+- **Cause:** NVN reads a program when it is bound. The host retained pointers in the active queue and saved queue states after `nvnProgramFinalize`, so reactivation could combine stages from memory the game had reused. Composite programs also retained their own copies of the removed stage.
+- **Fix:** `mtl_prog_forget` removes the program from active bindings and every saved queue state under the submission lock. The active effective program is recomputed from its remaining bound stages; saved effective programs are resolved when their queues become active again. Pipeline and argument state are invalidated when the effective binding changes.
+- **Found on:** seedds and liunice reported Fire Emblem Fortune's Weave's title-to-demo failure and its before/after game checks in upstream [commit 1440a736](https://github.com/seedds/nxnative/commit/1440a736860e45c7722f7bd803a0fc74ff62c69f). I imported the correction during [Splatoon 3](../bringup/splatoon-3.md) investigation; I have not reproduced that game's visual symptom through program finalization.
+- **Check:** `t_queue_origin` finalizes a program retained by active and saved queues, poisons the freed object's storage, switches queues, and checks removal of a composite's fragment stage while preserving its vertex stage. Its real-GPU queue-origin checks run with Metal API validation and both encoding-thread modes.
 
 ### Fence syncs recorded in command buffers
 

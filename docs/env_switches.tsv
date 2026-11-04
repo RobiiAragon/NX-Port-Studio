@@ -101,6 +101,7 @@ DM_NET_DISCOVERY_PEER	player	Optional discovery relay IPv4 endpoint; automatic l
 DM_NET_TRACE	diagnostic	Log native socket and local-network translation details
 DM_NEXTENDO_BCAT_DIR	path	Private title/version calendar recipe and validated seed snapshot; runtime checks for public HTTPS updates when online services are enabled
 DM_NEXTENDO_CLIENT_ID	switch	Public OAuth application identifier embedded in mobile account setup; never a client secret
+DM_NEXTENDO_PEER_COLLECTION	path	Optional iOS build-time directory of already-approved title/host peer certificates; defaults to Studio's local collection
 DM_NEXTENDO_ROUTES	path	Private reviewed Nextendo route-policy TSV with exact host and certificate constraints
 DM_NEXTENDO_SERVICES_DIR	path	Validated game service profile directory for Nextendo
 DM_NICK	switch	The account nickname the game sees (default `Player`)
@@ -221,7 +222,7 @@ DM_PRELOAD	diagnostic	Set: on the Mac, runs the host's early background loading 
 DM_PRESENT_FIFO	switch	`0` makes the display link take the newest queued frame each tick, as before; by default it shows frames in order, at most one tick behind
 DM_PRESENT_HZ	switch	`=<N>`: the frequency of presentation pacing (default 60); `0` means no frame limit and is for performance profiling only
 DM_PRESENT_INTERVAL	switch	`display` presents one frame per display-link tick whatever interval the game sets; `game` follows the game's present interval (default: the profile's `present_interval`)
-DM_PRESENT_LATENCY	switch	`=<n>` (above 0): the display link's preferred frame latency in a window and in fullscreen (default 2 in variable-refresh fullscreen, 1 otherwise)
+DM_PRESENT_LATENCY	switch	`=1` or `2`: overrides the display link's preferred frame latency for every screen and window mode; larger positive values use 2 (default 2 in variable-refresh fullscreen, 1 otherwise)
 DM_PRESENT_LINK	switch	Present pacing: `0` acquires the drawable itself, `1` (the default) presents on a 60 Hz display link, `2` uses a 120 Hz display link with a frame every other tick
 DM_PRESENT_SNAP	player	`=<n>`: present snapshots, a ring of n host textures (2 to 4; `1` = 2) the presents are copied to so the game's swapchain texture is free at once; `0` off (default: the profile's `present_snap`)
 DM_PRESENT_UPSCALE	player	`metalfx` scales a picture smaller than its rectangle on the screen through MetalFX's spatial scaler; `off` (the default) scales it bilinearly
@@ -286,6 +287,7 @@ DM_RUMBLE_LOG	diagnostic	`=1` logs the game's vibration handle requests and, onc
 DM_RUMBLE_MIN	player	`=0..0.9`: controller rumble levels below it stay silent and the rest is stretched over the full range (default 0; the phone is unaffected); for games whose quiet HD rumble texture keeps rotating motors running (Mario Kart 8 Deluxe: 0.45); launcher setting
 DM_SAVE	path	This run's save folder (must be set); the device save is `<DM_SAVE>_device`, and `pso_user.tsv` goes in its parent folder; the Mac launcher, the iOS app and the NSP script set it
 DM_SAVED_CHOICES	switch	`0` ignores the player's saved choices (launcher.<VAR> in the app's preferences) and leaves them saved; the Mac launcher and the iOS settings screen
+DM_SAVE_ARCHIVE_SANITIZE	test	`=1` builds the source-only JKSV ZIP interoperability driver with ASan and UBSan; used by dm/host/tests/test_save_archives.py, never by a game runtime
 DM_SAVE_SYNC	player	Cloud saves: the folder whose `<title ID>/save.dmsync` the save is synced through, `icloud` for iCloud Drive/nxnative Saves (the Mac); `0` or unset, off. The Mac launcher sets the folder chosen in its settings window's Cloud saves, the iPhone app the one picked in its launcher (dm/host/save_sync.h)
 DM_SCHEME_NAME	switch	Set by `build_ipa.sh` itself for xcodegen's `project.yml`: the Xcode scheme name, `DmIOS`, or `<display name> (<title ID>)` for a project prepared with `--prepare-xcode`
 DM_SCREEN_MATCH	switch	`0` keeps the screen's refresh rate in fullscreen; by default a Mac screen whose rate is not a multiple of the game's frame rate switches to one that is (144 → 120 Hz)

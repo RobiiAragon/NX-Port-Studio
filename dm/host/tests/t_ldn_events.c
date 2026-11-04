@@ -35,7 +35,8 @@ int dm_net_errno(void) { return 13; }
 int dm_net_multicast_allowed(void) { return 0; }
 static void *read_during_finalize(void *argument) {
     int which=(int)(uintptr_t)argument; Result r;
-    if(which) { dm_ldn_security_parameter out; r=h_ldn_Security(&out); }
+    if(which==2) r=h_ldn_SetProtocol(1);
+    else if(which) { dm_ldn_security_parameter out; r=h_ldn_Security(&out); }
     else { dm_ldn_network_config out; r=h_ldn_Config(&out); }
     assert(r!=0 && waits==0);return NULL;
 }
@@ -62,19 +63,27 @@ int main(void) {
     // previously attached still-open kernel objects are no longer producers.
     h_ldn_Fini(); assert(!waits); ldn_event(NULL); assert(events[1].signals == 2 && events[2].signals == 1);
     h_ldn_Attach(storage[2]); ldn_event(NULL); assert(events[3].signals == 1 && events[1].signals == 2);
-    getter_lifetime(0);getter_lifetime(1);
+    getter_lifetime(0);getter_lifetime(1);getter_lifetime(2);
     // Smash 13.0.5 imports this SDK entry. After the host replaces Initialize,
     // it must not execute the SDK wrapper's uninitialized service vtable.
     assert(h_ldn_ControllerRestriction(1) != 0 && waits == 0);
     dm_ldn_context *context = calloc(1, sizeof *context); assert(context);
     pthread_mutex_init(&context->lock, NULL); context->state = LDN_INITIALIZED; g_ldn = context;
+    // SDK20 titles initialize the native transport, then call SetProtocol.
+    // The original wrapper would touch an uninitialized guest service vtable.
+    assert(!h_ldn_SetProtocol(0) && context->protocol==1 && !waits);
+    assert(!h_ldn_SetProtocol(1) && context->protocol==1 && !waits);
+    assert(h_ldn_SetProtocol(3)!=0 && context->protocol==1 && !waits);
+    assert(h_ldn_SetProtocol(-1)!=0 && h_ldn_SetProtocol(2)!=0 && context->protocol==1 && !waits);
     assert(!h_ldn_ControllerRestriction(1) && context->controller_restriction == 1 && !waits);
     assert(h_ldn_ControllerRestriction(2) != 0 && context->controller_restriction == 1 && !waits);
     assert(!h_ldn_ControllerRestriction(0) && context->controller_restriction == 0 && !waits);
     context->state = LDN_AP;
+    assert(h_ldn_SetProtocol(1)!=0 && context->protocol==1 && !waits);
     assert(h_ldn_ControllerRestriction(1) != 0 && context->controller_restriction == 0 && !waits);
     g_ldn = NULL; pthread_mutex_destroy(&context->lock); free(context);
     setenv("DM_NETWORK", "offline", 1); assert(h_ldn_Init() == LDN_ERROR(22)); assert(h_ldn_State() == 0 && waits == 0);
+    assert(h_ldn_SetProtocol(1)!=0 && waits==0);
     setenv("DM_NETWORK", "auto", 1); assert(ldn_enabled());
-    puts("LDN event close/reuse, observers, controller policy, concurrent getter/Finalize and offline state passed."); return 0;
+    puts("LDN event close/reuse, observers, NX protocol/controller policy, concurrent getter/Finalize and offline state passed."); return 0;
 }

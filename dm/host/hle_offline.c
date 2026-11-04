@@ -17,10 +17,10 @@ HLE_FORCE("_ZN2nn5prepo28RequestImmediateTransmissionEv", "telemetry immediate u
 // nn::ldn lives in hle_ldn.c (explicit DM_NETWORK=ldn).
 
 // ---------- socket: offline by default. Explicit Mac LAN uses the translated host transport ----------
-enum { SK_ENETDOWN = 100, SK_EAI_FAIL = 4 };
+enum { SK_ENETDOWN = 100 };
 HLE_FORCE("_ZN2nn6socket10InitializeEPvmmi", "connects to the bsd socket service; offline, creates no session (cut)", Result, h_sk_Init4, void *mem, uint64_t sz, uint64_t alloc, int conc) { (void)mem; (void)sz; (void)alloc; (void)conc; return RES_OK; }
 HLE_FORCE_WAIT("_ZN2nn6socket8FinalizeEv", "release the host's LAN descriptors, if enabled", Result, h_sk_Fini, void) { dm_net_finalize(); return RES_OK; }
-HLE_FORCE("_ZN2nn6socket12GetLastErrnoEv", "Horizon Linux errno in LAN mode; ENETDOWN otherwise", int, h_sk_Errno, void) { return dm_net_enabled() ? dm_net_errno() : SK_ENETDOWN; }
+HLE_FORCE("_ZN2nn6socket12GetLastErrnoEv", "retained Horizon errno shared with the C entry, including offline local descriptors", int, h_sk_Errno, void) { return dm_net_errno(); }
 HLE_FORCE("_ZN2nn6socket6SocketEiii", "socket transport, offline by default", int, h_sk_Socket3i, int a, int b, int c) { return dm_net_socket(a, b, c); }
 HLE_FORCE("_ZN2nn6socket8ShutdownEii", "socket transport, offline by default", int, h_sk_Shutdown, int s, int h) { return dm_net_shutdown(s, h); }
 HLE_FORCE("_ZN2nn6socket4BindEiPK8sockaddrj", "socket transport, offline by default", int, h_sk_Bind, int s, const void *a, unsigned n) { return dm_net_bind(s, a, n); }
@@ -129,14 +129,14 @@ HLE_FORCE("_ZN2nn3web19ShowOfflineHtmlPageEPNS0_26OfflineHtmlPageReturnValueERKN
 // ---------- C socket interface; transport stays offline unless a network mode is selected ----------
 HLE_FORCE_WAIT("nnsocketAccept", "socket transport, offline by default", int, h_c_sk_Accept, int s, void *a, unsigned *n) { return dm_net_accept(s, a, n); }
 HLE_FORCE("nnsocketListen", "socket transport, offline by default", int, h_c_sk_Listen, int s, int n) { return dm_net_listen(s, n); }
-HLE_FORCE("nnsocketRecvMsg", "scatter/gather transport remains unsupported", int, h_c_sk_RecvMsg, void) { dm_net_set_errno(dm_net_enabled() ? 95 : SK_ENETDOWN); return -1; }
-HLE_FORCE("nnsocketSendMsg", "scatter/gather transport remains unsupported", int, h_c_sk_SendMsg, void) { dm_net_set_errno(dm_net_enabled() ? 95 : SK_ENETDOWN); return -1; }
+HLE_FORCE_WAIT("nnsocketRecvMsg", "guarded Horizon scatter/gather receive with a signed 64-bit byte count", long, h_c_sk_RecvMsg, int s, void *m, int f) { return dm_net_recvmsg(s, m, f); }
+HLE_FORCE_WAIT("nnsocketSendMsg", "guarded Horizon scatter/gather send with a signed 64-bit byte count", long, h_c_sk_SendMsg, int s, const void *m, int f) { return dm_net_sendmsg(s, m, f); }
 HLE_FORCE("nnsocketShutdown", "socket transport, offline by default", int, h_c_sk_Shutdown, int s, int h) { return dm_net_shutdown(s, h); }
-HLE_FORCE_WAIT("nnsocketGetAddrInfo", "C resolver layout follows the matching SDK's C++ ABI; ambiguous SDKs fail rather than return the wrong layout", int, h_c_sk_Gai, const char *h, const char *s, const void *hint, void **res) {
-    int legacy = guest_sym("_ZN2nn6socket11GetAddrInfoEPKcS2_PK8addrinfoPPS3_") != NULL;
-    int modern = guest_sym("_ZN2nn6socket11GetAddrInfoEPKcS2_PKNS0_8AddrInfoEPPS3_") != NULL;
-    if (legacy == modern) { if (res) *res = NULL; return SK_EAI_FAIL; }
-    return legacy ? dm_net_getaddrinfo_legacy(h, s, hint, res) : dm_net_getaddrinfo(h, s, hint, res);
+// The C API takes plain struct addrinfo, independently of which C++ overloads
+// the SDK exports. SDK 20 retains both overloads; its C wrapper forwards to the
+// plain-addrinfo one, and its gRPC consumer reads ai_addr at +32 (not +24).
+HLE_FORCE_WAIT("nnsocketGetAddrInfo", "C plain addrinfo ABI; canonical name at24 and address at32", int, h_c_sk_Gai, const char *h, const char *s, const void *hint, void **res) {
+    return dm_net_getaddrinfo_legacy(h, s, hint, res);
 }
 HLE_FORCE("nnsocketFreeAddrInfo", "release only resolver allocations owned by the host", void, h_c_sk_FreeAi, void *ai) { dm_net_freeaddrinfo(ai); }
 HLE_FORCE("nnsocketGAIStrError", "resolver error text", const char *, h_c_sk_GaiStr, int e) { (void)e; return "network unavailable"; }

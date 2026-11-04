@@ -78,14 +78,10 @@ rm -rf Gen && mkdir -p Gen/dm || die "mkdir Gen"
 python3 "$IOS_SOURCE/tools/nextendo_resources.py" "$(dirname "$DM")" Gen || die "prepare Nextendo mobile codecs"
 mkdir -p Gen/dm/Notices/OpenSSL || die "create dependency notices"
 cp "$DM/third_party/notices/OpenSSL/"* Gen/dm/Notices/OpenSSL/ || die "stage OpenSSL license and provenance"
+mkdir -p Gen/dm/Notices/libarchive || die "create libarchive notices"
+cp "$DM/third_party/notices/libarchive/"* Gen/dm/Notices/libarchive/ || die "stage libarchive public-header notices"
 if [ -n "${DM_NEXTENDO_SERVICES_DIR:-}" ]; then
-  python3 - "$DM" "$DM_NEXTENDO_SERVICES_DIR" "$GAME" <<'PY' || die "stage the public Nextendo service profile"
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(sys.argv[1]) / 'tools'))
-import nextendo_services
-nextendo_services.stage(sys.argv[2], Path('Gen/dm/nextendo'), sys.argv[3])
-PY
+  python3 "$IOS_SOURCE/tools/nextendo_profiles.py" "$(dirname "$DM")" "$DM_NEXTENDO_SERVICES_DIR" "$GAME" Gen/dm || die "stage Nextendo service profiles"
 fi
 if [ -n "${DM_NEXTENDO_BCAT_DIR:-}" ]; then
   python3 - "$DM" "$DM_NEXTENDO_BCAT_DIR" "$GAME" "$DM_APP_VERSION" <<'PY_BCAT' || die "stage the validated private calendar snapshot"

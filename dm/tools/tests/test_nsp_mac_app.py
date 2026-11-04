@@ -122,7 +122,9 @@ class PackReuse(unittest.TestCase):
             'pso/prebuilt.tsv': b'prebuilt', 'pso/rest_pairs.tsv': b'rest', 'pso/archive.tsv': b'index',
             'env.txt': b'DM_TEST=1', 'split.tsv': b'split', 'icon.jpg': b'jpeg', 'source/launcher.c': b'launcher',
             'source/save_supervisor.c': b'supervisor', 'source/save_supervisor_start.c': b'spawn', 'source/save_supervisor.h': b'api',
-            'host/front.h': b'early HUD api', 'host/romfs_image.h': b'validator', 'host/save_sync.c': b'sync', 'host/save_sync.h': b'sync api', 'tools/romfs.py': b'reader',
+            'host/save_archive.c': b'save zip implementation', 'host/save_archive.h': b'save zip API',
+            'third_party/libarchive-headers/archive.h': b'public header', 'third_party/libarchive-headers/archive_entry.h': b'public header', 'third_party/notices/libarchive/LICENSE.txt': b'BSD notice',
+            'ios/Sources/LauncherSavesView.swift': b'save controls', 'host/front.h': b'early HUD api', 'host/romfs_image.h': b'validator', 'host/save_sync.c': b'sync', 'host/save_sync.h': b'sync api', 'tools/romfs.py': b'reader',
             'third_party/notices/OpenSSL/LICENSE.txt': b'fixture notice', 'source/Launcher.swift': b'window', 'ios/Sources/LauncherSettings.swift': b'model', 'ios/Sources/LauncherRow.swift': b'rows', 'ios/Sources/LauncherLocalization.swift': b'localization',
         }
         for n in pack_app.TABLES: files['profile/' + n] = n.encode()
@@ -370,7 +372,7 @@ class PackReuse(unittest.TestCase):
         sync = next(c for c in self.commands if Path(c[0]).name == 'clang' and '-o' in c and c[-1].endswith('save_sync.c'))
         self.assertTrue(sync[sync.index('-o') + 1].endswith('/Helpers/dm-save-supervisor'))
         self.assertNotIn(sync[sync.index('-o') + 1], s)   # cloud send survives primary host failure
-        self.assertEqual([Path(x).name for x in s if x.endswith('.swift')], ['Launcher.swift', 'LauncherSettings.swift', 'LauncherRow.swift', 'LauncherLocalization.swift'])
+        self.assertEqual([Path(x).name for x in s if x.endswith('.swift')], ['Launcher.swift', 'LauncherSettings.swift', 'LauncherRow.swift', 'LauncherLocalization.swift', 'LauncherSavesView.swift'])
 
     def test_selected_file_modes_and_file_additions_and_removals_invalidate(self):
         self.pack()

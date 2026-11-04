@@ -1,7 +1,8 @@
 """Prepare a private profile from explicitly approved local service certificates.
 
-This never enrolls peers, contacts a server, changes system trust or stages an
-iOS export. The public profile remains the sole source of service addresses.
+This never enrolls peers, contacts a server or changes system trust. Apple
+packagers may copy its separate result; the public profile remains the sole
+source of service addresses.
 """
 from pathlib import Path
 import ctypes

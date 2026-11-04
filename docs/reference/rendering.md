@@ -51,6 +51,14 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
 - **Found on:** [The Legend of Zelda: Breath of the Wild](../../dm/games/01007EF00011E000/README.md): panes tagged `CaptureOn` (about 140 layouts, e.g. `PaGuideKeySmoke_00`; user data `A8`, `CaptureScale` 0.5, `MultiFilter`) are drawn into a target, blurred at half size and copied into a capture texture that the layout's materials sample in place of the placeholder `FBLayout_00`. The game creates it with its per-format default mapping (one call site, `main+0xecb0bc`: R8 → (R, 0, 0, 1), RG8 → (R, G, 0, 1), and so on), then rebuilds it with the capture's own mapping: `main+0xf597dc` picks (1, 1, 1, R) for an `A8` capture (the material colour kept, the mask as alpha) and alpha 1 when the pane says `CaptureOutputAlpha` 255 (read at `main+0xf58e98`; an RGB10A2 capture then reads (R, G, B, 1)); `main+0xecacf0` stores the mapping and rebuilds the texture (`main+0xecabe8`), and `main+0xec33f0` replaces the descriptor only on a difference. The captures kept (R, 0, 0, 1), whose alpha is always 1: hard-edged dark boxes behind every prompt (the shadow pane `e6a88e12dbae9743`: black, alpha = capture alpha × vertex alpha 180/255) and rectangles filled with cream cloud (the glow `aa209f57b133e862`: alpha = min(cloud alpha, capture alpha)). Checked on the Mac by the PR's author (M4 Pro, unchanged shader libraries): green stamina, the purple noise meter and the game's own blurred System menu background. [Super Mario Odyssey](../../dm/games/0100000000010000/README.md): its layouts rebuild their captures through the same agl code (`main+0x982320` replaces the registered descriptor only if `nvnTextureCompare` reports a difference), so the fix covers them too.
 - **Note:** before the cause was known, a profile key, `alpha_from_red`, listed the layout library's pixel shaders and bound such render targets through a view mapped (R, 0, 0, R). In BotW (all 26 pixel-shader variants, `main`'s BNSH at 0x1d83000) that fixed the alpha but zeroed green and blue, so tinted panes such as the stamina wheel came out black, and the System menu background (a capture with alpha forced to 1) stayed black. In Odyssey (all 26 layout pixel shaders, `main`'s BNSH at 0x132c000) it had turned the coin counters' solid white cards into the right shapes. With the comparison fixed it found no (R, 0, 0, 1) target on either game (the mapping a capture is rebuilt with replaces it, on the Mac and the iPhone alike), so the key and its host code (`tex_alpha_red`, DM_NVN_ALPHA_RED) were removed (c76f6798); Odyssey's note has the A/B runs.
 
+### Sampling a depth attachment through a red texture view
+
+- **Symptom:** Metal validation rejects a `Depth32Float` attachment viewed as `R32Float`, or a `Depth16Unorm` attachment viewed as `R16Unorm`.
+- **Cause:** Metal forbids these depth-to-colour format casts. Reading the unchanged depth texture as colour can also repeat depth into green and blue instead of the NVN red view's `(depth, 0, 0, 1)`.
+- **Fix:** I imported [nxnative e58e4467](https://github.com/seedds/nxnative/commit/e58e4467d37ebcf74f180ee2b3f2fd7a9838a84e), by seedds and Eliran Zach. The host keeps depth storage, applies the red-channel mapping before the descriptor's swizzle, and selects its requested mip and layer range. Later writes to the same depth storage stay visible. The shader chain is unchanged.
+- **Check:** I ran the imported `t_view_swizzle` fixture on this fork with Metal API validation: 442 checks passed, including both format pairs, GPU reads and samples, mip selection, cached views, later depth writes and channel remapping.
+- **Found on:** upstream's [Burnout Paradise Remastered report (#985)](https://github.com/seedds/nxnative/issues/985). I have not established that this defect causes Splatoon 3's separate news/plaza corruption, or qualified the change in a game on Mac or iOS.
+
 ### Texture views cached by texture and view parameters
 
 - **Symptom:** `newTextureViewWithPixelFormat` takes a large share of the replay thread (45% in Age of Calamity) when a game registers textures into a ring of IDs before every bind.
@@ -83,9 +91,17 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
 ### Cube textures held as 6-layer 2D arrays
 
 - **Symptom:** shaders that sample a cube texture as `texturecube_array` get a type mismatch.
-- **Cause:** Metal can make a cube-array view only of a 2D-array base texture.
+- **Cause:** the shader can declare an array of cubes while the bound descriptor describes one cube; Metal requires a view of the declared type. The host keeps cube storage as 2D-array face slices so either view can share that allocation.
 - **Fix:** NVN cube textures are created as 6-layer 2D arrays and bound through cube / cube-array views by `tex_fit`, which also maps a cube array read as a cube to its first cube.
 - **Found on:** [The Legend of Zelda: Breath of the Wild](../../dm/games/01007EF00011E000/README.md): 1,512 shaders sample the environment probes as `texturecube_array` while a single cube texture is bound.
+
+### A cube view read as a one-element cube array
+
+- **Symptom:** `texture type mismatch: shader … declares slot … as Metal type 6, texture … type 5 … bound as is`, even though the texture holds all six cube faces.
+- **Cause:** `tex_fit` adapted cube arrays to cubes and 2D arrays to either type, but omitted the reverse cube-to-cube-array case. A descriptor can already have a cube view when the shader requests `texturecube_array`. A cube's `arrayLength` is one, while Metal's texture-view slice range counts six faces per cube, as specified by [Apple's texture-view contract](https://developer.apple.com/documentation/metal/mtltexture/newtextureviewwithpixelformat:texturetype:levels:slices:).
+- **Fix:** create the one-element cube-array view from six face slices, preserving the source view's root storage, mip range, first face and swizzle. Existing cache identity and incompatible-type rejection remain in use; no shader or translation-chain change is needed.
+- **Check:** `t_tex_fit_root` samples six distinct faces at cube-array index zero, at two mips, from both a root cube and a cube subview of a 12-face allocation. It also checks the swizzle, resource-ID cache, reverse adaptation and rejection of a cube-to-volume request. On an M5 Max with Metal API validation, the expanded fixture fails twice before the fix and passes all 47 checks afterward.
+- **Found on:** [Splatoon 3](../bringup/splatoon-3.md), during the first graphical startup attempt. This binding warning is separate from that run's subsequent gRPC wakeup-descriptor initialization abort; removing it does not establish rendered-scene or online compatibility.
 
 ### Cube map arrays count layer-faces
 
@@ -906,6 +922,14 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
   - [Mario vs. Donkey Kong](../../dm/games/0100B99019412000/README.md) (it skips clears under render conditions, as Tears of the Kingdom and Animal Crossing: New Horizons do).
   - Drawn unconditionally with no `render_cond`, nothing looked wrong in [Big Brain Academy: Brain vs. Brain](../../dm/games/0100620012D6E000/README.md) (no screen played looked wrong) or [DARK SOULS: REMASTERED](../../dm/games/01004AB00A260000/README.md) (nothing seen).
   - [Portal 2](../../dm/games/0100ABD01785C000/README.md) needs no `render_cond` and must not get it: NVIDIA's occlusion culling in its D3D9 layer (`IDirect3DDevice9::SetOcclusionShape`, `materialsystem.nro+0xc1130`) puts a mesh under `SetRenderEnableConditional(RENDER_IF_NOT_EQUAL, pair)` when its shape has a query, else `SetRenderEnable(true)`, so drawing everything only costs GPU time. With the key on, those conditions read 0 / 0 at replay (no report in the submission writes the pairs; memory later held `0xffff` / 0) and visible furniture vanished. **Open:** who writes those pairs and when.
+
+### Conditional reports dropped after fixed tracking limits
+
+- **Symptom:** timestamp-guarded clears can execute again after many query reports in the same submission, even though a timestamp's pending counter value is already known to be zero.
+- **Cause:** the pending-report table held only 256 entries shared by timestamps and occlusion queries. Once filled, later timestamps were forgotten and `rc_value` read the older CPU value. The separate fixed 4,096-address occlusion table could also forget later queries and treat their unfinished values as known.
+- **Fix:** I imported only the conditional-report tracking block from [seedds/nxnative `c8521eeb`](https://github.com/seedds/nxnative/commit/c8521eebf283d2fc4ad9e237d030b115c1b1ba47). Timestamp reports now use a growing per-submission vector, while occlusion addresses use a separate growing hash table. Unknown query values remain unknown; this does not force conditional rendering on for other games or change shader translation.
+- **Check:** I adapted the upstream `t_sbw` cases to real synthetic storage: 9,000 occlusion reports followed by a timestamp, more than 256 timestamps, unreported values and a submission reset. Four assertions fail with the old tables and pass with the imported block.
+- **Found on:** seedds reported 285 ink queries preceding conditional clears in Splatoon Raiders in that upstream commit. I have not qualified that game in Studio. I investigated the same limit during my [Splatoon 3 bring-up](../bringup/splatoon-3.md), but its ordinary diagnostic log did not measure table saturation; I have not established this as the cause of its plaza corruption.
 
 ## Vulkan layer
 

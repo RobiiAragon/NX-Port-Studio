@@ -14,6 +14,8 @@ struct LauncherView: View {
     @ObservedObject var m: LauncherModel
     let done: (Bool) -> Void
     let fit: (CGFloat) -> Void
+    @State private var savesBusy = false
+    @State private var savesNeedRestart = false
     @AppStorage("window.show") private var show = true
     @AppStorage("window.advanced") private var advanced = false
     private let hudRuntimeWasEnabled = (Int(ProcessInfo.processInfo.environment["MTL_HUD_ENABLED"] ?? "0") ?? 0) != 0
@@ -32,6 +34,7 @@ struct LauncherView: View {
             Form {
                 settingSections(basic: true)
                 CloudSavesSection()
+                LauncherSavesSection(language: m.uiLanguage, busy: $savesBusy, needsRestart: $savesNeedRestart)
                 Section {
                     DisclosureGroup("Advanced settings", isExpanded: $advanced) {}
                 }
@@ -55,7 +58,7 @@ struct LauncherView: View {
                 Toggle("Show this window at launch", isOn: $show).toggleStyle(.checkbox)
                 Spacer()
                 Button("Quit") { done(false) }
-                Button("Play") { done(true) }.keyboardShortcut(.defaultAction)
+                Button("Play") { if !savesBusy && !savesNeedRestart { done(true) } }.keyboardShortcut(.defaultAction).disabled(savesBusy || savesNeedRestart)
             }
             .padding(20)
         }
