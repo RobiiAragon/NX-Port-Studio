@@ -7367,10 +7367,12 @@ static int encode_args_(id<MTLCommandEncoder> en, NvShader *sh, int nvn_stage, i
             if (!t) { t = dummy_tex(b->dtt, b->dpf); trid = g_dummy_tex_rid[b->dtt % DMY_NT][b->dpf & 3]; }
             else if (b->dtt == (uint8_t)MTLTextureTypeTextureBuffer) t = tbuf_shadow(t, &trid);   // see tbuf_shadow
             uint64_t resource_key;
-            if (resource_trace_on() && nvn_resource_trace_watches(&g_resource_trace, sh->key, &resource_key)) {
-                // tid was already resolved above, under this same registry lock.
+            if (b->kind == NVN_RB_TEX && resource_trace_on() && nvn_resource_trace_watches(&g_resource_trace, sh->key, &resource_key)) {
+                // Metadata of a declared ordinary binding, already resolved under
+                // this registry lock. A shader branch need not actually read it.
+                // TEXU and bindless arrays remain untraced.
                 nvn_resource_fact f = resource_texture_fact(t);
-                f.key = resource_key; f.stage = nvn_stage; f.role = b->kind == NVN_RB_TEX ? NVN_TRACE_TEXTURE : NVN_TRACE_TEXTURE_U; f.slot = reg;
+                f.key = resource_key; f.stage = nvn_stage; f.role = NVN_TRACE_TEXTURE; f.slot = reg;
                 f.descriptor = tid; f.serial = tv && tid > 0 && tid < g_ntreg && g_treg[tid].ok ? g_treg[tid].t.serial : 0; f.dummy = resource_dummy;
                 for (int c = 0; c < 4; c++) if (trid && trid == g_dummy_tex_rid[b->dtt % DMY_NT][c]) f.dummy = 1;
                 f.level = t.parentTexture ? (uint32_t)t.parentRelativeLevel : 0; f.slice = t.parentTexture ? (uint32_t)t.parentRelativeSlice : 0;
