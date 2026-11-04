@@ -16,6 +16,7 @@ import argparse, ctypes, hashlib, json, os, plistlib, re, shutil, stat, subproce
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+PORT_CORE = HERE.parent.parent / 'macOS/NXPortStudio/Sources/PortCore'
 sys.path.insert(0, str(HERE.parent / 'tools'))
 import romfs as rfs
 import system_data
@@ -92,7 +93,7 @@ def require_primary_host(host):
 
 
 def swift_sources():   # the settings window, with the iOS launcher's model and rows
-    return [HERE / 'Launcher.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift', HERE.parent / 'ios/Sources/LauncherSavesView.swift']
+    return [HERE / 'Launcher.swift', HERE / 'GameAccount.swift', PORT_CORE / 'NextendoAccount.swift', PORT_CORE / 'NextendoLoopback.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift', HERE.parent / 'ios/Sources/LauncherSavesView.swift']
 
 
 def build_launcher(out, minos, clang, swiftc, sdk):   # in-process C bootstrap + existing SwiftUI settings; no main or second NSApplication
@@ -102,7 +103,7 @@ def build_launcher(out, minos, clang, swiftc, sdk):   # in-process C bootstrap +
             run([clang, '-isysroot', sdk, '-arch', 'arm64', f'-mmacosx-version-min={minos}', '-O2', '-Wall', '-I', HERE.parent / 'host', '-c', '-o', obj, src])
         run([swiftc, '-sdk', sdk, '-target', f'arm64-apple-macos{minos}', '-O', '-swift-version', '5', '-parse-as-library', '-module-cache-path', Path(t) / 'module-cache',
              '-import-objc-header', HERE.parent / 'host/save_archive.h', '-larchive', '-emit-library', '-Xlinker', '-install_name', '-Xlinker', '@rpath/DMMacBootstrap.dylib',
-             '-o', out, *swift_sources(), *objs, '-framework', 'CoreFoundation', '-framework', 'AppKit', '-framework', 'SwiftUI'])
+             '-o', out, *swift_sources(), *objs, '-framework', 'CoreFoundation', '-framework', 'AppKit', '-framework', 'SwiftUI', '-framework', 'Foundation', '-framework', 'CryptoKit', '-framework', 'Security', '-framework', 'Network'])
         helper = out.parent.parent / 'Helpers/dm-save-supervisor'; helper.parent.mkdir(exist_ok=True)
         run([clang, '-isysroot', sdk, '-arch', 'arm64', f'-mmacosx-version-min={minos}', '-O2', '-Wall', '-I', HERE.parent / 'host',
              '-o', helper, HERE / 'save_supervisor.c', HERE.parent / 'host/save_sync.c'])

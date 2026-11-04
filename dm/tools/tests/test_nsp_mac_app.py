@@ -125,7 +125,7 @@ class PackReuse(unittest.TestCase):
             'host/save_archive.c': b'save zip implementation', 'host/save_archive.h': b'save zip API',
             'third_party/libarchive-headers/archive.h': b'public header', 'third_party/libarchive-headers/archive_entry.h': b'public header', 'third_party/notices/libarchive/LICENSE.txt': b'BSD notice',
             'ios/Sources/LauncherSavesView.swift': b'save controls', 'host/front.h': b'early HUD api', 'host/romfs_image.h': b'validator', 'host/save_sync.c': b'sync', 'host/save_sync.h': b'sync api', 'tools/romfs.py': b'reader',
-            'third_party/notices/OpenSSL/LICENSE.txt': b'fixture notice', 'source/Launcher.swift': b'window', 'ios/Sources/LauncherSettings.swift': b'model', 'ios/Sources/LauncherRow.swift': b'rows', 'ios/Sources/LauncherLocalization.swift': b'localization',
+            'third_party/notices/OpenSSL/LICENSE.txt': b'fixture notice', 'source/Launcher.swift': b'window', 'source/GameAccount.swift': b'account bridge', 'core/NextendoAccount.swift': b'account service', 'core/NextendoLoopback.swift': b'account callback', 'ios/Sources/LauncherSettings.swift': b'model', 'ios/Sources/LauncherRow.swift': b'rows', 'ios/Sources/LauncherLocalization.swift': b'localization',
         }
         for n in pack_app.TABLES: files['profile/' + n] = n.encode()
         for n, content in files.items():
@@ -162,7 +162,7 @@ class PackReuse(unittest.TestCase):
             if name == 'iconutil': Path(cmd[cmd.index('-o') + 1]).write_bytes(b'icns'); return ''
             return real_run(cmd)
         def which(name): return str(self.codesign) if name == 'codesign' else real_which(name)
-        for patch in (mock.patch.object(pack_app, 'run', fake_run), mock.patch.object(pack_app, 'HERE', t / 'source'),
+        for patch in (mock.patch.object(pack_app, 'run', fake_run), mock.patch.object(pack_app, 'HERE', t / 'source'), mock.patch.object(pack_app, 'PORT_CORE', t / 'core'),
                       mock.patch.object(pack_app, 'can_clone', return_value=False), mock.patch.object(shutil, 'which', which)):
             patch.start(); self.addCleanup(patch.stop)
         self.clone = pack_app.can_clone
@@ -309,7 +309,7 @@ class PackReuse(unittest.TestCase):
         names = ['dmhost', 'patched/main.patched.bin', 'patched/main.fixups.tsv', 'patched/main.gates.tsv', 'patched/main.cuts.tsv',
                  'patched/main.obs.tsv', 'patched/nro.tsv', 'msl/k.metallib', 'msl/k.json', 'msl/inputs.tsv', 'font/nintendo_ext.ttf',
                  'pso/gpu.mtl4a', 'pso/prebuilt.tsv', 'pso/rest_pairs.tsv', 'pso/archive.tsv', 'env.txt', 'icon.jpg', 'source/launcher.c',
-                 'source/Launcher.swift', 'ios/Sources/LauncherSettings.swift', 'ios/Sources/LauncherRow.swift',   # the settings window's sources
+                 'source/Launcher.swift', 'source/GameAccount.swift', 'core/NextendoAccount.swift', 'core/NextendoLoopback.swift', 'ios/Sources/LauncherSettings.swift', 'ios/Sources/LauncherRow.swift',   # the settings window's sources
                  'host/front.h', 'host/save_sync.c', 'host/save_sync.h']   # early HUD and post-exit save code
         names += ['profile/' + n for n in pack_app.TABLES]
         for name in names:
@@ -369,10 +369,11 @@ class PackReuse(unittest.TestCase):
         self.assertEqual(s[s.index('-o') + 1], str(Path(self.args.out).resolve().with_name('Game.app.partial') / 'Contents/Frameworks/DMMacBootstrap.dylib'))
         self.assertIn(c[c.index('-o') + 1], s)   # in-process bootstrap, with no main
         self.assertIn('-emit-library', s)
+        for framework in ('Foundation', 'CryptoKit', 'Security', 'Network'): self.assertIn(framework, s)
         sync = next(c for c in self.commands if Path(c[0]).name == 'clang' and '-o' in c and c[-1].endswith('save_sync.c'))
         self.assertTrue(sync[sync.index('-o') + 1].endswith('/Helpers/dm-save-supervisor'))
         self.assertNotIn(sync[sync.index('-o') + 1], s)   # cloud send survives primary host failure
-        self.assertEqual([Path(x).name for x in s if x.endswith('.swift')], ['Launcher.swift', 'LauncherSettings.swift', 'LauncherRow.swift', 'LauncherLocalization.swift', 'LauncherSavesView.swift'])
+        self.assertEqual([Path(x).name for x in s if x.endswith('.swift')], ['Launcher.swift', 'GameAccount.swift', 'NextendoAccount.swift', 'NextendoLoopback.swift', 'LauncherSettings.swift', 'LauncherRow.swift', 'LauncherLocalization.swift', 'LauncherSavesView.swift'])
 
     def test_selected_file_modes_and_file_additions_and_removals_invalidate(self):
         self.pack()
@@ -429,7 +430,7 @@ class PackReuse(unittest.TestCase):
     def test_missing_selected_inputs_fail_before_reuse_or_partial_creation(self):
         self.pack()
         for name in ('dmhost', 'patched/main.fixups.tsv', 'msl/k.metallib', 'romfs/marker', 'pso/prebuilt.tsv', 'env.txt', 'icon.jpg',
-                     'font', 'aoc', 'profile', 'bin/clang', 'bin/swiftc', 'sdk', 'bin/codesign', 'source/launcher.c', 'source/Launcher.swift', 'ios/Sources/LauncherRow.swift'):
+                     'font', 'aoc', 'profile', 'bin/clang', 'bin/swiftc', 'sdk', 'bin/codesign', 'source/launcher.c', 'source/Launcher.swift', 'source/GameAccount.swift', 'core/NextendoAccount.swift', 'core/NextendoLoopback.swift', 'ios/Sources/LauncherRow.swift'):
             with self.subTest(name=name):
                 p = self.tmp / name; hidden = p.with_name(p.name + '.hidden'); p.rename(hidden)
                 try:
