@@ -171,7 +171,7 @@ static void trace_tests(void) {
     for(unsigned i=0;i<200;i++) dm_account_trace_nifm(DM_ACCOUNT_TRACE_AVAILABLE,i&1,i&1,(dm_account_trace_network){0,-1,-1,0});
     for(unsigned i=0;i<200;i++) dm_account_trace_nifm(DM_ACCOUNT_TRACE_NETWORK_RESULT,i&1,i&1,(dm_account_trace_network){0,-1,-1,0});
     for(unsigned i=0;i<200;i++) dm_account_trace_available(0x9000+i,1,1);
-    for(unsigned i=0;i<200;i++) dm_account_trace_provider(i&1,(dm_account_trace_provider_state){1,0,0,1,1,1,0,(int)i,0,32,0,0});
+    for(unsigned i=0;i<200;i++) dm_account_trace_provider(i&1,(dm_account_trace_provider_state){1,0,0,1,1,1,0,(int)i,0,32,0,0,DM_CRED_UNOBSERVED,0});
     text=trace_capture_end(capture); unsigned lines=0; for(char *p=text;*p;p++) if(*p=='\n')lines++;
     CHECK(preserved==E2BIG && lines+previousLines==128 && strstr(text,"op=acc.available result=0x9000"),"four independent 32-event budgets preserve account evidence after NIFM polling and preserve errno"); free(text); unsetenv("DM_ACCOUNT_TRACE");
 }
@@ -219,6 +219,8 @@ static void return_trace_tests(void) {
     CHECK(strstr(text,"op=acc.async_ensure result=0x2a2 stage=6") &&
           strstr(text,"op=acc.async_result result=0x2a2 stage=7") && strstr(text,"op=acc.async_result result=0x2a2 stage=9"),
           "async setup, absent context and real completion failure are distinct");
+    CHECK(strstr(text,"op=acc.ensure result=0x2a2 stage=2 credential_reason=4 security_status=0"),
+          "the actual failed ensure distinguishes provider-read failure from a rejected decoded credential");
     CHECK(!strstr(text,"RETURN_TRACE_SECRET_SENTINEL") && !strstr(text,"nx2.") &&
           !strstr(text,"synthetic_user") && !strstr(text,"1800000042"),"return traces exclude proof, claims, account IDs and user names");
     unsigned previousLines=0; for(char *p=text;*p;p++) if(*p=='\n')previousLines++; free(text);

@@ -68,29 +68,41 @@ static BOOL unsigned_decimal(NSString *text, uint64_t *out) {
     if (!value) return NO; *out = value; return YES;
 }
 static BOOL number(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID(); }
+static _Thread_local dm_nextendo_credential_diagnostic credentialDiagnostic;
+static id credential_rejected(dm_nextendo_credential_reason reason) { credentialDiagnostic.reason=reason;return nil; }
+static uint32_t credential_return(dm_account_trace_return_operation operation,uint32_t result) {
+    return dm_account_trace_credential_return(operation,result,credentialDiagnostic);
+}
 static NSData *read_credentials(BOOL allowInteraction, BOOL guestWait) {
+    credentialDiagnostic=(dm_nextendo_credential_diagnostic){0};
     (void)guestWait;
     if (allowInteraction) atomic_fetch_add(&preflightGeneration, 1);
     dm_nextendo_credential_provider provider = atomic_load(&credentialProvider);
-    if (provider) { NSMutableData *data = [NSMutableData dataWithLength:65536]; size_t size = 0; if (!data || !provider(data.mutableBytes, data.length, &size) || !size || size > data.length) return nil; data.length = size; return data; }
+    if (provider) { NSMutableData *data = [NSMutableData dataWithLength:65536]; size_t size = 0;
+        if (!data) return credential_rejected(DM_CRED_ALLOCATION);
+        if (!provider(data.mutableBytes, data.length, &size)) return credential_rejected(DM_CRED_PROVIDER_FAILED);
+        if (!size || size > data.length) return credential_rejected(DM_CRED_PROVIDER_SIZE);
+        data.length = size; return data; }
 #if TARGET_OS_IOS
     (void)allowInteraction; // The existing provider/document path is unchanged.
     NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-    NSString *path = [documents stringByAppendingPathComponent:@"nextendo-account.json"]; if (!path) return nil;
-    int fd = open(path.fileSystemRepresentation, O_RDONLY | O_CLOEXEC | O_NOFOLLOW); if (fd < 0) return nil;
-    struct stat st; if (fstat(fd, &st) || !S_ISREG(st.st_mode) || (st.st_mode & 0777) != 0600 || st.st_uid != geteuid() || st.st_size <= 0 || st.st_size > 65536) { close(fd); return nil; }
-    NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)st.st_size]; size_t done = 0;
-    while (done < data.length) { ssize_t n = read(fd, (char *)data.mutableBytes + done, data.length - done); if (n <= 0) { close(fd); return nil; } done += (size_t)n; }
+    NSString *path = [documents stringByAppendingPathComponent:@"nextendo-account.json"]; if (!path) return credential_rejected(DM_CRED_DOCUMENT_PATH);
+    int fd = open(path.fileSystemRepresentation, O_RDONLY | O_CLOEXEC | O_NOFOLLOW); if (fd < 0) return credential_rejected(DM_CRED_DOCUMENT_OPEN);
+    struct stat st; if (fstat(fd, &st) || !S_ISREG(st.st_mode) || (st.st_mode & 0777) != 0600 || st.st_uid != geteuid() || st.st_size <= 0 || st.st_size > 65536) { close(fd); return credential_rejected(DM_CRED_DOCUMENT_METADATA); }
+    NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)st.st_size];
+    if (!data) { close(fd); return credential_rejected(DM_CRED_ALLOCATION); }
+    size_t done = 0;
+    while (done < data.length) { ssize_t n = read(fd, (char *)data.mutableBytes + done, data.length - done); if (n <= 0) { close(fd); return credential_rejected(DM_CRED_DOCUMENT_READ); } done += (size_t)n; }
     close(fd); return data;
 #else
     NSMutableDictionary *query = [@{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,
         (__bridge id)kSecAttrService:@"org.nxnative.nextendo.account", (__bridge id)kSecAttrAccount:@"active",
         (__bridge id)kSecAttrSynchronizable:@NO, (__bridge id)kSecReturnData:@YES, (__bridge id)kSecMatchLimit:(__bridge id)kSecMatchLimitOne} mutableCopy];
-    if (!query) return nil;
+    if (!query) return credential_rejected(DM_CRED_ALLOCATION);
     if (!allowInteraction) {
         // Availability is queried before the game menu. Do not stop local boot
         // for a protected Keychain authorization; explicit access stays intact.
-        LAContext *context = [LAContext new]; if (!context) return nil;
+        LAContext *context = [LAContext new]; if (!context) return credential_rejected(DM_CRED_INTERACTION_CONTEXT);
         context.interactionNotAllowed = YES;
         query[(__bridge id)kSecUseAuthenticationContext] = context;
     }
@@ -98,30 +110,35 @@ static NSData *read_credentials(BOOL allowInteraction, BOOL guestWait) {
     // The probe has no guest scheduler/TLS: it runs before host preload.
     if (guestWait) dm_guest_host_wait_begin();
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    credentialDiagnostic.security_status=status;
     if (guestWait) dm_guest_host_wait_end();
-    if (status || !result) { if (result) CFRelease(result); return nil; }
-    id data = CFBridgingRelease(result); return [data isKindOfClass:NSData.class] && [data length] <= 65536 ? data : nil;
+    if (status || !result) { if (result) CFRelease(result); return credential_rejected(status ? DM_CRED_SECURITY_STATUS : DM_CRED_SECURITY_RESULT); }
+    id data = CFBridgingRelease(result); return [data isKindOfClass:NSData.class] && [data length] <= 65536 ? data : credential_rejected(DM_CRED_SECURITY_DATA);
 #endif
 }
 static DmNextendoCredential *decode_credential(NSData *data) {
-    if (!data.length || data.length > 65536) return nil;
-    id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]; if (![decoded isKindOfClass:NSDictionary.class]) return nil; NSDictionary *json = decoded;
-    if (!number(json[@"schema_version"]) || [json[@"schema_version"] doubleValue] != 1 || ![json[@"token_kind"] isEqual:@"nex"]) return nil;
-    NSString *token = json[@"token"]; if (![token isKindOfClass:NSString.class] || !token.length || [token lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 16384) return nil;
-    for (NSUInteger i = 0; i < token.length; i++) { unichar c = [token characterAtIndex:i]; if (c <= 32 || c >= 127) return nil; }
-    NSArray *parts = [token componentsSeparatedByString:@"."]; if (parts.count != 3 || ![parts[0] isEqual:@"nx2"]) return nil;
-    NSData *payload = decode_base64url(parts[1]), *signature = decode_base64url(parts[2]); if (!payload || signature.length != 32) return nil;
-    NSString *text = [[NSString alloc] initWithData:payload encoding:NSUTF8StringEncoding]; NSArray *claims = [text componentsSeparatedByString:@"."]; if (claims.count < 3) return nil;
-    uint64_t pid, expiry; if (!unsigned_decimal(claims.firstObject, &pid) || !unsigned_decimal(claims.lastObject, &expiry) || expiry > INT64_MAX) return nil;
-    NSString *username = [[claims subarrayWithRange:NSMakeRange(1, claims.count - 2)] componentsJoinedByString:@"."]; if (!username.length || username.length > 128) return nil;
-    id identity = json[@"identity"]; if (![identity isKindOfClass:NSDictionary.class] || !number(identity[@"pid"])) return nil;
-    uint64_t storedPid; if (!unsigned_decimal([identity[@"pid"] stringValue], &storedPid) || storedPid != pid || ![identity[@"username"] isEqual:username]) return nil;
+    if (!data) return nil; // Preserve the preceding read's rejection reason.
+    if (!data.length || data.length > 65536) return credential_rejected(DM_CRED_EMPTY);
+    id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]; if (![decoded isKindOfClass:NSDictionary.class]) return credential_rejected(DM_CRED_JSON); NSDictionary *json = decoded;
+    if (!number(json[@"schema_version"]) || [json[@"schema_version"] doubleValue] != 1) return credential_rejected(DM_CRED_SCHEMA);
+    if (![json[@"token_kind"] isEqual:@"nex"]) { int saved=errno; BOOL oauth=[json[@"token_kind"] isEqual:@"oauth"];errno=saved;return credential_rejected(oauth ? DM_CRED_OAUTH : DM_CRED_TOKEN_KIND); }
+    NSString *token = json[@"token"]; if (![token isKindOfClass:NSString.class] || !token.length || [token lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 16384) return credential_rejected(DM_CRED_TOKEN_TEXT);
+    for (NSUInteger i = 0; i < token.length; i++) { unichar c = [token characterAtIndex:i]; if (c <= 32 || c >= 127) return credential_rejected(DM_CRED_TOKEN_TEXT); }
+    NSArray *parts = [token componentsSeparatedByString:@"."]; if (parts.count != 3 || ![parts[0] isEqual:@"nx2"]) return credential_rejected(DM_CRED_TOKEN_FORMAT);
+    NSData *payload = decode_base64url(parts[1]), *signature = decode_base64url(parts[2]); if (!payload || signature.length != 32) return credential_rejected(DM_CRED_BASE64);
+    NSString *text = [[NSString alloc] initWithData:payload encoding:NSUTF8StringEncoding]; NSArray *claims = [text componentsSeparatedByString:@"."]; if (claims.count < 3) return credential_rejected(DM_CRED_CLAIMS);
+    uint64_t pid, expiry; if (!unsigned_decimal(claims.firstObject, &pid) || !unsigned_decimal(claims.lastObject, &expiry) || expiry > INT64_MAX) return credential_rejected(DM_CRED_CLAIMS);
+    NSString *username = [[claims subarrayWithRange:NSMakeRange(1, claims.count - 2)] componentsJoinedByString:@"."]; if (!username.length || username.length > 128) return credential_rejected(DM_CRED_CLAIMS);
+    id identity = json[@"identity"]; if (![identity isKindOfClass:NSDictionary.class] || !number(identity[@"pid"])) return credential_rejected(DM_CRED_IDENTITY);
+    uint64_t storedPid; if (!unsigned_decimal([identity[@"pid"] stringValue], &storedPid) || storedPid != pid || ![identity[@"username"] isEqual:username]) return credential_rejected(DM_CRED_IDENTITY);
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
-    if (!number(json[@"created_at"]) || !number(json[@"expires_at"])) return nil;
+    if (!number(json[@"created_at"]) || !number(json[@"expires_at"])) return credential_rejected(DM_CRED_TIME);
     double created = [json[@"created_at"] doubleValue], until = [json[@"expires_at"] doubleValue];
-    if (!isfinite(created) || !isfinite(until) || created <= 0 || created > now + 60 || until <= now || until <= created || until > (double)expiry) return nil;
-    id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return nil; for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return nil;
-    DmNextendoCredential *c = [DmNextendoCredential new]; c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
+    if (!isfinite(created) || !isfinite(until) || created <= 0 || created > now + 60 || until <= now || until <= created || until > (double)expiry) return credential_rejected(isfinite(until) && until <= now ? DM_CRED_EXPIRED : DM_CRED_TIME);
+    id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return credential_rejected(DM_CRED_SCOPES); for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return credential_rejected(DM_CRED_SCOPES);
+    DmNextendoCredential *c = [DmNextendoCredential new]; if (!c) return credential_rejected(DM_CRED_ALLOCATION);
+    credentialDiagnostic.reason=DM_CRED_OK;
+    c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
 }
 // A passive social operation never reads the Keychain, a device document or an
 // embedding provider. Only an already validated explicit read can populate this
@@ -174,7 +191,8 @@ static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) 
 #if !TARGET_OS_IOS
     guestWait=!preflightChild;
 #endif
-    return enabled() ? decode_credential(read_credentials(allowInteraction,guestWait)) : nil;
+    if (!enabled()) { credentialDiagnostic=(dm_nextendo_credential_diagnostic){DM_CRED_DISABLED,0};return nil; }
+    return decode_credential(read_credentials(allowInteraction,guestWait));
 }
 static DmNextendoCredential *credential(void) {
     uint64_t generation = social_begin_explicit();
@@ -199,7 +217,7 @@ void dm_nextendo_set_game_version(const char *version) {
 // The legacy SecItem shim ignores LAContext for password decryption. Its public
 // UI switch applies to every Keychain call in a process, so use it only in this
 // short-lived instance of the identical executable, before AppKit or guest boot.
-int dm_nextendo_account_preflight_child(int fd) { @autoreleasepool {
+static int account_preflight_child(int fd,BOOL diagnostic) { @autoreleasepool {
     struct stat st; if (fd < 3 || fstat(fd, &st) || !S_ISFIFO(st.st_mode)) return 64;
     preflightChild = YES;
     // Also bound this child if the renderer exits before it can cancel us.
@@ -216,12 +234,18 @@ int dm_nextendo_account_preflight_child(int fd) { @autoreleasepool {
 #pragma clang diagnostic pop
     if (restored) return 66;
     BOOL representable = c && c.expiry < (double)UINT64_MAX / 1000;
+    if (c && !representable) credentialDiagnostic.reason=DM_CRED_REPRESENTATION;
     dm_nextendo_preflight_reply reply = {.magic=DM_NEXTENDO_PREFLIGHT_MAGIC, .version=1, .pid=(uint32_t)getpid(),
         .available=representable, .expires_ms=representable ? (uint64_t)floor(c.expiry * 1000) : 0};
-    size_t done = 0; const uint8_t *bytes = (const uint8_t *)&reply;
-    while (done < sizeof reply) { ssize_t n = write(fd, bytes + done, sizeof reply - done); if (n < 0 && errno == EINTR) continue; if (n <= 0) return 67; done += (size_t)n; }
+    dm_nextendo_preflight_diagnostic detail={.magic=DM_NEXTENDO_PREFLIGHT_DIAGNOSTIC_MAGIC,.version=2,.credential=credentialDiagnostic};
+    uint8_t bytes[sizeof reply+sizeof detail];memcpy(bytes,&reply,sizeof reply);
+    if (diagnostic) memcpy(bytes+sizeof reply,&detail,sizeof detail);
+    size_t length=sizeof reply+(diagnostic ? sizeof detail : 0),done=0;
+    while (done < length) { ssize_t n = write(fd, bytes + done, length - done); if (n < 0 && errno == EINTR) continue; if (n <= 0) return 67; done += (size_t)n; }
     return 0;
 } }
+int dm_nextendo_account_preflight_child(int fd) { return account_preflight_child(fd,NO); }
+int dm_nextendo_account_preflight_diagnostic_child(int fd) { return account_preflight_child(fd,YES); }
 static BOOL preflight_available(dm_account_trace_provider_state *trace) {
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     static uint64_t generation; static NSTimeInterval checkedUntil, expiresAt; static BOOL available;
@@ -234,6 +258,7 @@ static BOOL preflight_available(dm_account_trace_provider_state *trace) {
         dm_nextendo_preflight_status status=dm_nextendo_preflight_last_status();
         trace->stage=status.stage; trace->error=status.error; trace->bytes=status.bytes;
         trace->exit_code=status.exit_code; trace->signal=status.signal;
+        trace->credential_reason=(int)status.credential.reason;trace->security_status=status.credential.security_status;
         now = NSDate.date.timeIntervalSince1970;
         expiresAt = valid ? (double)reply.expires_ms / 1000 : 0;
         available = valid && reply.available && expiresAt > now;
@@ -252,25 +277,27 @@ static BOOL preflight_available(dm_account_trace_provider_state *trace) {
 #endif
 uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool {
     if (!out) return DM_ACCOUNT_FAIL; *out = 0;
-    dm_account_trace_provider_state trace = {enabled(),-1,-1,-1,-1,-1,-1,-1,0,-1,-1,0};
+    dm_account_trace_provider_state trace = {enabled(),-1,-1,-1,-1,-1,-1,-1,0,-1,-1,0,DM_CRED_UNOBSERVED,0};
     if (!trace.enabled) { dm_account_trace_provider(0,trace); return 0; }
 #if TARGET_OS_IOS
     trace.provider = 1;
     *out = credential_with_interaction(NO) != nil;
+    trace.credential_reason=(int)credentialDiagnostic.reason;trace.security_status=credentialDiagnostic.security_status;
 #else
     trace.provider = atomic_load(&credentialProvider) != NULL;
     *out = trace.provider ? credential_with_interaction(NO) != nil : preflight_available(&trace);
+    if (trace.provider) { trace.credential_reason=(int)credentialDiagnostic.reason;trace.security_status=credentialDiagnostic.security_status; }
 #endif
     dm_account_trace_provider(*out != 0,trace);
     return 0;
 } }
 uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
     if (!out) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
-    *out = 0; DmNextendoCredential *c = credential(); if (!c) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL);
+    *out = 0; DmNextendoCredential *c = credential(); if (!c) return credential_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL);
     if (dm_nextendo_api_baas_namespace("account")) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,dm_nextendo_api_baas_id(out),DM_ACCOUNT_STAGE_BAAS_ID);
     *out = c.pid; return 0;
 } }
-uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return dm_account_trace_return(DM_ACCOUNT_RETURN_ENSURE,credential() ? 0 : DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL); } }
+uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return credential_return(DM_ACCOUNT_RETURN_ENSURE,credential() ? 0 : DM_ACCOUNT_FAIL); } }
 // Host-only API authorization. Never serialized into a game bundle or HLE output.
 NSString *dm_nextendo_api_bearer(void) { return credential().token; }
 NSData *dm_nextendo_api_identity(void) {
@@ -316,7 +343,7 @@ static NSData *id_token(DmNextendoCredential *c) {
 uint32_t dm_nextendo_account_load_token(uint64_t *size, char *buffer, uint64_t capacity) { @autoreleasepool {
     if (!size) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
     *size = 0; if (!buffer && capacity) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
-    DmNextendoCredential *c = credential(); if (!c) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL);
+    DmNextendoCredential *c = credential(); if (!c) return credential_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL);
     NSData *token = id_token(c); if (!token) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ID_TOKEN);
     *size = token.length; if (!buffer || capacity <= token.length) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_OUTPUT_BUFFER);
     memcpy(buffer, token.bytes, token.length); buffer[token.length] = 0; return 0;
@@ -376,7 +403,7 @@ uint32_t dm_nextendo_async_execute(void *object, dm_nextendo_async_operation ope
 } }
 static uint32_t ensure_token_operation(const void *context) {
     (void)context; DmNextendoCredential *c = credential();
-    if (!c) return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL);
+    if (!c) return credential_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,DM_ACCOUNT_FAIL);
     return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,id_token(c) ? 0 : DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ID_TOKEN);
 }
 uint32_t dm_nextendo_async_ensure(void *object) { return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,dm_nextendo_async_execute(object, ensure_token_operation, NULL),DM_ACCOUNT_STAGE_ASYNC_SETUP); }

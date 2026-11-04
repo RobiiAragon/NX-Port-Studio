@@ -1316,3 +1316,26 @@ close/reopen observation without opening a window or reading the real Keychain.
 | 9 | The actual stored completion Result |
 
 For a Mac reproduction I close the current game first, then add `DM_ACCOUNT_TRACE=1` to that title's `~/Library/Application Support/nxnative/<title ID>/env.txt` and launch normally. The existing launcher reads this file at startup, ahead of the bundle's environment file; neither replaces a launch-environment variable. I remove the diagnostic line after the reproduction. This uses the documented per-title override and does not edit, rebuild or hot-update an active app. The normal player workflow does not require this setting.
+
+### Account credential acquisition fails without identifying read or decode rejection
+
+- **Symptom:** an account operation returns `0x2a2` at credential stage 2, while a completed availability probe reports unavailable. Those results alone do not distinguish denied/missing storage from a rejected OAuth, schema or expired record.
+- **Cause:** the read and decoder returned the same nil credential, and the normal 32-byte preflight reply deliberately carries availability without credential contents or a rejection reason.
+- **Fix:** I classify only guards already evaluated by the existing read and decoder. Exact `DM_ACCOUNT_TRACE=1` adds numeric `credential_reason` and `security_status` to the bounded provider/failed-return trace. Each read resets thread-local metadata; I make no additional read or service request. Returned Results, errno, user interaction policy and credential validation stay intact. Only a failed Security call contributes its numeric OSStatus; decoded account data never enters the trace.
+- **Wire:** normal/off values keep the same 32-byte magic/version-1 reply, including zero reserved bytes, and reject an unsolicited sidecar. Only the opt-in parent selects a private diagnostic argument for the same executable. That child sends the unchanged v1 header plus a fixed 16-byte sidecar with its own magic/version 2, reason and OSStatus. The parent requires exactly 48 bytes, a clean owned-child exit and valid magic/version/reason/status/availability relationships. It publishes nothing from malformed metadata. The trace environment variable is not inherited by the child; no new account access or UI capability is added.
+- **Check:** my synthetic-provider HLE fixture first reproduced the missing stage-2 detail. A separate fake-Security fixture covers read status versus JSON/schema/OAuth/token/identity/time/expiry/scopes guards, reset and thread isolation, unchanged one-query counts, a silent default, metadata exclusion and both wire modes. It rejects truncated/extra packets, bad versions/magic/reserved/reasons and inconsistent status or availability. Normal and ASan/UBSan runs use no real Keychain item or account service.
+- **Found on:** my [Splatoon 3 investigation](../../dm/games/0100C2500FC20000/README.md), to separate the remaining account rejection. I have not recorded the game's actual new reason or established its underlying cause with this diagnostic.
+
+The constants in `dm/host/nextendo_credential_diagnostic.h` define the numeric phases:
+
+| Reason | Meaning |
+| --- | --- |
+| 0 / 1 | No read observed / valid decoded credential |
+| 2–5 | Disabled service, allocation, provider rejection or provider size |
+| 6–9 | Existing iOS document path, open, metadata or read guard |
+| 10–13 | Interaction-context allocation, Security OSStatus, absent result or unexpected result data |
+| 14–18 | Empty data, JSON, schema, OAuth record or another token kind |
+| 19–23 | Token text, token structure, base64, claims structure or identity consistency |
+| 24–27 | Time fields, expiry, scopes or unrepresentable preflight expiry |
+
+These are rejection phases, not authentication verdicts: for example, an expired record does not prove why it was not refreshed, and a missing item does not establish whether another app replaced it.
