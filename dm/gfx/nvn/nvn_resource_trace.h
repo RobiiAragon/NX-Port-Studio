@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-enum { NVN_RESOURCE_TRACE_KEYS = 16, NVN_RESOURCE_TRACE_LIMIT = 32 };
+enum { NVN_RESOURCE_TRACE_KEYS = 16, NVN_RESOURCE_TRACE_LIMIT = 32, NVN_RESOURCE_TRACE_ALL_TYPES = 0x3ff };
 enum { NVN_TRACE_COLOR, NVN_TRACE_DEPTH, NVN_TRACE_STENCIL, NVN_TRACE_TEXTURE };
 typedef struct {
     uint64_t key, serial;
@@ -48,6 +48,24 @@ static int nvn_resource_trace_config(nvn_resource_trace *t, const char *s) {
         if (!end) return 1;
         p = end + 1;
     }
+}
+// Optional Metal texture type codes 0..9. Filter before change detection so
+// unrelated resource shapes do not spend the same process-wide 32-change cap.
+// No setting keeps all types; a malformed or overlong list fails closed.
+static int nvn_resource_trace_types(const char *s, unsigned *mask) {
+    *mask = NVN_RESOURCE_TRACE_ALL_TYPES;
+    if (!s || !*s) return 1;
+    unsigned types = 0, tokens = 0;
+    const char *p = s;
+    for (;;) {
+        if (*p < '0' || *p > '9' || ++tokens > 10 || (p[1] && p[1] != ',')) { *mask = 0; return 0; }
+        types |= 1u << (*p - '0');
+        if (!p[1]) { *mask = types; return 1; }
+        p += 2;
+    }
+}
+static int nvn_resource_trace_type_watches(unsigned mask, uint32_t type) {
+    return type < 10 && ((mask >> type) & 1u);
 }
 static int nvn_resource_trace_live(const nvn_resource_trace *t) { return t->nkeys && t->emitted < NVN_RESOURCE_TRACE_LIMIT; }
 static int nvn_resource_trace_watches(const nvn_resource_trace *t, const char *s, uint64_t *key) {
