@@ -143,7 +143,7 @@ class Progress:
         with self.lock:
             self.end()
             self.k += 1; now = time.time()
-            self.cur = types.SimpleNamespace(name=name, step=step, unit='', total=None, done=None, est=False, note='', t0=now, hist=collections.deque(), beat=now, pstop=None, jlast=None, jstate=None)
+            self.cur = types.SimpleNamespace(name=name, step=step, unit='', total=None, done=None, est=False, note='', t0=now, hist=collections.deque(), changed=None, beat=now, pstop=None, jlast=None, jstate=None)
             if self.mode == 'json':
                 self._json({'ev': 'stage', 'k': self.k, 'n': self.n, 'name': name, 'step': step, 't': round(now, 3)})
             elif self.mode != 'bar': self._out(f'[{clock()}] [{self.k}/{self.n}] {name}' + (f' · {step}' if step else '') + ' …')
@@ -170,6 +170,7 @@ class Progress:
             if not st: return
             if step is not None and step != st.step:
                 st.step, st.done, st.total, st.unit, st.est, st.note, st.beat = step, None, None, '', False, '', time.time(); st.hist.clear()
+                st.changed = None
                 if self.mode == 'lines': self._out(f'[{clock()}] [{self.k}/{self.n}] {st.name} · {step} …')
                 if self.mode == 'json': self._json({'ev': 'step', 'k': self.k, 'name': st.name, 'step': step})
             if unit is not None: st.unit = unit
@@ -177,12 +178,17 @@ class Progress:
             if est is not None: st.est = est
             if note is not None: st.note = note
             if done is not None:
-                st.done = done; now = time.time(); st.hist.append((now, done))
+                now = time.monotonic()
+                if done != st.done: st.changed = now
+                st.done = done; st.hist.append((now, done))
                 while len(st.hist) > 2 and st.hist[1][0] < now - 60: st.hist.popleft()   # the ETA follows the rate of the last minute
             if self.mode == 'json': self._json_progress(st)
 
     def _json_progress(self, st, force=False):   # a progress event when anything changed; a count change alone waits JSON_INTERVAL unless forced (the caller holds the lock)
-        state = (st.step, st.total, st.unit, st.est, st.note, st.done)
+        eta = self._eta(st)
+        # Send a lost rate estimate even when the count has not changed. An
+        # old ETA must not remain in a JSON front end indefinitely.
+        state = (st.step, st.total, st.unit, st.est, st.note, eta is not None, st.done)
         if state == st.jstate: return
         now = time.monotonic()
         if not force and st.jstate is not None and state[:-1] == st.jstate[:-1] and now - st.jlast < self.JSON_INTERVAL: return
@@ -190,7 +196,7 @@ class Progress:
         self._json({'ev': 'progress', 'k': self.k, 'name': st.name, 'step': st.step, 'done': st.done, 'total': st.total,
                     'unit': st.unit, 'est': st.est, 'note': st.note,
                     'frac': min(st.done / st.total, 0.99) if st.total and st.done is not None else None,
-                    'eta': self._eta(st), 'elapsed': round(time.time() - st.t0, 3)})
+                    'eta': eta, 'elapsed': round(time.time() - st.t0, 3)})
 
     def _json(self, obj):   # one JSON object per stdout line (a message's newlines are escaped)
         obj.setdefault('t', round(time.time(), 3))
@@ -232,7 +238,7 @@ class Progress:
         return f'{st.done:,}/{t}{st.total:,}' + (f' {st.unit}' if st.unit else '')
 
     def _eta(self, st):   # seconds left at the rate of the last minute; None while unknown
-        if not st.total or len(st.hist) < 2: return None
+        if not st.total or len(st.hist) < 2 or st.changed is None or time.monotonic() - st.changed > 60: return None
         (t1, d1), (t2, d2) = st.hist[0], st.hist[-1]
         if t2 - t1 < 3 or d2 <= d1: return None
         return max(st.total - st.done, 0) * (t2 - t1) / (d2 - d1)
@@ -282,12 +288,12 @@ class Progress:
 
     def _poll(self, st, poll, stop):
         while not stop.is_set():
-            t, step = time.time(), st.step
+            t, step = time.monotonic(), st.step
             try: r = poll()
             except Exception: r = None   # progress never stops the build
             with self.lock:   # a count read for a step that ended meanwhile is dropped
                 if r and self.cur is st and not stop.is_set() and ('step' in r or st.step == step): self.set(**r)
-            stop.wait(max(self.POLL, (time.time() - t) * 5))   # a slow poll (a walk over tens of thousands of files) runs less often
+            stop.wait(max(self.POLL, (time.monotonic() - t) * 5))   # wall-clock adjustments cannot suspend the observer
 
 
 PROG = Progress()
@@ -1914,46 +1920,58 @@ def shader_keys(g):   # the base shaders dmsh_build.py builds, shared by progres
 
 
 class ShaderWatch:
-    """Progress of dmsh_build.py, read from the files it writes (it prints nothing until it ends). It works in three phases:
-    the cache check (a hit restores <key>_b.json into the library directory b-<chain>/: the iOS one, or the Mac's for a Mac-only build; a miss writes <key>.bin into its temporary folder dmsh_* under WORK),
-    the translation of the misses (<key>.spv in the temporary folder), and the compile, which takes the keys in a fixed order (sorted, the vertex shaders with pixel pairs last)
-    and writes <key>_b.json again for every miss and every pixel shader: the furthest key written so far tells how far it got"""
+    """Observe base artifacts, not completed shader jobs. dmsh_build clears its
+    output before creating dmsh_* under WORK, then restores cache hits and builds
+    misses in parallel. Reflection plus a base library can precede geometry/fetch
+    variants, so only the subprocess and final stamp establish stage success."""
     def __init__(self, g, out, tmp, pso_pairs=None):   # out: the library directory b-<chain>/ (the iOS one, or the Mac's for a Mac-only build)
-        keys = shader_keys(g)
-        pairs = set()
-        for path in (g.table('shader_pairs.tsv'), pso_pairs):
-            if path and path.is_file():
-                pairs |= {ln.split()[0] for ln in path.read_text(errors='replace').splitlines() if ln.strip() and not ln.startswith('#')}
-        order = sorted(keys - pairs) + sorted(keys & pairs)
-        self.pos, self.n = {k: i for i, k in enumerate(order)}, len(order)
-        self.out, self.tmp, self.t0, self.t1, self.w = out, tmp, time.time(), None, None
-        self.hits, self.fin, self.top = set(), set(), -1
+        self.keys = shader_keys(g); self.n = len(self.keys)
+        self.out, self.tmp, self.w = out, tmp, None
+        self.before = self.workdirs()
 
-    def written(self, keys, since):   # those of keys whose <key>_b.json in the output was written after since
+    def workdirs(self):
+        found = {}
+        try:
+            with os.scandir(self.tmp) as it:
+                for e in it:
+                    try:
+                        if e.name.startswith('dmsh_') and e.is_dir(follow_symlinks=False):
+                            st = e.stat(follow_symlinks=False); found[Path(e.path)] = (st.st_dev, st.st_ino)
+                    except OSError: pass
+        except OSError: pass
+        return found
+
+    @staticmethod
+    def names(directory):
         found = set()
         try:
-            with os.scandir(self.out) as it:
-                for e in it:
-                    if e.name.endswith('_b.json') and e.name[:-7] in keys and e.stat().st_mtime > since: found.add(e.name[:-7])
+            with os.scandir(directory) as entries:
+                for e in entries:
+                    try:
+                        if e.is_file(follow_symlinks=False): found.add(e.name)
+                    except OSError: pass
         except OSError: pass
         return found
 
     def __call__(self):
-        if not self.w:   # dmsh_build.py's temporary folder: the dmsh_* under WORK made since it started
-            self.w = max((d for d in self.tmp.glob('dmsh_*') if d.stat().st_birthtime >= self.t0 - 2), key=lambda d: d.stat().st_birthtime, default=None)
-        try: ext = collections.Counter(os.path.splitext(x)[1] for x in os.listdir(self.w)) if self.w else collections.Counter()
-        except OSError: ext = collections.Counter()
-        if self.t1 is None:
-            self.hits |= self.written(self.pos.keys() - self.hits, self.t0 - 2)
-            if len(self.hits) + ext['.bin'] < self.n and not ext['.spv'] and not ext['.metal']:
-                return {'step': 'cache check', 'done': len(self.hits) + ext['.bin'], 'total': self.n, 'unit': 'shaders', 'note': f'{len(self.hits):,} cached'}
-            self.t1 = time.time()   # the cache check is over: from now on a <key>_b.json is written by the compile
-        if ext['.bin'] and not ext['.metal'] and ext['.spv'] < ext['.bin']:
-            return {'step': 'translating', 'done': ext['.spv'], 'total': ext['.bin'], 'unit': 'shaders'}
-        new = self.written(self.pos.keys() - self.fin, self.t1)
-        self.fin |= new; self.top = max([self.top] + [self.pos[k] for k in new])
-        return {'step': 'compiling' if ext['.bin'] else 'finishing', 'done': max(len(self.fin), self.top + 1), 'total': self.n, 'unit': 'shaders',
-                'note': f'{ext[".bin"]:,} not cached' if ext['.bin'] else ''}
+        if self.w is None:
+            fresh = [p for p, identity in self.workdirs().items() if self.before.get(p) != identity]
+            if not fresh:
+                return {'step': 'cache check', 'done': 0, 'total': self.n, 'unit': 'shader bases', 'note': 'waiting for shader output preparation'}
+            self.w = fresh[-1]   # one build owns WORK; a new marker follows its output cleanup
+        work, output = self.names(self.w), self.names(self.out)
+        misses = {k for k in self.keys if k + '.bin' in work}
+        translated = {k for k in misses if k + '.spv' in work}
+        bases = {k for k in self.keys if k + '_b.json' in output and k + '_b.metallib' in output}
+        active_msl = any(k + '.metal' in work for k in misses)
+        if len(bases) == self.n or not self.w.is_dir():
+            return {'step': 'finishing variants and reflection', 'note': f'{len(bases):,}/{self.n:,} base artifact pairs observed; waiting for the shader build to finish'}
+        if len(bases | misses) < self.n and not translated and not active_msl:
+            return {'step': 'cache check', 'done': len(bases | misses), 'total': self.n, 'unit': 'shader bases', 'note': f'{len(bases):,} base artifact pairs restored'}
+        if misses and len(translated) < len(misses) and not active_msl:
+            return {'step': 'translating', 'done': len(translated), 'total': len(misses), 'unit': 'shaders'}
+        return {'step': 'preparing base artifacts', 'done': len(bases), 'total': self.n, 'unit': 'shader bases',
+                'note': 'base library + reflection pairs; variants and final validation may still be running'}
 
 
 def spirv_cross(repo, env=None):   # resolve the same selection the shader tools run, including an executable name on PATH

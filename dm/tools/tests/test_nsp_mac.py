@@ -228,12 +228,17 @@ class Nvn(Base):
             self.build(True); self.assertEqual(len(self.ran), 1)
             self.build(True); self.assertEqual(self.ran, [])
 
-    def test_shader_watch_finishes_extra_pairs_last(self):
+    def test_shader_watch_counts_artifacts_independently_of_extra_pairs(self):
         (self.tmp / 'shader_map.tsv').write_text('p.bin\t0\tvs\ta\tsrc\np.bin\t1\tps\tb\tsrc\np.bin\t2\tvs\tc\tsrc\n')
         (self.tmp / 'shader_pairs.tsv').write_text('c\tb\n')
         pso = self.tmp / 'pso_pairs.tsv'; pso.write_text('a\tb\n')
         watch = nsp.ShaderWatch(self.g, self.tmp, self.tmp, pso)
-        self.assertEqual(list(watch.pos), ['b', 'a', 'c'])
+        work = self.tmp / 'dmsh_test'; work.mkdir()
+        for key in ('a', 'b', 'c'):
+            for suffix in ('.bin', '.spv', '.metal'): (work / (key + suffix)).write_text('')
+        for suffix in ('_b.json', '_b.metallib'): (self.tmp / ('c' + suffix)).write_text('')
+        state = watch()
+        self.assertEqual((state['step'], state['done'], state['total']), ('preparing base artifacts', 1, 3))
 
 
 class EnvFile(Base):
