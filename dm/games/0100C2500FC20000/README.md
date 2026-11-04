@@ -1,6 +1,6 @@
 # Splatoon 3 (`0100C2500FC20000`)
 
-I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. In my latest Mac test of candidate `9f3f6be1`, I passed the title screen, entered the lobby and its tour, created my player card, and entered the Nextendo matchmaking queue. **This profile remains experimental:** severe graphics corruption persisted during that run, and I have not completed a match. Earlier diagnostics reached character creation, the tutorial, the train transition and the plaza, then failed a lobby connection with `2321-4992`; that older error is not the result of this new queue attempt. Nextendo match completion, LAN/LDN discovery and matches, iPhone rendering, DLC gameplay and long-session stability remain unqualified.
+I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. In my latest Mac test of source `8836235c` and shader chain `8410a1435ffe`, I reached a mostly correct lobby scene; one captured HUD reading was **60 FPS** and **4.28 ms GPU time** on an M5 Max. Small black stippled patches and white/red highlights remained on some floor reflections. **This profile remains experimental:** I have not accepted its graphics as correct or completed a match. My earlier `9f3f6be1` test reached the lobby tour, player-card creation and Nextendo matchmaking queue but had severe graphics corruption. Nextendo match completion, LAN/LDN discovery and matches, iPhone rendering, DLC gameplay and long-session stability remain unqualified.
 
 I record the detailed bring-up evidence and remaining tests in [Splatoon 3 bring-up](../../../docs/bringup/splatoon-3.md) and [local-network requirements](../../../docs/bringup/splatoon-3-local-network.md). Passing backend fixtures and recognizing a server profile do not establish working multiplayer in this game.
 
@@ -43,6 +43,14 @@ I check the versioned [calendar recipe](../../../docs/reference/nextendo-bcat.md
 Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Stick** there. I keep these protocols separate: native LAN uses IP sockets, while the LDN bridge requires a compatible IP peer/module. Two ordinary windows on one Mac do not establish two independent endpoints. I have not qualified discovery, joining, both host roles or a completed local match for this profile.
 
 ## Mac acceptance on November 4, 2026
+
+### Source 8836235c with shader chain 8410a1435ffe
+
+I tested the rebuilt Mac application with relaxed shader math. The lobby scene improved substantially and rendered normally across most of the picture. My private capture showed 60 FPS, 4.28 ms GPU time and a 16.67 ms frame interval on an M5 Max. This is a single captured reading, not a benchmark or a long-session stability result. Localized black stippling and white/red highlights remained in some floor reflections; I have not attributed that residual defect to an image binding, sampler LOD or shader operation.
+
+The bounded metadata sample from the tone-map consumer contained six accepted facts with no rejected metadata line or crash marker. It identified real full-resolution and five-mip lower-resolution inputs, whose serials differed from the output attachment. This does not establish feedback in an earlier producer or show its sampler clamps. My online and LAN/LDN acceptance limits remain unchanged.
+
+### Earlier source 9f3f6be1
 
 I tested the installed Mac application built from `9f3f6be1`. I advanced beyond the title, entered the lobby, completed its tour, created my player card and started the Nextendo matchmaking queue. The picture became severely corrupted during this sequence. I have not finished an online match or established the cause of the remaining graphics defect.
 
