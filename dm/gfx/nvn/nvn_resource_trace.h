@@ -7,7 +7,7 @@
 #include <string.h>
 
 enum { NVN_RESOURCE_TRACE_KEYS = 16, NVN_RESOURCE_TRACE_LIMIT = 32 };
-enum { NVN_TRACE_COLOR, NVN_TRACE_DEPTH, NVN_TRACE_STENCIL, NVN_TRACE_TEXTURE, NVN_TRACE_TEXTURE_U };
+enum { NVN_TRACE_COLOR, NVN_TRACE_DEPTH, NVN_TRACE_STENCIL, NVN_TRACE_TEXTURE };
 typedef struct {
     uint64_t key, serial;
     int32_t stage, role, slot, descriptor; // descriptor -1: none (render attachment)
@@ -67,7 +67,7 @@ static int nvn_resource_fact_same(const nvn_resource_fact *a, const nvn_resource
 static int nvn_resource_trace_note(nvn_resource_trace *t, const nvn_resource_fact *f) {
     if (!nvn_resource_trace_live(t)) return 0;
     unsigned k = 0; for (; k < t->nkeys && t->keys[k] != f->key; k++) {}
-    if (k == t->nkeys || f->role < NVN_TRACE_COLOR || f->role > NVN_TRACE_TEXTURE_U) return 0;
+    if (k == t->nkeys || f->role < NVN_TRACE_COLOR || f->role > NVN_TRACE_TEXTURE) return 0;
     unsigned i = 0;
     for (; i < t->nlast; i++) {
         const nvn_resource_fact *p = &t->last[i];
@@ -78,8 +78,8 @@ static int nvn_resource_trace_note(nvn_resource_trace *t, const nvn_resource_fac
     t->last[i] = *f; t->emitted++; return 1;
 }
 static void nvn_resource_trace_print(FILE *out, const nvn_resource_fact *f, uint64_t frame, uint64_t pass) {
-    static const char *const roles[] = {"color", "depth", "stencil", "texture", "texture_u"};
-    if (f->role < NVN_TRACE_COLOR || f->role > NVN_TRACE_TEXTURE_U) return;
+    static const char *const roles[] = {"color", "depth", "stencil", "texture"};
+    if (f->role < NVN_TRACE_COLOR || f->role > NVN_TRACE_TEXTURE) return;
     fprintf(out, "[dm] [nvn-resource] key=%016llx frame=%llu pass=%llu stage=%d role=%s slot=%d serial=%llu descriptor=%d type=%u format=%u width=%u height=%u depth=%u levels=%u layers=%u samples=%u level=%u slice=%u plane=%u render_layers=%u dummy=%u\n",
         (unsigned long long)f->key, (unsigned long long)frame, (unsigned long long)pass, f->stage, roles[f->role], f->slot, (unsigned long long)f->serial, f->descriptor,
         f->type, f->format, f->width, f->height, f->depth, f->levels, f->layers, f->samples, f->level, f->slice, f->plane, f->render_layers, f->dummy);

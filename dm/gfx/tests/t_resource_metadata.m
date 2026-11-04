@@ -18,6 +18,7 @@ uint64_t now_ns(void) { return bp_now(); }
 static int checks,failed;
 #define CHECK(c,s) do { checks++; if (!(c)) { failed++; fprintf(stderr,"FAIL: %s\n",s); } } while (0)
 static prog_t programs[2];
+static int own_texu;
 static id<MTLLibrary> shaders;
 
 static void programs_init(void) {
@@ -44,7 +45,7 @@ static void programs_init(void) {
         f->rf.color_known=1; f->rf.color_mask=mode?1:255; f->rf.nb=1;
         f->rf.b[0]=(nvn_rbind){.kind=NVN_RB_CBUF,.aid=0,.reg=0}; f->cb_ext[0]=16;
         if (!mode) snprintf(f->key,sizeof f->key,"0123456789abcdef_b");
-        if (mode) { snprintf(f->key,sizeof f->key,"fedcba9876543210_b"); f->rf.b[0]=(nvn_rbind){.kind=NVN_RB_TEX,.aid=0,.reg=0,.dtt=MTLTextureType3D,.dpf=NVN_DPF_FLOAT}; }
+        if (mode) { snprintf(f->key,sizeof f->key,"fedcba9876543210_b"); f->rf.b[0]=(nvn_rbind){.kind=own_texu?NVN_RB_TEXU:NVN_RB_TEX,.aid=0,.reg=0,.dtt=MTLTextureType3D,.dpf=NVN_DPF_FLOAT}; }
         f->ae=[f->fn newArgumentEncoderWithBufferIndex:0]; f->arg_len=f->ae.encodedLength;
         programs[mode].serial=nvn_new_serial(); serial_put(programs[mode].serial,p);
     }
@@ -67,11 +68,12 @@ static void check_volume(const tex_t *texture,int phase,int output) {
     }
 }
 static void run(void) {
-    enum { SIZE=262144, TEX=65536, UBO=131072, INDEX=147456, OUTPUT=196608 };
+    enum { SIZE=262144, TEX=65536, UBO=131072, INDEX=147456, OUTPUT=196608, HANDLE=163840 };
     uint8_t *mem=mmap(NULL,SIZE,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0); if (mem==MAP_FAILED) abort();
     pool_t pool={0}; pool_builder_t pb={.mem=mem,.size=SIZE,.flags=NVN_MEMORY_POOL_FLAGS_CPU_CACHED|NVN_MEMORY_POOL_FLAGS_GPU_CACHED};
     CHECK(h_nvnMemoryPoolInitialize((NVNmemoryPool *)&pool,(const NVNmemoryPoolBuilder *)&pb),"own pool initializes");
     uint16_t indices[]={0,1,2}; memcpy(mem+INDEX,indices,sizeof indices);
+    uint64_t own_handle=701; memcpy(mem+HANDLE,&own_handle,sizeof own_handle);
     NVNtexture texture={0}; NVNtextureBuilder builder;
     h_nvnTextureBuilderSetDefaults(&builder); h_nvnTextureBuilderSetTarget(&builder,NVN_TEXTURE_TARGET_3D);
     h_nvnTextureBuilderSetSize3D(&builder,8,8,8); h_nvnTextureBuilderSetFormat(&builder,NVN_FORMAT_R11G11B10F);
@@ -107,6 +109,7 @@ static void run(void) {
         h_nvnCommandBufferSetViewport(&cmd,0,0,8,64); h_nvnCommandBufferSetScissor(&cmd,0,0,8,64);
         h_nvnCommandBufferBindProgram(&cmd,(const NVNprogram *)&programs[1],3);
         h_nvnCommandBufferBindTexture(&cmd,NVN_SHADER_STAGE_FRAGMENT,0,701);
+        if (own_texu) h_nvnCommandBufferBindUniformBuffer(&cmd,NVN_SHADER_STAGE_FRAGMENT,0,(uint64_t)(mem+HANDLE),16);
         h_nvnCommandBufferDrawElements(&cmd,NVN_DRAW_PRIMITIVE_TRIANGLES,NVN_INDEX_TYPE_UNSIGNED_SHORT,3,(uint64_t)(mem+INDEX));
         NVNcommandHandle handle=h_nvnCommandBufferEndRecording(&cmd);
         state_reset(); memset(&R,0,sizeof R); mtl_sub_begin(); mtl_exec((const uint8_t *)handle);
@@ -118,7 +121,8 @@ static void run(void) {
     mtl_reg_tex(701,NULL,NULL); h_nvnTextureFinalize(&output);
     h_nvnTextureFinalize(&texture); h_nvnMemoryPoolFinalize((NVNmemoryPool *)&pool); mtl_drain(); munmap(mem,SIZE);
 }
-int main(void) { @autoreleasepool {
+int main(int argc,const char **argv) { @autoreleasepool {
+    own_texu=argc==2 && !strcmp(argv[1],"texu");
     const char *env=getenv("DM_NVN_RESOURCE_TRACE_KEYS"); char *late=env?strdup(env):NULL;
     unsetenv("DM_NVN_RESOURCE_TRACE_KEYS"); mtl_init();
     CHECK(!g_resource_trace_initialized,"initialization before bundle environment does not lock trace off");

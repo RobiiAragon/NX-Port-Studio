@@ -13,6 +13,19 @@ FIELDS = {'key', 'frame', 'pass', 'stage', 'role', 'slot', 'serial', 'descriptor
 
 class ResourceMetadataTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('DM_TEST_RESOURCE_METADATA'), 'set DM_TEST_RESOURCE_METADATA to the own GPU fixture')
+    def test_scalar_texu_remains_untraced(self):
+        env = dict(os.environ, DM_NVN_RESOURCE_TRACE_KEYS=KEYS)
+        for name in ('DM_NVN_PASSDUMP', 'DM_NVN_PASSDUMP_ALL', 'DM_NVN_KEYDUMP', 'DM_NVN_CBDUMP', 'DM_NVN_TEXINFO'):
+            env.pop(name, None)
+        p = subprocess.run([env['DM_TEST_RESOURCE_METADATA'], 'texu'], env=env, text=True, capture_output=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertRegex(p.stdout, r'RESOURCE_METADATA \d+ checks, 0 failed')
+        lines = [line for line in p.stderr.splitlines() if line.startswith('[dm] [nvn-resource] ')]
+        self.assertEqual(len(lines), 9, 'eight producer attachments and one consumer attachment; no scalar TEXU binding')
+        self.assertTrue(all('role=color ' in line for line in lines))
+        self.assertNotIn('[RED]', p.stderr)
+
+    @unittest.skipUnless(os.environ.get('DM_TEST_RESOURCE_METADATA'), 'set DM_TEST_RESOURCE_METADATA to the own GPU fixture')
     def test_identical_own_pixels_and_resolution_counts_off_on(self):
         results = []
         for keys in ('', KEYS):
@@ -55,6 +68,7 @@ class ResourceMetadataTests(unittest.TestCase):
 
     def test_hooks_only_observe_already_resolved_metadata(self):
         source = (Path(__file__).parents[1] / 'nvn/nvn_mtl.m').read_text()
+        self.assertIn('if (b->kind == NVN_RB_TEX && resource_trace_on()', source)
         for name in ('resource_texture_fact', 'resource_attachment_snapshot', 'resource_fact_emit'):
             match = re.search(r'\b' + name + r'\([^;{}]+\) \{', source)
             self.assertIsNotNone(match, name)
