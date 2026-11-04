@@ -20,6 +20,7 @@ ERRORS = {
     -4: ("full", "The personal Mii library cannot contain more than 100 records."),
     -5: ("io", "The Mii file could not be read or replaced."),
     -6: ("not_found", "The Mii source file was not found."),
+    -7: ("commit_uncertain", "The Mii replacement is visible, but directory synchronization failed. Its durability is unconfirmed."),
 }
 
 

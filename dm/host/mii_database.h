@@ -25,7 +25,10 @@ typedef struct { uint32_t added, replaced, unchanged, total; } dm_mii_import_res
 enum {
     DM_MII_OK = 0, DM_MII_INVALID = -1, DM_MII_CHECKSUM = -2,
     DM_MII_UNSUPPORTED = -3, DM_MII_FULL = -4, DM_MII_IO = -5,
-    DM_MII_NOT_FOUND = -6
+    DM_MII_NOT_FOUND = -6,
+    // Replacement is visible, but synchronizing its directory failed. Do not
+    // report a durable commit or assume that the previous file is unchanged.
+    DM_MII_COMMIT_UNCERTAIN = -7
 };
 
 // These validate and preserve IDs and appearance. No missing/invalid record is
@@ -37,6 +40,10 @@ int dm_mii_inspect_file(const char *path, dm_mii_collection *out);
 int dm_mii_read(const char *path, dm_mii_collection *out);
 // Merge by CreateId (stable existing positions, append new IDs), under an
 // interprocess lock and an atomic, CRC-protected private-file replacement.
+// A changed collection succeeds only after file and containing-directory fsync.
+// Failure leaves out untouched, including COMMIT_UNCERTAIN after rename. A
+// no-change import or an existing seed is not a new durable-commit receipt.
+// fsync is the OS/filesystem barrier, not a guarantee against drive-cache loss.
 int dm_mii_import_file(const char *database, const char *source, dm_mii_import_result *out);
 // Existence is checked under the writer lock. Never merge an old bundled seed
 // over a database another port or a later explicit import has already created.

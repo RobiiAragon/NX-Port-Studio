@@ -57,10 +57,16 @@ $(B)/t_mii: t_mii.c ../hle_mii.c ../hle_mii_database.c ../mii_database.h $(GAME_
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -o $@ t_mii.c ../hle_mii_database.c
 $(B)/t_mii_asan: t_mii.c ../hle_mii.c ../hle_mii_database.c ../mii_database.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function $(GINC) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_mii.c ../hle_mii_database.c
-mii: $(B)/t_mii
+$(B)/t_mii_durability: t_mii_durability.c ../hle_mii_database.c ../mii_database.h ../../tools/mii_import.c | $(B)
+	$(CLANG) -std=gnu11 -O1 -g -Wall -Wextra -Werror -Wno-unused-function -o $@ t_mii_durability.c
+$(B)/t_mii_durability_asan: t_mii_durability.c ../hle_mii_database.c ../mii_database.h ../../tools/mii_import.c | $(B)
+	$(CLANG) -std=gnu11 -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_mii_durability.c
+mii: $(B)/t_mii $(B)/t_mii_durability
 	$(B)/t_mii
-mii-sanitize: $(B)/t_mii_asan
+	$(B)/t_mii_durability
+mii-sanitize: $(B)/t_mii_asan $(B)/t_mii_durability_asan
 	$(B)/t_mii_asan
+	$(B)/t_mii_durability_asan
 run: mii
 run: $(B)/t_heap_size $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_commit_list $(B)/t_thread_leak $(B)/t_fs_case $(B)/t_audio $(B)/t_audio_spsc $(B)/t_swkbd $(B)/t_altstack $(B)/t_condvar $(B)/t_condvar_old $(B)/t_pctl $(B)/t_time $(B)/t_shared_font $(B)/t_vorbis $(B)/t_vorbis_divides $(B)/t_hid $(B)/t_haptics $(B)/t_haptics_apple $(B)/t_controls $(B)/t_joycon_protocol $(B)/t_joycon_rumble $(B)/t_joycon_output $(B)/t_language $(B)/t_motion $(B)/t_pollwait $(B)/t_cheats
 	$(B)/t_language
