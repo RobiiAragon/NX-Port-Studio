@@ -357,6 +357,21 @@ check_t_linear_readback: t_linear_readback
 .PHONY: check_t_linear_readback_asan
 check_t_linear_readback_asan: t_linear_readback_asan
 	$(ASAN_ENV) MTL_DEBUG_LAYER=1 ./t_linear_readback_asan
+t_compressible_content: t_compressible_content.m $(MTL_T_DEP)
+	clang $(CFLAGS) -DDM_TEST_TEX_FLUSH_UPLOAD=0 -fobjc-arc -o $@ t_compressible_content.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+t_compressible_content_flush: t_compressible_content.m $(MTL_T_DEP)
+	clang $(CFLAGS) -DDM_TEST_TEX_FLUSH_UPLOAD=1 -fobjc-arc -o $@ t_compressible_content.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+t_compressible_content_asan: t_compressible_content.m $(MTL_T_DEP) ../../sanitizers/ignorelist.txt
+	clang $(CFLAGS) $(ASAN_FLAGS) -DDM_TEST_TEX_FLUSH_UPLOAD=0 -fobjc-arc -o $@ t_compressible_content.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+t_compressible_content_flush_asan: t_compressible_content.m $(MTL_T_DEP) ../../sanitizers/ignorelist.txt
+	clang $(CFLAGS) $(ASAN_FLAGS) -DDM_TEST_TEX_FLUSH_UPLOAD=1 -fobjc-arc -o $@ t_compressible_content.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+.PHONY: check_t_compressible_content check_t_compressible_content_asan
+check_t_compressible_content: t_compressible_content t_compressible_content_flush
+	MTL_DEBUG_LAYER=1 ./t_compressible_content
+	MTL_DEBUG_LAYER=1 ./t_compressible_content_flush
+check_t_compressible_content_asan: t_compressible_content_asan t_compressible_content_flush_asan
+	$(ASAN_ENV) MTL_DEBUG_LAYER=1 ./t_compressible_content_asan
+	$(ASAN_ENV) MTL_DEBUG_LAYER=1 ./t_compressible_content_flush_asan
 t_pfv: t_pfv.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_pfv.m $(MTL_T_SRC) $(FW)
 check_t_pfv: RUN_ENV = MTL_DEBUG_LAYER=1
