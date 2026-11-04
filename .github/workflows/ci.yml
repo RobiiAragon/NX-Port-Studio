@@ -65,6 +65,7 @@ jobs:
           dm.tools.tests.test_display_mods
           dm.ios.tests.test_launcher_storage
           dm.ios.tests.test_mobile_nextendo
+          dm.ios.tests.test_game_account_preparation
           dm.ios.tests.test_nextendo_resources
           dm.ios.tests.test_nextendo_embed
           tools.maintainers.test_prepare_export
