@@ -101,10 +101,9 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         precondition(model.account == nil && !model.hasGameCredential && model.hasClientID)
         model.signIn()
         try await eventually { !model.isAuthorizing }
-        precondition(model.account?.tokenKind == .oauth && !model.hasGameCredential && model.canRequestGameCredential)
-        precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends", "presence", "game.matchmaking", "emulator.status"]))
-        model.requestGameCredential()
-        try await eventually { !model.isRequestingCredential }
+        precondition(model.account?.tokenKind == .nex && model.hasGameCredential && !model.canRequestGameCredential,
+                     "One sign-in must finish with the provider's game proof")
+        precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends"]))
         let storedNEX = try store.load()
         precondition(model.hasGameCredential && storedNEX?.tokenKind == .nex)
         await model.load()
@@ -136,7 +135,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
 
         let cancelledStore = FixtureStore(), cancelledCallbacks = MobileNextendoCallbackPool(), pendingBrowser = FixtureBrowser()
         pendingBrowser.mode = .pending
-        let cancelledService = NextendoAccountService(store: cancelledStore, http: FixtureHTTP([.init(data:token,statusCode:200)]), makeReceiver:{ try cancelledCallbacks.make() })
+        let cancelledService = NextendoAccountService(store: cancelledStore, http: FixtureHTTP([.init(data:token,statusCode:200),.init(data:identity,statusCode:200),.init(data:nex,statusCode:200)]), makeReceiver:{ try cancelledCallbacks.make() })
         let cancelled = MobileNextendoModel(bundle: bundle, preferences: preferences, accountService: cancelledService, catalogService: catalogService, callbacks: cancelledCallbacks, browser: pendingBrowser)
         cancelled.signIn()
         try await eventually { pendingBrowser.receiver != nil }
@@ -148,8 +147,22 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         pendingBrowser.mode = .approve
         cancelled.signIn()
         try await eventually { !cancelled.isAuthorizing }
-        precondition(cancelled.account?.tokenKind == .oauth, "Retry must wait for the old cancellation barrier")
+        precondition(cancelled.account?.tokenKind == .nex, "Retry must wait for the old cancellation barrier and finish the game-proof exchange")
         await cancelled.signOut()
+
+        let rejectedStore = FixtureStore(), rejectedCallbacks = MobileNextendoCallbackPool()
+        try rejectedStore.save(storedNEX!)
+        let rejectedService = NextendoAccountService(store: rejectedStore,
+            http: FixtureHTTP([.init(data:token,statusCode:200),.init(data:identity,statusCode:200),.init(data:Data(),statusCode:401)]),
+            makeReceiver:{ try rejectedCallbacks.make() })
+        let rejected = MobileNextendoModel(bundle: bundle, preferences: preferences, accountService: rejectedService,
+            catalogService: catalogService, callbacks: rejectedCallbacks, browser: FixtureBrowser())
+        await rejected.load()
+        rejected.signIn()
+        try await eventually { !rejected.isAuthorizing }
+        let preservedNEX = try rejectedStore.load()
+        precondition(preservedNEX == storedNEX && rejected.account?.tokenKind == .nex && rejected.accountError == .httpStatus(401),
+                     "An unsupported OAuth game-proof exchange must report failure and preserve the previous native credential")
 
         let mismatchKeychain = FixtureStore(), mismatchLegacy = FixtureLegacy(legacyData)
         try mismatchKeychain.save(oauth)
