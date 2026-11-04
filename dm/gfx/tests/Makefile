@@ -469,3 +469,17 @@ check_t_logic: t_logic
 # AppKit mode classification only: no app/window, game files or GPU required.
 t_screen_refresh_mac: t_screen_refresh_mac.m ../../host/mac_screen_refresh.inc
 	clang -O1 -g -Wall -Wextra -Werror -fobjc-arc -o $@ $< -framework AppKit -framework Foundation
+
+# Bounded resource metadata: pure signature checks and own 3D MRT producer / consumer.
+t_resource_trace: t_resource_trace.c ../nvn/nvn_resource_trace.h
+	clang -std=c11 -O1 -g -Wall -Wextra -Werror -o $@ $<
+t_resource_trace_asan: t_resource_trace.c ../nvn/nvn_resource_trace.h
+	clang -std=c11 -O1 -g -Wall -Wextra -Werror $(ASAN_FLAGS) -o $@ $<
+t_resource_metadata: t_resource_metadata.m $(MTL_T_DEP)
+	clang $(CFLAGS) -fobjc-arc -o $@ t_resource_metadata.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+t_resource_metadata_asan: t_resource_metadata.m $(MTL_T_DEP) ../../sanitizers/ignorelist.txt
+	clang $(CFLAGS) $(ASAN_FLAGS) -fobjc-arc -o $@ t_resource_metadata.m ../../host/crash.c ../../host/hle_bigstack.c t_host_stubs.c $(filter-out ../nvn/nvn_mtl.m,$(GFX)) $(FW)
+check_t_resource_metadata: t_resource_metadata
+	DM_TEST_RESOURCE_METADATA=$(CURDIR)/t_resource_metadata MTL_DEBUG_LAYER=1 python3 -B -m unittest test_resource_metadata.py
+check_t_resource_metadata_asan: t_resource_metadata_asan
+	$(ASAN_ENV) DM_TEST_RESOURCE_METADATA=$(CURDIR)/t_resource_metadata_asan MTL_DEBUG_LAYER=1 python3 -B -m unittest test_resource_metadata.py
