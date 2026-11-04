@@ -6,6 +6,9 @@
 #undef HLE_FORCE_WAIT
 #define HLE_FORCE(name, why, ret, cname, ...) static ret cname(__VA_ARGS__)
 #define HLE_FORCE_WAIT HLE_FORCE
+static _Atomic int mute_sf_logs;
+#undef LOG
+#define LOG(...) do { if(!atomic_load(&mute_sf_logs)){flockfile(stderr);fprintf(stderr,"[dm] " __VA_ARGS__);fputc('\n',stderr);funlockfile(stderr);} } while(0)
 #include "../hle_sf.c"
 #include <stdio.h>
 #include <unistd.h>
@@ -145,6 +148,64 @@ static void capacity_limits(void) {
     uint32_t untouched=0xface;CHECK(h_sf_Connect(&untouched,"friend:u")!=0&&untouched==0xface);
     for(unsigned i=0;i<64;i++)h_sf_Close(sessions[i]);CHECK(g_nse==0);
 }
+static _Atomic uint32_t legacy_handle;
+static _Atomic unsigned legacy_errors;
+static pthread_mutex_t legacy_lock=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t legacy_cv=PTHREAD_COND_INITIALIZER;
+static unsigned legacy_waiting;static int legacy_go;
+static void legacy_gate(void) {
+    pthread_mutex_lock(&legacy_lock);legacy_waiting++;pthread_cond_broadcast(&legacy_cv);
+    while(!legacy_go)pthread_cond_wait(&legacy_cv,&legacy_lock);pthread_mutex_unlock(&legacy_lock);
+}
+static void legacy_request(uint32_t session,unsigned domain,unsigned command) {
+    uint32_t message[64];request(message,1,command,NULL,0);
+    if(!domain){memcpy(message+4,message+8,16);memset(message+8,0,16);message[1]=8;}
+    uint32_t status=h_sf_Send(session,message,sizeof message);
+    // A concurrently closed handle or changed domain may reject this request.
+    // A successful legacy response must still be one complete, zero-result
+    // CMIF reply for the domain state held during this dispatch.
+    if(!status&&!(message[4]==0x4f434653&&!message[6])&&!(message[8]==0x4f434653&&!message[10]))atomic_fetch_add(&legacy_errors,1);
+}
+static void *legacy_sender(void *unused) {
+    (void)unused;legacy_gate();
+    for(unsigned i=0;i<4000;i++)legacy_request(atomic_load(&legacy_handle),i&1,i&3);
+    return NULL;
+}
+static void *legacy_reuser(void *unused) {
+    (void)unused;legacy_gate();
+    for(unsigned i=0;i<2000;i++) {
+        h_sf_Close(atomic_load(&legacy_handle));uint32_t next=0;
+        if(h_sf_Connect(&next,"olsc:u"))atomic_fetch_add(&legacy_errors,1);
+        else atomic_store(&legacy_handle,next);
+    }
+    return NULL;
+}
+static void *legacy_cloner(void *unused) {
+    (void)unused;legacy_gate();
+    for(unsigned i=0;i<2000;i++) {
+        uint32_t clone=0,object=0;
+        if(!h_sf_Dup(&clone,atomic_load(&legacy_handle))) {
+            if(i&1)(void)h_sf_ToDomain(&object,clone);
+            legacy_request(clone,i&1,i&3);h_sf_Close(clone);
+        }
+        if(i&1)(void)h_sf_ToDomain(&object,atomic_load(&legacy_handle));
+    }
+    return NULL;
+}
+static void legacy_concurrency(void) {
+    uint32_t session=0;CHECK(!h_sf_Connect(&session,"olsc:u"));atomic_store(&legacy_handle,session);
+    atomic_store(&mute_sf_logs,1);pthread_t workers[3];
+    CHECK(!pthread_create(&workers[0],NULL,legacy_sender,NULL));
+    CHECK(!pthread_create(&workers[1],NULL,legacy_reuser,NULL));
+    CHECK(!pthread_create(&workers[2],NULL,legacy_cloner,NULL));
+    pthread_mutex_lock(&legacy_lock);while(legacy_waiting!=3)pthread_cond_wait(&legacy_cv,&legacy_lock);
+    legacy_go=1;pthread_cond_broadcast(&legacy_cv);pthread_mutex_unlock(&legacy_lock);
+    for(unsigned i=0;i<3;i++)CHECK(!pthread_join(workers[i],NULL));
+    // Deliberate handle reuse can retire a concurrently duplicated handle;
+    // discard every remaining fixture session after all workers have stopped.
+    for(unsigned i=0;i<SF_MAX;i++)if(g_sf[i].used)h_sf_Close(SF_H0+i);
+    atomic_store(&mute_sf_logs,0);CHECK(!atomic_load(&legacy_errors));CHECK(g_nse==0);
+}
 int main(void) {
     uint32_t session=0,root=0,message[64];
     CHECK(!h_sf_Connect(&session,"friend:u"));
@@ -176,7 +237,7 @@ int main(void) {
     CHECK(g_nse==0);
     CHECK(!h_sf_Connect(&session,"friend:u")&&!h_sf_ToDomain(&root,session));
     cancellation(session);service=create_service(session);malformed(session,service);h_sf_Close(session);
-    CHECK(g_nse==0);server_event_lifetimes();capacity_limits();
+    CHECK(g_nse==0);server_event_lifetimes();capacity_limits();legacy_concurrency();
 finish:
     printf("SF friends synthetic IPC/kernel fixture: %d checks, %d failures\n",checks,failures);
     return failures!=0;

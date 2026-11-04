@@ -80,13 +80,10 @@ HLE_FORCE("_ZN2nn2sf4hipc6client16DuplicateSessionEPNS_3svc6HandleES4_", "contro
 HLE_FORCE("_ZN2nn2sf4hipc6client18DuplicateSessionExEPNS_3svc6HandleES4_j", "control request: clone a session (with a tag) → a new host session to the same service", Result, h_sf_DupEx,
           uint32_t *out, uint32_t h, unsigned tag) { (void)tag; return h_sf_Dup(out, h); }
 
-HLE_FORCE_WAIT("_ZN2nn2sf4hipc15SendSyncRequestENS_3svc6HandleEPvm", "native service dispatch; a real friends provider request can block", Result, h_sf_Send,
-          uint32_t h, uint32_t *m, uint64_t size) {
-    pthread_mutex_lock(&g_sf_mu);int i = sf_slot(h);
-    sf_friend_domain *friends=i<0?NULL:g_sf[i].friends;int converted=i>=0&&g_sf[i].domain;
-    sf_friend_domain_retain(friends);pthread_mutex_unlock(&g_sf_mu);
-    if (i < 0 || !m || size < 0x40) { sf_friend_domain_release(friends);LOG("[RED] sf: SendSyncRequest on %#x (%llu bytes), not a host session", h, (unsigned long long)size); return 0xe401u; }   // kernel ResultInvalidHandle
-    if(friends){uint32_t result=sf_friend_send(friends,converted,(uint8_t *)m,(size_t)size);sf_friend_domain_release(friends);return result;}
+// Caller holds g_sf_mu over this bounded legacy dispatch. It performs no SDK
+// callbacks or provider work, so the slot, domain, name, seen key and trace
+// initialization stay coherent with concurrent close/convert/duplicate/reuse.
+static Result sf_legacy_send(int i, uint32_t *m, uint64_t size) {
     uint8_t *base = (uint8_t *)m;
     unsigned type = m[0] & 0xffff, nx = m[0] >> 16 & 15, nabw = (m[0] >> 20 & 15) + (m[0] >> 24 & 15) + (m[0] >> 28 & 15), ndw = m[1] & 0x3ff;
     uint32_t *p = m + 2;
@@ -104,7 +101,7 @@ HLE_FORCE_WAIT("_ZN2nn2sf4hipc15SendSyncRequestENS_3svc6HandleEPvm", "native ser
     if (dtype == 2) { memset(base, 0, 16); return RES_OK; }   // a domain object closed: nothing to answer
     if (magic != 0x49434653) { LOG("[RED] sf: %s: request without SFCI (%#x)", g_sf[i].name, magic); return 0xe401u; }
     unsigned key = (obj & 0xff) << 16 | (cmd & 0xffff);   // log each object / command once
-    pthread_mutex_lock(&g_sf_mu); int first = g_sf[i].seen != key; g_sf[i].seen = key; pthread_mutex_unlock(&g_sf_mu);
+    int first = g_sf[i].seen != key; g_sf[i].seen = key;
     if (first || trace) LOG("sf: %s object %u command %u (%u data words in): success, zeroed output", g_sf[i].name, obj, cmd, ndw);
     // The response: no special header and no descriptors, so the data words start at +8 and the CMIF part at +0x10; everything after the headers up to the buffer's end reads as zero
     size_t end = size < 0x1000 ? size : 0x1000;
@@ -113,4 +110,21 @@ HLE_FORCE_WAIT("_ZN2nn2sf4hipc15SendSyncRequestENS_3svc6HandleEPvm", "native ser
     size_t out = 0x10 + (dom ? 16 : 0);
     uint32_t *o = (uint32_t *)(base + out); o[0] = 0x4f434653; o[1] = ver; o[2] = RES_OK; o[3] = 0;   // "SFCO"; a domain's out-object count before it stays 0
     return RES_OK;
+}
+
+HLE_FORCE_WAIT("_ZN2nn2sf4hipc15SendSyncRequestENS_3svc6HandleEPvm", "native service dispatch; a real friends provider request can block", Result, h_sf_Send,
+          uint32_t h, uint32_t *m, uint64_t size) {
+    pthread_mutex_lock(&g_sf_mu);int i=sf_slot(h);
+    if(i<0||!m||size<0x40) {
+        pthread_mutex_unlock(&g_sf_mu);
+        LOG("[RED] sf: SendSyncRequest on %#x (%llu bytes), not a host session",h,(unsigned long long)size);
+        return 0xe401u; // kernel ResultInvalidHandle
+    }
+    sf_friend_domain *friends=g_sf[i].friends;
+    if(!friends) {
+        Result result=sf_legacy_send(i,m,size);pthread_mutex_unlock(&g_sf_mu);return result;
+    }
+    int converted=g_sf[i].domain;sf_friend_domain_retain(friends);pthread_mutex_unlock(&g_sf_mu);
+    Result result=sf_friend_send(friends,converted,(uint8_t *)m,(size_t)size);
+    sf_friend_domain_release(friends);return result;
 }
