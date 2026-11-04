@@ -3,7 +3,22 @@
 // This is deliberately separate from the legacy zero-output olsc adapter.
 #include "nextendo_social.h"
 #include <stdatomic.h>
+#include <errno.h>
 #define SF_FRIEND_OBJECT_MAX 64
+static _Atomic unsigned sf_friend_trace_count,sf_friend_unsupported_logged;
+static void sf_friend_trace(uint32_t object,uint32_t command,uint32_t result) {
+    int saved=errno;const char *flag=getenv("DM_ACCOUNT_TRACE");
+    if(flag&&!strcmp(flag,"1")) {
+        unsigned count=atomic_load(&sf_friend_trace_count);
+        while(count<32)if(atomic_compare_exchange_weak(&sf_friend_trace_count,&count,count+1)) {
+            fprintf(stderr,"[account-trace] op=sf.friends object=%u command=%u result=0x%x\n",object,command,result);break;
+        }
+    }
+    errno=saved;
+}
+static void sf_friend_unsupported(uint32_t command) {
+    if(!atomic_exchange(&sf_friend_unsupported_logged,1))LOG("[RED] sf: friend:u unsupported command %u",command);
+}
 
 typedef struct sf_friend_object {
     _Atomic unsigned refs;
@@ -139,6 +154,7 @@ static uint32_t sf_friend_send(sf_friend_domain *domain,int converted,uint8_t *b
     uint32_t result=RES_FAIL,child=0,handle=0;uint8_t available=0;size_t output_size=0;
     if(request.object==1) {
         if(!request.descriptors&&!request.argument_size&&request.command==0)result=sf_friend_create(domain,&child);
+        else if(request.command!=0)sf_friend_unsupported(request.command);
     } else {
         sf_friend_object *object=sf_friend_find(domain,request.object);
         if(object) {
@@ -159,12 +175,12 @@ static uint32_t sf_friend_send(sf_friend_domain *domain,int converted,uint8_t *b
                     result=dm_nextendo_friends_available(&available,request.arguments);if(!result)output_size=1;
                 } else if(request.argument_size==16&&request.command==10121) {
                     uint8_t uid[16];memcpy(uid,request.arguments,16);result=sf_friend_ensure(object,uid);
-                }
+                } else if(request.command!=0&&request.command!=1&&request.command!=10120&&request.command!=10121)sf_friend_unsupported(request.command);
             }
             sf_friend_object_release(object);
         }
     }
     // Metadata only: no user IDs, handles, addresses or raw IPC bytes.
-    LOG("sf: friend:u object %u command %u result %#x",request.object,request.command,result);
+    sf_friend_trace(request.object,request.command,result);
     return sf_friend_reply(bytes,size,&request,result,&available,output_size,child,handle);
 }

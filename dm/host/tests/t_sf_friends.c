@@ -12,6 +12,7 @@ static _Atomic int mute_sf_logs;
 #include "../hle_sf.c"
 #include <stdio.h>
 #include <unistd.h>
+#include "t_trace_capture.h"
 struct dm_flags g_flag;
 module_t *g_mod;int g_nmod;
 uint64_t g_t0_ns;
@@ -148,6 +149,38 @@ static void capacity_limits(void) {
     uint32_t untouched=0xface;CHECK(h_sf_Connect(&untouched,"friend:u")!=0&&untouched==0xface);
     for(unsigned i=0;i<64;i++)h_sf_Close(sessions[i]);CHECK(g_nse==0);
 }
+typedef struct {uint32_t session,object;_Atomic unsigned *errors;} trace_worker;
+static void *trace_requests(void *argument) {
+    trace_worker *work=argument;
+    for(unsigned i=0;i<40;i++) {
+        uint32_t message[64];request(message,work->object,i&1,NULL,0);
+        if(h_sf_Send(work->session,message,sizeof message)||message[10])atomic_fetch_add(work->errors,1);
+        else if(!(i&1)){uint64_t registers[32]={message[3]};if(!svc_thread(0x16,registers)||registers[0])atomic_fetch_add(work->errors,1);}
+    }
+    return NULL;
+}
+static void metadata_trace(void) {
+    uint32_t session=0,object=0;unsetenv("DM_ACCOUNT_TRACE");
+    CHECK(!h_sf_Connect(&session,"friend:u")&&!h_sf_ToDomain(&object,session));object=create_service(session);
+    const char *disabled[]={"0","true","01",""};TraceCapture capture=trace_capture_begin();
+    uint32_t event=completion(session,object);close_handle(event);
+    for(unsigned i=0;i<sizeof disabled/sizeof *disabled;i++){setenv("DM_ACCOUNT_TRACE",disabled[i],1);event=completion(session,object);close_handle(event);}
+    char *text=trace_capture_end(capture);CHECK(!*text);free(text);
+    setenv("DM_ACCOUNT_TRACE","1",1);setenv("DM_SF_TRACE","1",1);capture=trace_capture_begin();
+    _Atomic unsigned errors=0;trace_worker work={session,object,&errors};pthread_t threads[3];
+    for(unsigned i=0;i<3;i++)CHECK(!pthread_create(&threads[i],NULL,trace_requests,&work));
+    for(unsigned i=0;i<3;i++)CHECK(!pthread_join(threads[i],NULL));CHECK(!atomic_load(&errors));
+    errno=EAGAIN;sf_friend_trace(object,0,0);CHECK(errno==EAGAIN);
+    text=trace_capture_end(capture);unsigned lines=0;char *line=text;
+    while(*line) {
+        unsigned got_object=0,command=99,status=99;int used=0;
+        CHECK(sscanf(line,"[account-trace] op=sf.friends object=%u command=%u result=0x%x%n",&got_object,&command,&status,&used)==3&&
+            used>0&&line[used]=='\n'&&got_object==object&&command<2&&!status);
+        char *next=strchr(line,'\n');if(!next)break;line=next+1;lines++;
+    }
+    CHECK(lines==32&&!strstr(text,"request:")&&!strstr(text,"SFCI"));free(text);
+    unsetenv("DM_ACCOUNT_TRACE");unsetenv("DM_SF_TRACE");h_sf_Close(session);CHECK(g_nse==0);
+}
 static _Atomic uint32_t legacy_handle;
 static _Atomic unsigned legacy_errors;
 static pthread_mutex_t legacy_lock=PTHREAD_MUTEX_INITIALIZER;
@@ -207,6 +240,7 @@ static void legacy_concurrency(void) {
     atomic_store(&mute_sf_logs,0);CHECK(!atomic_load(&legacy_errors));CHECK(g_nse==0);
 }
 int main(void) {
+    unsetenv("DM_ACCOUNT_TRACE");
     uint32_t session=0,root=0,message[64];
     CHECK(!h_sf_Connect(&session,"friend:u"));
     if(!session)goto finish;
@@ -237,7 +271,7 @@ int main(void) {
     CHECK(g_nse==0);
     CHECK(!h_sf_Connect(&session,"friend:u")&&!h_sf_ToDomain(&root,session));
     cancellation(session);service=create_service(session);malformed(session,service);h_sf_Close(session);
-    CHECK(g_nse==0);server_event_lifetimes();capacity_limits();legacy_concurrency();
+    CHECK(g_nse==0);server_event_lifetimes();capacity_limits();metadata_trace();legacy_concurrency();
 finish:
     printf("SF friends synthetic IPC/kernel fixture: %d checks, %d failures\n",checks,failures);
     return failures!=0;

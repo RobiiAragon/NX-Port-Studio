@@ -261,7 +261,7 @@ $(B)/t_system_event: t_system_event.c ../hle_thread.c ../hle_sdk16.c ../hle.h ..
 system-event: $(B)/t_system_event
 	$(B)/t_system_event
 
-SF_FRIENDS_HEADERS = ../hle_sf.c ../sf_friends.inc ../hle_thread.c ../nextendo_social.h ../hle.h ../dm.h $(GAME_H)
+SF_FRIENDS_HEADERS = ../hle_sf.c ../sf_friends.inc ../hle_thread.c ../nextendo_social.h ../hle.h ../dm.h t_trace_capture.h $(GAME_H)
 $(B)/t_sf_friends: t_sf_friends.c $(SF_FRIENDS_HEADERS) | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -Wno-frame-address $(GINC) -o $@ t_sf_friends.c
 $(B)/t_sf_friends_asan: t_sf_friends.c $(SF_FRIENDS_HEADERS) | $(B)
