@@ -158,20 +158,46 @@ static int mii_lock(const char *path) {
     while (flock(fd,LOCK_EX)) { if (errno==EINTR) continue; close(fd); return -1; }
     return fd;
 }
+static int mii_sync(int fd) {
+    int r; do { r=fsync(fd); } while (r && errno==EINTR);
+    return r;
+}
 static int mii_write(const char *path, const dm_mii_collection *c) {
     if (!mii_collection_valid(c)) return DM_MII_INVALID;
     uint8_t bytes[MII_MAX_FILE]={ 'D','M','I','I',1,0,88,0 };
     size_t size=MII_HEADER+c->count*sizeof(dm_mii_charinfo);
     mii_put32(bytes+8,c->count); memcpy(bytes+MII_HEADER,c->entries,size-MII_HEADER);
     mii_put32(bytes+12,mii_crc32(mii_crc32(~0u,bytes,12),bytes+MII_HEADER,size-MII_HEADER)^~0u);
-    char temp[PATH_MAX]; if (snprintf(temp,sizeof temp,"%s.XXXXXX",path)>=(int)sizeof temp) return DM_MII_IO;
-    int fd=mkstemp(temp); if (fd<0) return DM_MII_IO;
+    char temp[PATH_MAX], parent[PATH_MAX];
+    if (snprintf(temp,sizeof temp,"%s.XXXXXX",path)>=(int)sizeof temp) return DM_MII_IO;
+    const char *base=strrchr(path,'/'); size_t prefix=base ? (size_t)(base-path) : 0;
+    if (!base) strcpy(parent,".");
+    else if (!prefix) strcpy(parent,"/");
+    else { memcpy(parent,path,prefix); parent[prefix]=0; }
+    base=base ? base+1 : path;
+    // Hold the same directory for the rename and its metadata barrier. Follow
+    // the existing parent-path policy; the temporary inode must belong to this
+    // opened directory before its name is used by renameat/unlinkat.
+    int directory=open(parent,O_RDONLY|O_DIRECTORY|O_CLOEXEC); if (directory<0) return DM_MII_IO;
+    int fd=mkstemp(temp); if (fd<0) { close(directory); return DM_MII_IO; }
+    const char *temporary=strrchr(temp,'/'); temporary=temporary ? temporary+1 : temp;
+    struct stat created, named;
+    if (fstat(fd,&created) || fstatat(directory,temporary,&named,AT_SYMLINK_NOFOLLOW) ||
+        !S_ISREG(named.st_mode) || created.st_dev!=named.st_dev || created.st_ino!=named.st_ino) {
+        // A concurrently moved/replaced parent is not the locked path anymore.
+        // Do not rename or delete a different directory's entry by pathname.
+        close(fd); close(directory); return DM_MII_IO;
+    }
     size_t n=0;
     while (n<size) { ssize_t r=write(fd,bytes+n,size-n); if (r<0 && errno==EINTR) continue; if (r<=0) break; n+=(size_t)r; }
-    int ok=n==size && !fsync(fd); if (close(fd)) ok=0;
-    if (ok && rename(temp,path)) ok=0;
-    if (!ok) unlink(temp);
-    return ok ? DM_MII_OK : DM_MII_IO;
+    int ok=n==size && !mii_sync(fd); if (close(fd)) ok=0;
+    int error=DM_MII_IO;
+    if (ok && !renameat(directory,temporary,directory,base)) {
+        // Once renamed, the new file can already be observed by other readers.
+        // A failed directory sync cannot be described as a rolled-back write.
+        error=mii_sync(directory) ? DM_MII_COMMIT_UNCERTAIN : DM_MII_OK;
+    } else unlinkat(directory,temporary,0);
+    close(directory); return error;
 }
 int dm_mii_import_file(const char *database, const char *source, dm_mii_import_result *out) {
     dm_mii_collection incoming, current;
@@ -235,6 +261,7 @@ const char *dm_mii_error(int error) {
         case DM_MII_UNSUPPORTED: return "unsupported Mii format/version; use CharInfo, StoreData or decrypted NFDB";
         case DM_MII_FULL: return "the personal Mii library already contains 100 records";
         case DM_MII_NOT_FOUND: return "Mii or source file not found";
+        case DM_MII_COMMIT_UNCERTAIN: return "Mii replacement is visible but directory synchronization failed; durability is unconfirmed";
         default: return "Mii file could not be read or replaced";
     }
 }
