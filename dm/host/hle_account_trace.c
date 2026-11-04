@@ -6,8 +6,8 @@
 #include <string.h>
 
 // Four independent budgets keep a polling NIFM caller from hiding account state.
-static _Atomic unsigned events[4];
-static _Atomic uint64_t previous[4] = {UINT64_MAX,UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static _Atomic unsigned events[4 + DM_ACCOUNT_RETURN_COUNT];
+static _Atomic uint64_t previous[4 + DM_ACCOUNT_RETURN_COUNT] = {UINT64_MAX,UINT64_MAX,UINT64_MAX,UINT64_MAX};
 static int reserve_event(unsigned section, uint64_t signature) {
     const char *flag = getenv("DM_ACCOUNT_TRACE");
     if (!flag || strcmp(flag, "1")) return 0;
@@ -48,4 +48,13 @@ void dm_account_trace_nifm(dm_account_trace_operation operation, uint32_t result
                                 operation == DM_ACCOUNT_TRACE_AVAILABLE ? "available" : "result",
                                 result, available, state.enabled, state.pending, state.hold, state.ip_queried);
     errno = saved;
+}
+uint32_t dm_account_trace_return(dm_account_trace_return_operation operation, uint32_t result,
+                                dm_account_trace_return_stage stage) {
+    int saved = errno;
+    static const char *names[] = {"acc.ensure", "acc.id", "acc.load_token", "acc.async_ensure", "acc.async_result"};
+    if (result && (unsigned)operation < DM_ACCOUNT_RETURN_COUNT && (unsigned)stage <= DM_ACCOUNT_STAGE_ASYNC_COMPLETION &&
+        reserve_event(4 + (unsigned)operation, result | (uint64_t)stage << 32))
+        fprintf(stderr, "[account-trace] op=%s result=0x%x stage=%u\n", names[operation], result, (unsigned)stage);
+    errno = saved; return result;
 }

@@ -296,6 +296,7 @@ One line per symptom in the [subsystem references](../reference/): what you see 
 - startup crashes in `nn::oe::EnableGamePlayRecording` after `CreateTransferMemory`, while the recording applet proxy is null. → [System gameplay recording dereferences an unavailable applet proxy](../reference/services.md#system-gameplay-recording-dereferences-an-unavailable-applet-proxy)
 - a game's imports include `RequestSyncDeliveryCache(progress, const char*)`, but the existing whole-cache request hook does not intercept it. → [A newer BCAT directory-scoped request enters unavailable SDK IPC](../reference/services.md#a-newer-bcat-directory-scoped-request-enters-unavailable-sdk-ipc)
 - with automatic connections enabled, the game remains black before any shader library or draw while audio and AppKit continue running. A guest worker waits inside `IsNetworkServiceAccountAvailable` → `SecItemCopyMatching` → SecurityServer; the main guest waits for that worker. → [Game startup waits in Keychain before its first shader draw](../reference/services.md#game-startup-waits-in-keychain-before-its-first-shader-draw)
+- a game reports the shared `0x2a2` failure before its first recorded socket call, but account/NIFM availability diagnostics do not identify whether account ensure, ID retrieval, token loading or asynchronous completion failed. → [A generic account Result does not identify the failing operation](../reference/services.md#a-generic-account-result-does-not-identify-the-failing-operation)
 
 ## Movies
 
