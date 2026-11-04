@@ -134,6 +134,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [SHIN MEGAMI TENSEI V: Vengeance](010069C01AB82000/README.md) | `010069C01AB82000` | 1.0.3 | 15.3.2 | Unreal Engine 4.27 | NVN |
 | [Silver Pines](0100D5B026844000/README.md) | `0100D5B026844000` | 1.0.0 (base) | 21.4.7 | Unity 6000.3.15f1 IL2CPP | NVN |
 | [Splatoon 2, European release](0100F8F0000A2000/README.md) | `0100F8F0000A2000` | 5.5.2 (experimental: character creation and first tutorial prompt) | 3.4.1 | Nintendo EPD (sead / agl / gsys) | NVN |
+| [Splatoon 3](0100C2500FC20000/README.md) | `0100C2500FC20000` | 11.3.0 (experimental; graphics and multiplayer open) | 20.5.22 | Nintendo EPD (sead / agl / gsys), Pia / NPLN | NVN |
 | [STEINS;GATE RE:BOOT](01008BC024FDE000/README.md) | `01008BC024FDE000` | 1.0.3 | 20.5.17 | M2's ADV engine | NVN |
 | [Stardew Valley](0100E65002BB8000/README.md) | `0100E65002BB8000` | 1.6.15.13 | 20.5.27 | MonoGame (C# → C++ by BRUTE) | NVN |
 | [Suika Game](0100800015926000/README.md) | `0100800015926000` | 2.3.6 (experimental startup profile) | 16.2.6 | Unity 2022.3.13f1 / IL2CPP | NVN |

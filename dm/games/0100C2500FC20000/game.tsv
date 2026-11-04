@@ -1,0 +1,42 @@
+# Experimental Splatoon 3 profile, update 11.3.0 (v2752512), SDK 20.5.22.
+# I reached character creation, the tutorial and the plaza in earlier private Mac diagnostics; serious graphics and multiplayer defects remain open.
+
+# ---- Identity ----
+title_id	0100C2500FC20000
+program_id	0100C2500FC20000
+
+# ---- App ----
+name	Splatoon 3
+ipa	Splatoon3.ipa
+app_category	public.app-category.games
+
+# ---- Versions ----
+build	v2752512	11.3.0	main=28c4287aee36f7499da60f3e68b54c70	sdk=574284b40c06cf1821a44857939083be
+package	v2752512
+shader_versions	v2752512
+
+# ---- Files ----
+# every module main imports from
+modules	main sdk
+romfs_marker	Model/Fld_PlayerMake.bfres.zs
+zip_store	.bwav:.xtx:.zs:.metallib
+
+# ---- Memory ----
+# main sets a heap of at most the pool − 64 MB: a 3328 MB heap region
+mem_reserve	0x100000000
+mem_alias	0x10000000
+mem_stack	0x10000000
+app_pool	0xCD500000
+# the NPDM declares 0 MB of system resource: IsVirtualAddressMemoryEnabled is false, as on Horizon (Big Brain Academy: Brain vs. Brain sets a heap only then)
+sys_resource	0x0
+
+# ---- Shader split ----
+shader_groups	/Pack/=pack /UI/=ui /Model/=model /Sound/=sound /Layout/=layout /Bake/=bake /Phive/=phive /Locker/=locker /Gyml/=gyml /AnimationEvent/=animationevent /Banc/=banc /Component/=component /RSDB/=rsdb /CameraAnimation/=cameraanimation /Fest/=fest /Catalog/=catalog /Mals/=mals /Lib/=lib /NavTable/=navtable /Event/=event /Effect/=effect /UniqueSequenceSPL/=uniquesequencesp /System/=system /Env/=env
+shader_note	Splatoon 3 shaders (provisional profile)
+
+# ---- After the rewrite ----
+# used memory for the current rewritten modules, at least the default 64 MB
+mem_used	0x7600000
+
+# The game uses NVN conditional rendering; evaluate its existing reports at replay.
+render_cond	on
