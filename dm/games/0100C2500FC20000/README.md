@@ -48,4 +48,8 @@ I link the shared service and graphics findings from the [bring-up note](../../.
 
 I also corrected the [shader-progress observer](../../../docs/reference/packing.md#shader-progress-freezes-or-counts-unfinished-work-as-complete) after its displayed count lagged behind this game's base artifacts. The new synthetic schedules qualify progress reporting, not shader correctness, rendering or network play.
 
+I added [failed account-operation metadata](../../../docs/reference/services.md#a-generic-account-result-does-not-identify-the-failing-operation) after a lobby attempt reported the shared `0x2a2` Result before a recorded socket call. I verified the diagnostic with synthetic providers; I have not attributed that game failure to an account, token or service without a new coordinated trace.
+
+While investigating unavailable credentials, I reproduced and corrected [game sign-in replacing a native proof with scoped OAuth](../../../docs/reference/services.md#game-sign-in-overwrites-a-working-native-credential-with-scoped-oauth). The synthetic coordinator and native decoder tests establish that storage defect and its preservation checks. They do not identify the contents of my actual Keychain item or qualify this game's online access; the provider must still authorize the complete exchange.
+
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition or tested its correction in the game; this result does not qualify the lobby return or establish its cause.

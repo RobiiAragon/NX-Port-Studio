@@ -62,10 +62,10 @@ HLE_FORCE("_ZN2nn7account11GetNicknameEPNS0_8NicknameERKNS0_3UidE", "user nickna
 }
 
 // ---------- Online accounts: a real Nextendo credential, scoped to the local user ----------
-HLE_FORCE_WAIT("_ZN2nn7account36EnsureNetworkServiceAccountAvailableERKNS0_10UserHandleE", "network service account requires the user's actual unexpired Nextendo NEX proof", Result, h_acc_EnsureNsa, const UserHandle *h) { return online_user(h) ? dm_nextendo_account_ensure() : RES_FAIL; }
-HLE_FORCE_WAIT("_ZN2nn7account26GetNetworkServiceAccountIdEPNS0_23NetworkServiceAccountIdERKNS0_10UserHandleE", "real provider PID or required server-reported BAAS identity", Result, h_acc_GetNsaId, uint64_t *id, const UserHandle *h) { if (id) *id = 0; return online_user(h) ? dm_nextendo_account_id(id) : RES_FAIL; }
+HLE_FORCE_WAIT("_ZN2nn7account36EnsureNetworkServiceAccountAvailableERKNS0_10UserHandleE", "network service account requires the user's actual unexpired Nextendo NEX proof", Result, h_acc_EnsureNsa, const UserHandle *h) { return online_user(h) ? dm_nextendo_account_ensure() : dm_account_trace_return(DM_ACCOUNT_RETURN_ENSURE,RES_FAIL,DM_ACCOUNT_STAGE_USER_HANDLE); }
+HLE_FORCE_WAIT("_ZN2nn7account26GetNetworkServiceAccountIdEPNS0_23NetworkServiceAccountIdERKNS0_10UserHandleE", "real provider PID or required server-reported BAAS identity", Result, h_acc_GetNsaId, uint64_t *id, const UserHandle *h) { if (id) *id = 0; return online_user(h) ? dm_nextendo_account_id(id) : dm_account_trace_return(DM_ACCOUNT_RETURN_ID,RES_FAIL,DM_ACCOUNT_STAGE_USER_HANDLE); }
 HLE_FORCE_WAIT("_ZN2nn7account37LoadNetworkServiceAccountIdTokenCacheEPmPcmRKNS0_10UserHandleE", "real NEX proof in the native game's cached account token", Result, h_acc_LoadTok, uint64_t *n, char *buf, uint64_t sz, const UserHandle *h) {
-    if (n) *n = 0; return online_user(h) ? dm_nextendo_account_load_token(n, buf, sz) : RES_FAIL;
+    if (n) *n = 0; return online_user(h) ? dm_nextendo_account_load_token(n, buf, sz) : dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,RES_FAIL,DM_ACCOUNT_STAGE_USER_HANDLE);
 }
 HLE_FORCE("_ZN2nn7account40ShowLicenseRequirementsForNetworkServiceERKNS0_10UserHandleE", "online membership notice applet, out of scope; cut", Result, h_acc_ShowLic, const UserHandle *h) { (void)h; return RES_FAIL; }
 // The Nintendo Account's cached profile (birthday, country): no Nintendo Account is linked on the host, so loading fails and the game skips its getters (Big Brain Academy: Brain vs. Brain, main+0xab8bc)
@@ -76,7 +76,7 @@ HLE_FORCE("_ZN2nn7account29LoadCachedNintendoAccountInfoEPNS0_25CachedNintendoAc
 // keys; only the SDK's own CreateSystemEvent callback creates the guest event.
 HLE_FORCE_WAIT("_ZN2nn7account12AsyncContextC1Ev", "owned account async state", void, h_acc_AcCtor, void *self) { dm_nextendo_async_construct(self); }
 HLE_FORCE_WAIT("_ZN2nn7account12AsyncContextC2Ev", "owned account async state", void, h_acc_AcCtor2, void *self) { dm_nextendo_async_construct(self); }
-HLE_FORCE_WAIT("_ZN2nn7account44EnsureNetworkServiceAccountIdTokenCacheAsyncEPNS0_12AsyncContextERKNS0_10UserHandleE", "cache the real Nextendo NEX game token and publish its actual completion result", Result, h_acc_EnsureTokAsync, void *ctx, const UserHandle *h) { return online_user(h) ? dm_nextendo_async_ensure(ctx) : RES_FAIL; }
+HLE_FORCE_WAIT("_ZN2nn7account44EnsureNetworkServiceAccountIdTokenCacheAsyncEPNS0_12AsyncContextERKNS0_10UserHandleE", "cache the real Nextendo NEX game token and publish its actual completion result", Result, h_acc_EnsureTokAsync, void *ctx, const UserHandle *h) { return online_user(h) ? dm_nextendo_async_ensure(ctx) : dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,RES_FAIL,DM_ACCOUNT_STAGE_USER_HANDLE); }
 // This path invokes guest CreateSystemEvent, so it must retain the callback-capable
 // HLE path. Credential reads and signing run only in the separate WAIT hooks.
 HLE_FORCE("_ZN2nn7account12AsyncContext14GetSystemEventEPNS_2os11SystemEventE", "account completion event with a checked kernel-event lifetime", Result, h_acc_AcGetEv, void *self, void *ev) {
