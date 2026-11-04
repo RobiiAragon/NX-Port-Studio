@@ -140,7 +140,7 @@ import Combine
                     guard let self, operation == operationID else { return }
                     cancel(); accountError = .authorizationExpired
                 }
-                let summary = try await accountService.finishSignIn(request.id)
+                let summary = try await accountService.finishSignIn(request.id, forGames: true)
                 guard operation == operationID, !Task.isCancelled else { return }
                 account = summary
             } catch is CancellationError { }
@@ -201,6 +201,6 @@ import Combine
     private func configuration() throws -> NextendoOAuthConfiguration {
         // Match the publisher's registered grant used by the verified desktop flow.
         // Consent remains on Nextendo's own website; this app never adds a secret.
-        try NextendoOAuthConfiguration(clientID: clientID, scopes: ["identity", "friends", "presence", "game.matchmaking", "emulator.status"])
+        try NextendoOAuthConfiguration(clientID: clientID, scopes: ["identity", "friends"])
     }
 }
