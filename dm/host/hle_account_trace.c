@@ -31,11 +31,11 @@ void dm_account_trace_provider(int available, dm_account_trace_provider_state st
         (uint64_t)(state.provider+1)<<4 | (uint64_t)(state.cached+1)<<6 |
         (uint64_t)(state.query_valid+1)<<8 | (uint64_t)(state.child_available+1)<<10 |
         (uint64_t)(state.expiry_valid+1)<<12 | (uint64_t)(state.generation_changed+1)<<14;
-    const int details[]={state.stage,state.error,state.bytes,state.exit_code,state.signal};
+    const int details[]={state.stage,state.error,state.bytes,state.exit_code,state.signal,state.credential_reason,state.security_status};
     for(unsigned i=0;i<sizeof details/sizeof *details;i++) signature=(signature^(uint32_t)details[i])*UINT64_C(1099511628211);
-    if (reserve_event(1,signature)) fprintf(stderr,"[account-trace] op=acc.provider available=%d enabled=%d provider=%d cached=%d query_valid=%d child_available=%d expiry_valid=%d generation_changed=%d stage=%d error=%d bytes=%d exit=%d signal=%d\n",
+    if (reserve_event(1,signature)) fprintf(stderr,"[account-trace] op=acc.provider available=%d enabled=%d provider=%d cached=%d query_valid=%d child_available=%d expiry_valid=%d generation_changed=%d stage=%d error=%d bytes=%d exit=%d signal=%d credential_reason=%d security_status=%d\n",
         available,state.enabled,state.provider,state.cached,state.query_valid,state.child_available,state.expiry_valid,state.generation_changed,
-        state.stage,state.error,state.bytes,state.exit_code,state.signal);
+        state.stage,state.error,state.bytes,state.exit_code,state.signal,state.credential_reason,state.security_status);
     errno = saved;
 }
 void dm_account_trace_nifm(dm_account_trace_operation operation, uint32_t result, int available,
@@ -57,4 +57,16 @@ uint32_t dm_account_trace_return(dm_account_trace_return_operation operation, ui
         reserve_event(4 + (unsigned)operation, result | (uint64_t)stage << 32))
         fprintf(stderr, "[account-trace] op=%s result=0x%x stage=%u\n", names[operation], result, (unsigned)stage);
     errno = saved; return result;
+}
+uint32_t dm_account_trace_credential_return(dm_account_trace_return_operation operation, uint32_t result,
+                                          dm_nextendo_credential_diagnostic diagnostic) {
+    int saved=errno;
+    static const char *names[]={"acc.ensure","acc.id","acc.load_token","acc.async_ensure","acc.async_result"};
+    uint64_t signature=result | (uint64_t)DM_ACCOUNT_STAGE_CREDENTIAL<<32;
+    signature=(signature^diagnostic.reason)*UINT64_C(1099511628211);
+    signature=(signature^(uint32_t)diagnostic.security_status)*UINT64_C(1099511628211);
+    if (result && (unsigned)operation<DM_ACCOUNT_RETURN_COUNT && diagnostic.reason>DM_CRED_UNOBSERVED && diagnostic.reason<DM_CRED_REASON_COUNT &&
+        reserve_event(4+(unsigned)operation,signature))
+        fprintf(stderr,"[account-trace] op=%s result=0x%x stage=2 credential_reason=%u security_status=%d\n",names[operation],result,diagnostic.reason,diagnostic.security_status);
+    errno=saved;return result;
 }

@@ -157,6 +157,7 @@ int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--validate-hle")) { void dm_validate_hle_registry(void); dm_validate_hle_registry(); return 0; }
 #if TARGET_OS_OSX
     if (argc == 2 && !strcmp(argv[1], DM_NEXTENDO_PREFLIGHT_ARG)) return dm_nextendo_account_preflight_child(DM_NEXTENDO_PREFLIGHT_FD);
+    if (argc == 2 && !strcmp(argv[1], DM_NEXTENDO_PREFLIGHT_DIAGNOSTIC_ARG)) return dm_nextendo_account_preflight_diagnostic_child(DM_NEXTENDO_PREFLIGHT_FD);
     { int result = dm_mac_bundle_prepare(&argc, &argv); if (result >= 0) return result; }
     // A primary app can acquire diagnostic options from env.txt or settings
     // after dyld's constructors. Retrying these idempotent starts preserves
