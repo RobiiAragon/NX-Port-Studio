@@ -218,6 +218,19 @@ ldn: $(B)/t_ldn $(B)/t_ldn_events
 ldn-sanitize: $(B)/t_ldn_asan $(B)/t_ldn_events
 	$(B)/t_ldn_asan
 	$(B)/t_ldn_events
+# Optional real-interface/two-process diagnostic. It sends only to IPv4
+# addresses already assigned to this Mac; it does not scan the local network.
+LDN_ENDPOINT_SOURCES = t_ldn_endpoints.c $(filter-out t_ldn.c,$(LDN_SOURCES))
+LDN_ENDPOINT_HEADERS = ../hle_ldn.h ../nsd.h ../net_socket.h ../net_eventfd.inc ../net_message.inc ../net_discovery.h ../net_discovery_queue.inc ../discovery_protocol.h
+$(B)/t_ldn_endpoints: $(LDN_ENDPOINT_SOURCES) $(LDN_ENDPOINT_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_LDN_TEST -o $@ $(LDN_ENDPOINT_SOURCES)
+$(B)/t_ldn_endpoints_asan: $(LDN_ENDPOINT_SOURCES) $(LDN_ENDPOINT_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_LDN_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(LDN_ENDPOINT_SOURCES)
+.PHONY: ldn-endpoints ldn-endpoints-sanitize
+ldn-endpoints: $(B)/t_ldn_endpoints
+	$(B)/t_ldn_endpoints "$(LDN_ENDPOINT_FIRST)" "$(LDN_ENDPOINT_SECOND)"
+ldn-endpoints-sanitize: $(B)/t_ldn_endpoints_asan
+	$(B)/t_ldn_endpoints_asan "$(LDN_ENDPOINT_FIRST)" "$(LDN_ENDPOINT_SECOND)"
 $(B)/t_symbols: t_symbols.c ../hle.c ../loader.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -Wno-deprecated-declarations -I.. $(GINC) -o $@ t_symbols.c
 .PHONY: symbols
