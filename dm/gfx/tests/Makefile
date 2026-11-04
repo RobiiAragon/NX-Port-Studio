@@ -414,6 +414,11 @@ check_t_upgrade_alias: RUN_ENV = MTL_DEBUG_LAYER=1
 t_srgb_alias: t_srgb_alias.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_srgb_alias.m $(MTL_T_SRC) $(FW)
 check_t_srgb_alias: RUN_ENV = MTL_DEBUG_LAYER=1
+t_srgb_alias_asan: t_srgb_alias.m $(MTL_T_DEP) ../../sanitizers/ignorelist.txt
+	clang $(CFLAGS) $(ASAN_FLAGS) -fobjc-arc -o $@ t_srgb_alias.m $(MTL_T_SRC) $(FW)
+.PHONY: check_t_srgb_alias_asan
+check_t_srgb_alias_asan: t_srgb_alias_asan
+	$(ASAN_ENV) MTL_DEBUG_LAYER=1 ./t_srgb_alias_asan
 t_image_alias: t_image_alias.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_image_alias.m $(MTL_T_SRC) $(FW)
 .PHONY: check_t_image_alias
