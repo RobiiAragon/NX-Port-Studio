@@ -255,7 +255,8 @@ final class StudioModel {
         if let k = event.k { stageIndex = k }
         if let n = event.n { stageTotal = n }
         if event.ev == "stage" { progress = nil; stepName = "" }
-        if let value = event.fraction { progress = value }
+        if event.ev == "step" || event.ev == "progress" { progress = event.fraction }
+        else if let value = event.fraction { progress = value }
         if let message = event.message {
             appendLog(message)
             if message.hasPrefix("game project: ") { projectURL = URL(fileURLWithPath: String(message.dropFirst("game project: ".count))) }
