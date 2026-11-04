@@ -25,6 +25,9 @@ static char *g_argv[64] = {"game"}; static int g_argc = 1;
 static const char *g_module_directory;
 
 static void guest_main(void) {
+#if TARGET_OS_OSX
+    dm_mac_bundle_prepare_account();
+#endif
     // The front end's event loop is available while this bounded calendar check
     // runs. Finish selection before any SDK initializer or game resource open.
     { void dm_bcat_start(const char *, const char *, int);
