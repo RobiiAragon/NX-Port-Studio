@@ -3,6 +3,7 @@ rebuilt after an iOS-only NVN build and an iOS build is not reused after a Mac-o
 chain version's c1_full.tsv / cb_extent.tsv name); the run command's environment file is read as the iOS app reads it.
 No game files, keys or Xcode needed (temporary files only in a temporary folder)."""
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -74,6 +75,39 @@ class Layer(Base):
         self.vk(True, 'K2'); self.assertEqual(len(self.ran), 1)
         self.assertTrue((self.sh / 'ios/vk/vk_shaders.metallib').is_file())   # the iPhone library stays, under its own (older) key
         self.assertEqual(nsp.reused(self.sh / 'ios/vk.key', 'K'), '3 shaders for the Mac and iOS')
+
+
+class NvnContentKey(Base):
+    """Real stage fingerprints, with only the compiler execution/version stubbed."""
+    def setUp(self):
+        super().setUp();self.g=types.SimpleNamespace(table=lambda n:self.tmp/n,dir=self.tmp)
+        for name,text in {'game.tsv':'name\tOriginal fixture\n','shader_map.tsv':'pkg.bin\t0\tvertex\tk\t/original\n',
+                          'shader_facts_manual.tsv':'k\t{"manual": 1}\n','pso_pairs.tsv':'# no pairs\n','README.md':'I tested this build.\n'}.items():
+            (self.tmp/name).write_text(text)
+        self.pkg=self.sh/'pkg';self.pkg.mkdir(parents=True);(self.pkg/'main.bin').write_bytes(b'shaderA')
+        self.xlate=self.tmp/'compiler/xlate';self.xlate.parent.mkdir();self.xlate.write_bytes(b'original synthetic translator')
+        for cm in (mock.patch.object(nsp,'chain_of',return_value=CHAIN),mock.patch.object(nsp,'toolchain',return_value=())):
+            cm.__enter__();self.addCleanup(cm.__exit__,None,None,None)
+
+    def build(self):
+        self.ran.clear()
+        return nsp.build_shaders(sys.executable,REPO,self.sh,self.xlate,{'WORK':str(self.tmp)},self.logs,self.g,pkg_key=nsp.package_key(self.pkg),mac=True)
+
+    def test_documentation_keeps_completed_shaders_but_tables_invalidate(self):
+        self.build();self.assertEqual(len(self.ran),1)
+        for name in ('README.md','README.es.md','NOTES.MD'):
+            (self.tmp/name).write_text('I checked the next scene.\n');self.build();self.assertEqual(self.ran,[])
+        table=self.tmp/'shader_facts_manual.tsv';before=table.stat();os.utime(table,ns=(before.st_atime_ns,before.st_mtime_ns+1000000000));self.build();self.assertEqual(self.ran,[])
+        for name in ('game.tsv','shader_map.tsv','shader_facts_manual.tsv','pso_pairs.tsv'):
+            table=self.tmp/name;before=table.stat();table.write_text(table.read_text()+'# Updated semantic input\n');os.utime(table,ns=(before.st_atime_ns,before.st_mtime_ns))
+            self.build();self.assertEqual(len(self.ran),1)
+        # Rewriter-only rules remain outside shader keys; the rewrite fixture
+        # separately verifies their actual source-content invalidation.
+        (self.tmp/'patches.py').write_text('CUTS = {}\n');self.build();self.assertEqual(self.ran,[])
+
+    def test_shader_binary_content_is_checked_even_with_preserved_metadata(self):
+        self.build();binary=self.pkg/'main.bin';before=binary.stat();os.utime(binary,ns=(before.st_atime_ns,before.st_mtime_ns+1000000000));self.build();self.assertEqual(self.ran,[])
+        binary.write_bytes(b'shaderB');os.utime(binary,ns=(before.st_atime_ns,before.st_mtime_ns));self.build();self.assertEqual(len(self.ran),1)
 
 
 class Nvn(Base):

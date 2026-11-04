@@ -2,6 +2,15 @@
 
 ## Build tools
 
+### Editing a profile note repeats shader preparation
+
+- **Symptom:** after editing a game's `README.md`, a host-only iteration repeats shader splitting and visits every cached shader and side variant even though the shader inputs and translation chain are unchanged.
+- **Cause:** the pipeline's `profile_files` included Markdown notes in its split and shader-stage fingerprints. The derived-profile key also treated those notes as semantic inputs, retiring computed profile data before the stages ran. None of those consumers reads Markdown notes.
+- **Fix:** exclude Markdown documentation from the shader-stage input list and derived-profile key, retaining other profile data and code. Generated C1/extent tables remain excluded as before. Rewriter-only `patches.py` remains in the rewrite stage's independent source-content key, not the shader key. Package bytes, main binaries, compiler identity, translation tools and semantic profile tables keep their existing invalidation rules. This changes pipeline reuse, not shader translation or its chain version. Existing older pipeline keys can require one preparation pass before the new keys are reusable.
+- **Notes:** a derived profile copies notes when semantic inputs require regeneration. Reuse preserves existing notes, including private edits, without synchronizing source-note edits or deletions; the source profile remains the current documentation. This avoids overwriting local notes merely to reuse computed shader data.
+- **Checks:** original synthetic integration fixtures run the actual fingerprint/reuse paths for derived profiles, split, NVN, Vulkan, OpenGL and rewrite stages. Ordinary and shader-only derived profiles retain refined `game.tsv`, shader tables and heap-check stamps after Markdown edits, additions or removals; semantic table edits still regenerate them. Markdown edits/additions keep completed work; data-table and `game.tsv` changes still invalidate, as do rewrite-rule and binary-content changes. Preserved mtimes do not hide changed content in content-keyed inputs, and touching unchanged profile tables does not rebuild them.
+- **Found on:** [my Splatoon 3 bring-up](../bringup/splatoon-3.md), where updating the note revisited 31,218 cached base shaders during a backend-only iteration.
+
 ### Network survey reports implemented socket imports as missing
 
 - **Symptom:** the SDK-surface survey lists `nn::socket::Socket`, `Bind`, `Close`, `Listen` and `SetSockOpt` as unavailable even though the host registers their translated implementations.
