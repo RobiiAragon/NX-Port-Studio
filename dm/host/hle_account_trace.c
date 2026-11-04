@@ -6,8 +6,8 @@
 #include <string.h>
 
 // Four independent budgets keep a polling NIFM caller from hiding account state.
-static _Atomic unsigned events[4 + DM_ACCOUNT_RETURN_COUNT];
-static _Atomic uint64_t previous[4 + DM_ACCOUNT_RETURN_COUNT] = {UINT64_MAX,UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static _Atomic unsigned events[4 + DM_ACCOUNT_RETURN_COUNT + DM_ACCOUNT_API_COUNT];
+static _Atomic uint64_t previous[4 + DM_ACCOUNT_RETURN_COUNT + DM_ACCOUNT_API_COUNT] = {UINT64_MAX,UINT64_MAX,UINT64_MAX,UINT64_MAX};
 static int reserve_event(unsigned section, uint64_t signature) {
     const char *flag = getenv("DM_ACCOUNT_TRACE");
     if (!flag || strcmp(flag, "1")) return 0;
@@ -69,4 +69,14 @@ uint32_t dm_account_trace_credential_return(dm_account_trace_return_operation op
         reserve_event(4+(unsigned)operation,signature))
         fprintf(stderr,"[account-trace] op=%s result=0x%x stage=2 credential_reason=%u security_status=%d\n",names[operation],result,diagnostic.reason,diagnostic.security_status);
     errno=saved;return result;
+}
+void dm_account_trace_api(dm_account_trace_api_operation operation,unsigned http_status) {
+    int saved=errno;
+    static const char *names[]={"api.me","api.friends","api.presence"};
+    if((unsigned)operation<DM_ACCOUNT_API_COUNT) {
+        unsigned status=http_status>=100&&http_status<=599?http_status:0;
+        if(reserve_event(4+DM_ACCOUNT_RETURN_COUNT+(unsigned)operation,(uint64_t)status+1))
+            fprintf(stderr,"[account-trace] op=%s http_status=%u\n",names[operation],status);
+    }
+    errno=saved;
 }

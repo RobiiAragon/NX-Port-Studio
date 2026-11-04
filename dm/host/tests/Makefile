@@ -626,10 +626,10 @@ nextendo-x509: $(B)/t_nextendo_x509
 nextendo-x509-sanitize: $(B)/t_nextendo_x509_asan
 	$(PYTHON) test_nextendo_x509.py $(B)/t_nextendo_x509_asan "$(OPENSSL_TOOL)"
 
-API_SOURCES = t_nextendo_api.m ../hle_nextendo_api_apple.m
-$(B)/t_nextendo_api: $(API_SOURCES) ../nextendo_api_apple.h | $(B)
+API_SOURCES = t_nextendo_api.m ../hle_nextendo_api_apple.m ../hle_account_trace.c
+$(B)/t_nextendo_api: $(API_SOURCES) ../nextendo_api_apple.h ../account_trace.h t_trace_capture.h | $(B)
 	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -o $@ $(API_SOURCES) -framework Foundation
-$(B)/t_nextendo_api_asan: $(API_SOURCES) ../nextendo_api_apple.h | $(B)
+$(B)/t_nextendo_api_asan: $(API_SOURCES) ../nextendo_api_apple.h ../account_trace.h t_trace_capture.h | $(B)
 	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(API_SOURCES) -framework Foundation
 .PHONY: nextendo-api nextendo-api-sanitize
 nextendo-api: $(B)/t_nextendo_api
@@ -637,10 +637,10 @@ nextendo-api: $(B)/t_nextendo_api
 nextendo-api-sanitize: $(B)/t_nextendo_api_asan
 	$(B)/t_nextendo_api_asan
 
-SOCIAL_SOURCES = t_nextendo_social.m ../hle_nextendo_social_apple.m ../hle_nextendo_api_apple.m ../hle_nextendo_friends.c
-$(B)/t_nextendo_social: $(SOCIAL_SOURCES) ../nextendo_social.h ../nextendo_api_apple.h | $(B)
+SOCIAL_SOURCES = t_nextendo_social.m ../hle_nextendo_social_apple.m ../hle_nextendo_api_apple.m ../hle_nextendo_friends.c ../hle_account_trace.c
+$(B)/t_nextendo_social: $(SOCIAL_SOURCES) ../nextendo_social.h ../nextendo_api_apple.h ../account_trace.h | $(B)
 	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -Isocial_profile -o $@ $(SOCIAL_SOURCES) -framework Foundation
-$(B)/t_nextendo_social_asan: $(SOCIAL_SOURCES) ../nextendo_social.h ../nextendo_api_apple.h | $(B)
+$(B)/t_nextendo_social_asan: $(SOCIAL_SOURCES) ../nextendo_social.h ../nextendo_api_apple.h ../account_trace.h | $(B)
 	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -Isocial_profile -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(SOCIAL_SOURCES) -framework Foundation
 .PHONY: nextendo-social nextendo-social-sanitize
 nextendo-social: $(B)/t_nextendo_social $(B)/t_nextendo_passive

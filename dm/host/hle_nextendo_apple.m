@@ -47,6 +47,11 @@ static BOOL preflightChild;
 @property(nonatomic) NSString *username;
 @property(nonatomic) NSString *token;
 @property(nonatomic) NSTimeInterval expiry;
+// Host API authorization from the optional encrypted renewal record. The
+// refresh token is validated as metadata and never retained by this bridge.
+@property(nonatomic) NSString *oauthAccess;
+@property(nonatomic) NSTimeInterval oauthExpiry;
+@property(nonatomic) NSSet<NSString *> *oauthScopes;
 @end
 @implementation DmNextendoCredential
 @end
@@ -69,6 +74,43 @@ static BOOL unsigned_decimal(NSString *text, uint64_t *out) {
     if (!value) return NO; *out = value; return YES;
 }
 static BOOL number(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID(); }
+static BOOL oauth_text(id value) {
+    if(![value isKindOfClass:NSString.class]||![value length]||[value lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>16384)return NO;
+    for(NSUInteger i=0;i<[value length];i++){unichar c=[value characterAtIndex:i];if(c<=32||c>=127)return NO;}
+    return YES;
+}
+static BOOL oauth_identifier(id value,BOOL scope) {
+    if(![value isKindOfClass:NSString.class]||![value length]||[value length]>(scope?64u:256u))return NO;
+    for(NSUInteger i=0;i<[value length];i++) {
+        unichar c=[value characterAtIndex:i];
+        if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-'||(scope&&c==':')))return NO;
+    }
+    return scope||(![value isEqual:@"nextendo-emulator"]&&![value isEqual:@"unregistered"]);
+}
+static void decode_oauth_grant(DmNextendoCredential *credential,id value,NSTimeInterval now) {
+    if(![value isKindOfClass:NSDictionary.class])return;
+    id token=value[@"access_token"],scopes=value[@"scopes"],expiry=value[@"expires_at"];
+    if(!oauth_identifier(value[@"client_id"],NO)||!oauth_text(token)||[token hasPrefix:@"nx2."]||
+       !oauth_text(value[@"refresh_token"])||!number(expiry)||!isfinite([expiry doubleValue])||[expiry doubleValue]<=now||
+       ![scopes isKindOfClass:NSArray.class]||![scopes count]||[scopes count]>32)return;
+    NSMutableSet<NSString *> *permissions=[NSMutableSet new];
+    for(id scope in scopes) {
+        if(!oauth_identifier(scope,YES)||[permissions containsObject:scope])return;
+        [permissions addObject:scope];
+    }
+    credential.oauthAccess=token;credential.oauthExpiry=[expiry doubleValue];credential.oauthScopes=permissions.copy;
+}
+static NSString *oauth_scope(const char *resource) {
+    if(!resource)return nil;
+    if(!strcmp(resource,"me"))return @"identity";
+    if(!strcmp(resource,"friends"))return @"friends";
+    if(!strcmp(resource,"presence"))return @"presence";
+    return nil;
+}
+static BOOL oauth_authorized(DmNextendoCredential *credential,NSString *scope,NSTimeInterval now) {
+    return credential&&scope&&isfinite(now)&&isfinite(credential.expiry)&&credential.expiry>now&&
+        credential.oauthAccess&&isfinite(credential.oauthExpiry)&&credential.oauthExpiry>now&&[credential.oauthScopes containsObject:scope];
+}
 static _Thread_local dm_nextendo_credential_diagnostic credentialDiagnostic;
 static id credential_rejected(dm_nextendo_credential_reason reason) { credentialDiagnostic.reason=reason;return nil; }
 static uint32_t credential_return(dm_account_trace_return_operation operation,uint32_t result) {
@@ -139,7 +181,10 @@ static DmNextendoCredential *decode_credential(NSData *data) {
     id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return credential_rejected(DM_CRED_SCOPES); for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return credential_rejected(DM_CRED_SCOPES);
     DmNextendoCredential *c = [DmNextendoCredential new]; if (!c) return credential_rejected(DM_CRED_ALLOCATION);
     credentialDiagnostic.reason=DM_CRED_OK;
-    c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
+    c.pid = pid; c.username = username; c.token = token; c.expiry = until;
+    // A missing/malformed/expired OAuth grant denies only host account APIs.
+    // The separately validated NEX proof remains available to the guest.
+    decode_oauth_grant(c,json[@"renewal"],now);return c;
 }
 // A passive social operation never reads the Keychain, a device document or an
 // embedding provider. Only an already validated explicit read can populate this
@@ -186,7 +231,7 @@ NSString *dm_nextendo_api_passive_bearer(uint64_t *generation) {
     social_lock();
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     if (socialCredential && (!isfinite(now) || !isfinite(socialCredential.expiry) || socialCredential.expiry <= now)) social_reset_locked();
-    NSString *proof = socialCredential.token;
+    NSString *proof = oauth_authorized(socialCredential,@"presence",now)?socialCredential.oauthAccess:nil;
     if (proof) *generation = socialGeneration;
     pthread_mutex_unlock(&socialCredentialLock); return proof;
 }
@@ -194,8 +239,8 @@ bool dm_nextendo_api_passive_valid(NSString *proof, uint64_t generation) {
     if (!proof || !generation || !enabled()) return false;
     social_lock();
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
-    BOOL valid = generation == socialGeneration && socialCredential && isfinite(now) &&
-        isfinite(socialCredential.expiry) && socialCredential.expiry > now && [socialCredential.token isEqual:proof];
+    BOOL valid = generation == socialGeneration && oauth_authorized(socialCredential,@"presence",now) &&
+        [socialCredential.oauthAccess isEqual:proof];
     pthread_mutex_unlock(&socialCredentialLock); return valid;
 }
 static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) {
@@ -311,10 +356,17 @@ uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
 } }
 uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return credential_return(DM_ACCOUNT_RETURN_ENSURE,credential() ? 0 : DM_ACCOUNT_FAIL); } }
 // Host-only API authorization. Never serialized into a game bundle or HLE output.
-NSString *dm_nextendo_api_bearer(void) { return credential().token; }
-NSData *dm_nextendo_api_identity(void) {
-    DmNextendoCredential *c = credential(); if (!c) return nil;
-    NSData *bytes = [c.token dataUsingEncoding:NSUTF8StringEncoding]; uint8_t digest[CC_SHA256_DIGEST_LENGTH];
+NSString *dm_nextendo_api_bearer(const char *resource) {
+    NSString *scope=oauth_scope(resource);if(!scope)return nil;
+    DmNextendoCredential *c=credential();return oauth_authorized(c,scope,NSDate.date.timeIntervalSince1970)?c.oauthAccess:nil;
+}
+NSData *dm_nextendo_api_identity(const char *resource) {
+    NSString *scope=oauth_scope(resource);if(!scope)return nil;
+    DmNextendoCredential *c=credential();if(!oauth_authorized(c,scope,NSDate.date.timeIntervalSince1970))return nil;
+    // Bind caches to this OAuth authorization, local identity and permission.
+    // NEX rotation or a legacy NEX-only record cannot authorize an API cache.
+    NSData *bytes=[NSJSONSerialization dataWithJSONObject:@[c.oauthAccess,@(c.pid),scope] options:0 error:nil];
+    if(!bytes)return nil;uint8_t digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(bytes.bytes, (CC_LONG)bytes.length, digest); return [NSData dataWithBytes:digest length:sizeof digest];
 }
 

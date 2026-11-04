@@ -44,6 +44,8 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 ## Found on this game
 
+- [A game credential is reused for account APIs](../../../docs/reference/services.md#a-game-credential-is-reused-for-account-apis): I reproduced and separated the host social OAuth bearer from the NEX game proof in synthetic decoder/transport tests. The bridge checks actual granted scopes; current service acceptance remains to be tested.
+
 - [Friends IPC initialization needs real objects and completion events](../../../docs/reference/services.md#friends-ipc-initialization-needs-real-objects-and-completion-events): the 11.3.0 SDK's lazy friends initializer reached unsupported `friend:u` after Play. The typed creator/event bridge passes synthetic IPC/kernel regressions; runtime launch and multiplayer validation remain open.
 
 I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
@@ -62,6 +64,6 @@ I reproduced [the local nickname hook ignoring a validated identity snapshot](..
 
 I corrected [retention and renewal of the provider's OAuth grant](../../../docs/reference/services.md#a-linked-nextendo-account-expires-and-forces-browser-sign-in-again) in the shared account service, with synthetic production-coordinator and two-process checks. The actual service must still accept the application's consent/refresh, and updated ports must be rebuilt; I do not treat this as a completed Splatoon 3 online session or a graphics fix.
 
-I prepared the [Mac account transaction before SDK startup](../../../docs/reference/services.md#packed-mac-launch-does-not-prepare-a-renewable-game-account-before-sdk-startup) with an asynchronous synthetic service and the actual C/Swift bootstrap bridge. I have not installed or tested this launch change in the game, or qualified its online session.
+I ran the [Mac account transaction before SDK startup](../../../docs/reference/services.md#packed-mac-launch-does-not-prepare-a-renewable-game-account-before-sdk-startup) in candidate `d55215fb` after ordinary sign-in. Preparation reported no error and native account availability became one with a valid NEX record. Play then closed before the title screen at unsupported `friend:u` initialization. The typed IPC and host OAuth changes still need a rebuilt game test; I have not qualified an online session or observed a real hourly refresh/rotation.
 
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.

@@ -20,6 +20,7 @@ typedef enum {
     DM_ACCOUNT_STAGE_ASYNC_SETUP, DM_ACCOUNT_STAGE_ASYNC_CONTEXT,
     DM_ACCOUNT_STAGE_ASYNC_STATE, DM_ACCOUNT_STAGE_ASYNC_COMPLETION
 } dm_account_trace_return_stage;
+typedef enum { DM_ACCOUNT_API_ME, DM_ACCOUNT_API_FRIENDS, DM_ACCOUNT_API_PRESENCE, DM_ACCOUNT_API_COUNT } dm_account_trace_api_operation;
 void dm_account_trace_available(uint32_t result, int valid_handle, int available);
 void dm_account_trace_provider(int available, dm_account_trace_provider_state state);
 void dm_account_trace_nifm(dm_account_trace_operation operation, uint32_t result, int available,
@@ -29,3 +30,5 @@ uint32_t dm_account_trace_return(dm_account_trace_return_operation operation, ui
                                 dm_account_trace_return_stage stage);
 uint32_t dm_account_trace_credential_return(dm_account_trace_return_operation operation, uint32_t result,
                                           dm_nextendo_credential_diagnostic diagnostic);
+// Closed operation names and numeric HTTP status only; 0 means no final status.
+void dm_account_trace_api(dm_account_trace_api_operation operation, unsigned http_status);
