@@ -106,6 +106,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends", "game.matchmaking"]))
         let storedNEX = try store.load()
         precondition(model.hasGameCredential && storedNEX?.tokenKind == .nex)
+        precondition(model.renewalTask != nil, "Successful game sign-in must schedule retained-grant preparation")
         await model.load()
         precondition(model.eligibility() == .versionNotAccepted(["4.0.1"]))
         model.updateRoutes(0)
@@ -132,6 +133,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         await model.signOut()
         let removed = try store.load()
         precondition(model.account == nil && removed == nil)
+        precondition(model.renewalTask == nil, "Sign-out must leave background preparation stopped")
 
         let cancelledStore = FixtureStore(), cancelledCallbacks = MobileNextendoCallbackPool(), pendingBrowser = FixtureBrowser()
         pendingBrowser.mode = .pending
@@ -163,6 +165,21 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         let preservedNEX = try rejectedStore.load()
         precondition(preservedNEX == storedNEX && rejected.account?.tokenKind == .nex && rejected.accountError == .accountHTTPStatus(.gameProof,401),
                      "An unsupported OAuth game-proof exchange must report failure and preserve the previous native credential")
+        precondition(rejected.renewalTask != nil, "A failed relink must rearm the retained grant after cleanup")
+        await rejected.signOut()
+
+        let retainedStore = FixtureStore(), retainedCallbacks = MobileNextendoCallbackPool(), retainedBrowser = FixtureBrowser()
+        try retainedStore.save(storedNEX!); retainedBrowser.mode = .pending
+        let retainedService = NextendoAccountService(store:retainedStore,http:FixtureHTTP([]),makeReceiver:{ try retainedCallbacks.make() })
+        let retained = MobileNextendoModel(bundle:bundle,preferences:preferences,accountService:retainedService,catalogService:catalogService,callbacks:retainedCallbacks,browser:retainedBrowser)
+        await retained.load(); precondition(retained.renewalTask != nil)
+        retained.signIn(); try await eventually { retainedBrowser.receiver != nil }
+        precondition(retained.renewalTask == nil)
+        retained.cancel(); await retainedBrowser.deliverLate()
+        try await eventually { retained.renewalTask != nil }
+        let retainedValue = try retainedStore.load()
+        precondition(retainedValue == storedNEX && !retained.isAuthorizing)
+        await retained.signOut(); precondition(retained.renewalTask == nil)
 
         let mismatchKeychain = FixtureStore(), mismatchLegacy = FixtureLegacy(legacyData)
         try mismatchKeychain.save(oauth)

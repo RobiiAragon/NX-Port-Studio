@@ -34,7 +34,7 @@ import Combine
     private var requestTask: Task<Void, Never>?
     private var cancellationTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
-    private var renewalTask: Task<Void, Never>?
+    private(set) var renewalTask: Task<Void, Never>?
     private var operationID = UUID()
 
     init(bundle: Bundle = .main, preferences: UserDefaults = .standard,
@@ -106,6 +106,10 @@ import Combine
             await self.load()
         }
     }
+    private func resumeRenewalIfIdle() {
+        guard !accountBusy else { return }
+        scheduleRenewal()
+    }
     func prepareServices() async {
         guard !isPreparingServices, routesState != 0 else { return }
         isPreparingServices = true; servicePreparationFailed = false
@@ -141,7 +145,7 @@ import Combine
         renewalTask?.cancel(); renewalTask = nil
         let configuration: NextendoOAuthConfiguration
         do { configuration = try self.configuration() }
-        catch { accountError = (error as? NextendoError) ?? .invalidConfiguration; return }
+        catch { accountError = (error as? NextendoError) ?? .invalidConfiguration; resumeRenewalIfIdle(); return }
         preferences.set(configuration.clientID, forKey: "launcher.nextendoClientID")
         isAuthorizing = true; accountError = nil
         operationID = UUID(); let operation = operationID, barrier = cancellationTask
@@ -162,7 +166,6 @@ import Combine
                 let summary = try await accountService.finishSignIn(request.id, forGames: true)
                 guard operation == operationID, !Task.isCancelled else { return }
                 account = summary
-                scheduleRenewal()
             } catch is CancellationError { }
             catch { if operation == operationID { accountError = (error as? NextendoError) ?? .requestFailed } }
             guard operation == operationID else { return }
@@ -172,6 +175,7 @@ import Combine
             await cleanup.value
             guard operation == operationID else { return }
             isAuthorizing = false; requestTask = nil
+            resumeRenewalIfIdle()
         }
     }
     func requestGameCredential() {
@@ -190,19 +194,24 @@ import Combine
             catch { if operation == operationID { accountError = (error as? NextendoError) ?? .requestFailed } }
             guard operation == operationID else { return }
             isRequestingCredential = false; requestTask = nil
+            resumeRenewalIfIdle()
         }
     }
     func cancel() {
         operationID = UUID()
-        requestTask?.cancel(); requestTask = nil
+        let cancelled = requestTask
+        cancelled?.cancel(); requestTask = nil
         expiryTask?.cancel(); expiryTask = nil
         browser.cancel()
         isAuthorizing = false; isRequestingCredential = false; authorizationExpiresAt = nil
-        _ = queueCancellation()
+        _ = queueCancellation(after:cancelled,resume:true)
     }
-    @discardableResult private func queueCancellation() -> Task<Void, Never> {
+    @discardableResult private func queueCancellation(after cancelled: Task<Void,Never>? = nil,resume: Bool = false) -> Task<Void, Never> {
         let previous = cancellationTask, service = accountService
-        let task = Task { await previous?.value; await service.cancelSignIn() }
+        let task = Task { [weak self] in
+            await previous?.value; await service.cancelSignIn(); await cancelled?.value
+            if resume { self?.resumeRenewalIfIdle() }
+        }
         cancellationTask = task
         return task
     }
