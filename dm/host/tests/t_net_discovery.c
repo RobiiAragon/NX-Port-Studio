@@ -94,6 +94,23 @@ static void traffic(void) {
     unsetenv("DM_NET_DISCOVERY_PEER"); CHECK(!dm_net_close(guest)); close(native);
     dm_net_test_pause_discovery_worker(0);
 }
+static void message_traffic(void) {
+    dm_net_test_interface a=adapter(0xfffffffc);dm_net_test_set_interface(&a);dm_net_set_multicast_allowed(0);
+    unsigned port;int native=receiver(&port),guest=dm_net_socket(2,2,0);CHECK(guest>=0);
+    address own=endpoint(INADDR_LOOPBACK,0);CHECK(!dm_net_bind(guest,&own,sizeof own));unsigned length=sizeof own;CHECK(!dm_net_name(guest,&own,&length,0));
+    address destination=endpoint(UINT32_MAX,port);unsigned char query[]={0x80,0,1,2,3,0xff,'M','S','G'};
+    dm_net_iovec vectors[]={{query,3},{query+3,sizeof query-3}};dm_net_msghdr message={.name=&destination,.name_size=sizeof destination,.vectors=vectors,.count=2};
+    dm_net_set_errno(777);CHECK(dm_net_sendmsg(guest,&message,0)==sizeof query&&dm_net_errno()==777);
+    unsigned char bytes[32];struct sockaddr_in from;CHECK(read_packet(native,bytes,sizeof bytes,&from)==sizeof query&&!memcmp(bytes,query,sizeof query)&&from.sin_port==own.port);
+    CHECK(sendto(native,"reply",5,0,(struct sockaddr *)&from,sizeof from)==5);
+    dm_net_iovec output[]={{bytes,2},{bytes+2,3}};dm_net_msghdr receive={.vectors=output,.count=2};
+    CHECK(dm_net_recvmsg(guest,&receive,0)==5&&!memcmp(bytes,"reply",5));
+    setenv("DM_NET_DISCOVERY_PEER","invalid",1);
+    CHECK(dm_net_sendmsg(guest,&message,0)==-1&&dm_net_errno()==22); // No guessed discovery destination.
+    destination.ip=htonl(INADDR_LOOPBACK);CHECK(dm_net_sendmsg(guest,&message,0)==sizeof query);
+    CHECK(read_packet(native,bytes,sizeof bytes,&from)==sizeof query&&!memcmp(bytes,query,sizeof query));
+    unsetenv("DM_NET_DISCOVERY_PEER");CHECK(!dm_net_close(guest));close(native);
+}
 static void bounds_and_lifetime(void) {
     dm_net_test_interface a=adapter(0xfffff000); dm_net_test_set_interface(&a);
     unsigned port; int native=receiver(&port),guest=dm_net_socket(2,2,0); CHECK(guest>=0);
@@ -180,11 +197,15 @@ static void supplemental_queries(void) {
     int native=receiver(&hybrid_native_port),phone=receiver(&hybrid_phone_port);dm_net_test_set_discovery_sender(hybrid_sender);
     unsigned char pia[0x12f]={0};pia[5]=1;pia[14]=1;
     const unsigned char ldn[12]={0,0x14,0x45,0x11};
-    for(unsigned protocol=0;protocol<2;++protocol) {
+    for(unsigned variant=0;variant<4;++variant) {
+        unsigned protocol=variant&1;
         const void *query=protocol?(const void *)ldn:(const void *)pia;size_t size=protocol?sizeof ldn:sizeof pia;
         int guest=dm_net_socket(2,2,0);CHECK(guest>=0);address own=endpoint(INADDR_LOOPBACK,0);CHECK(!dm_net_bind(guest,&own,sizeof own));unsigned length=sizeof own;CHECK(!dm_net_name(guest,&own,&length,0));
         address destination=endpoint(UINT32_MAX,protocol?11452:30000);hybrid_reset();dm_net_set_errno(777);
-        CHECK(dm_net_send(guest,query,size,0,&destination,sizeof destination)==(long)size&&dm_net_errno()==777);
+        dm_net_iovec vectors[]={{(void *)query,3},{(char *)query+3,size-3}};
+        dm_net_msghdr message={.name=&destination,.name_size=sizeof destination,.vectors=vectors,.count=2};
+        long sent=variant<2?dm_net_send(guest,query,size,0,&destination,sizeof destination):dm_net_sendmsg(guest,&message,0);
+        CHECK(sent==(long)size&&dm_net_errno()==777);
         unsigned char bytes[1024];struct sockaddr_in from;
         CHECK(read_packet(native,bytes,sizeof bytes,&from)==(ssize_t)size&&!memcmp(bytes,query,size)&&from.sin_port==own.port);
         CHECK(read_packet(phone,bytes,sizeof bytes,&from)==(ssize_t)size&&!memcmp(bytes,query,size)&&from.sin_port==own.port);
@@ -238,6 +259,6 @@ static void supplemental_queries(void) {
 }
 int main(void) {
     setenv("DM_NETWORK","auto",1); unsetenv("DM_NET_DISCOVERY_PEER"); dm_net_set_multicast_allowed(0);
-    ranges(); traffic(); unreachable_neighbor(); supplemental_queries(); bounds_and_lifetime(); dm_net_test_set_interface(NULL);
+    ranges(); traffic(); unreachable_neighbor(); supplemental_queries(); message_traffic(); bounds_and_lifetime(); dm_net_test_set_interface(NULL);
     printf("automatic discovery: %u checks passed (real UDP reply, ranges, bounded queue, close/reuse).\n",checks); return 0;
 }

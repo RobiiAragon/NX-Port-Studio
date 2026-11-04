@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <sys/ioctl.h>
 #include <sys/sockio.h>
 #include <time.h>
@@ -426,6 +427,8 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
     }
     close(r.fd); net_trace("send", guest, result); return result;
 }
+
+#include "net_message.inc"
 
 static int net_option(int level, int option, int *hostlevel, int *hostoption, unsigned *size) {
     *size = sizeof(int);

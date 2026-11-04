@@ -129,8 +129,8 @@ HLE_FORCE("_ZN2nn3web19ShowOfflineHtmlPageEPNS0_26OfflineHtmlPageReturnValueERKN
 // ---------- C socket interface; transport stays offline unless a network mode is selected ----------
 HLE_FORCE_WAIT("nnsocketAccept", "socket transport, offline by default", int, h_c_sk_Accept, int s, void *a, unsigned *n) { return dm_net_accept(s, a, n); }
 HLE_FORCE("nnsocketListen", "socket transport, offline by default", int, h_c_sk_Listen, int s, int n) { return dm_net_listen(s, n); }
-HLE_FORCE("nnsocketRecvMsg", "scatter/gather transport remains unsupported", int, h_c_sk_RecvMsg, void) { dm_net_set_errno(dm_net_enabled() ? 95 : SK_ENETDOWN); return -1; }
-HLE_FORCE("nnsocketSendMsg", "scatter/gather transport remains unsupported", int, h_c_sk_SendMsg, void) { dm_net_set_errno(dm_net_enabled() ? 95 : SK_ENETDOWN); return -1; }
+HLE_FORCE_WAIT("nnsocketRecvMsg", "guarded Horizon scatter/gather receive with a signed 64-bit byte count", long, h_c_sk_RecvMsg, int s, void *m, int f) { return dm_net_recvmsg(s, m, f); }
+HLE_FORCE_WAIT("nnsocketSendMsg", "guarded Horizon scatter/gather send with a signed 64-bit byte count", long, h_c_sk_SendMsg, int s, const void *m, int f) { return dm_net_sendmsg(s, m, f); }
 HLE_FORCE("nnsocketShutdown", "socket transport, offline by default", int, h_c_sk_Shutdown, int s, int h) { return dm_net_shutdown(s, h); }
 // The C API takes plain struct addrinfo, independently of which C++ overloads
 // the SDK exports. SDK 20 retains both overloads; its C wrapper forwards to the

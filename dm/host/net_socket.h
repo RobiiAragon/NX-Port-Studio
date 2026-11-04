@@ -6,6 +6,14 @@
 #include "net_discovery.h"
 
 typedef struct { int32_t fd; int16_t events, revents; } dm_net_pollfd;
+typedef struct { void *base; uint64_t size; } dm_net_iovec;
+// Plain Horizon BSD msghdr and nn::socket::MsgHdr share this 64-bit layout.
+// Explicit padding keeps guest field widths independent of Darwin's headers.
+typedef struct {
+    void *name; uint32_t name_size, pad0;
+    dm_net_iovec *vectors; int32_t count; uint32_t pad1;
+    void *control; uint32_t control_size; int32_t flags;
+} dm_net_msghdr;
 typedef struct { int32_t flags, family, type, protocol; uint32_t addrlen, pad; void *addr; char *canonname; void *next; } dm_net_addrinfo;
 typedef struct { int32_t flags, family, type, protocol; uint32_t addrlen, pad; char *canonname; void *addr; void *next; } dm_net_addrinfo_legacy;
 typedef enum { DM_NET_OFFLINE, DM_NET_LAN, DM_NET_LDN, DM_NET_NEXTENDO, DM_NET_AUTO } dm_net_mode_t;
@@ -82,6 +90,8 @@ int dm_net_fcntl(int fd, int cmd, int flags);
 int dm_net_sockopt(int fd, int level, int option, void *value, unsigned *len, int set);
 long dm_net_recv(int fd, void *buf, unsigned long len, int flags, void *addr, unsigned *addrlen);
 long dm_net_send(int fd, const void *buf, unsigned long len, int flags, const void *addr, unsigned addrlen);
+long dm_net_recvmsg(int fd, void *message, int flags);
+long dm_net_sendmsg(int fd, const void *message, int flags);
 int dm_net_poll(void *fds, uint64_t count, int timeout_ms);
 int dm_net_idle(void);
 int dm_net_select(int nfds, void *read, void *write, void *except, const int64_t *timeout);

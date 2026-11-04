@@ -94,6 +94,10 @@ SKF("_ZN2nn6socket17ResolverSetOptionERKNS0_14ResolverOptionE", h_sk_ResSet, con
 HLE_FORCE_WAIT("_ZN2nn6socket4RecvEiPvmNS0_7MsgFlagE", "socket transport, offline by default", long, h_sk_Recv, int s, void *b, unsigned long n, int f) { return dm_net_recv(s, b, n, f, NULL, NULL); }
 HLE_FORCE_WAIT("_ZN2nn6socket8RecvFromEiPvmNS0_7MsgFlagEPNS0_8SockAddrEPj", "socket transport, offline by default", long, h_sk_RecvFrom, int s, void *b, unsigned long n, int f, void *a, unsigned *al) { return dm_net_recv(s, b, n, f, a, al); }
 HLE_FORCE_WAIT("_ZN2nn6socket4SendEiPKvmNS0_7MsgFlagE", "socket transport, offline by default", long, h_sk_Send, int s, const void *b, unsigned long n, int f) { return dm_net_send(s, b, n, f, NULL, 0); }
+HLE_FORCE_WAIT("_ZN2nn6socket7RecvMsgEiP6msghdri", "guarded BSD scatter/gather receive", long, h_sk_RecvMsgPlain, int s, void *m, int f) { return dm_net_recvmsg(s, m, f); }
+HLE_FORCE_WAIT("_ZN2nn6socket7SendMsgEiPK6msghdri", "guarded BSD scatter/gather send", long, h_sk_SendMsgPlain, int s, const void *m, int f) { return dm_net_sendmsg(s, m, f); }
+HLE_FORCE_WAIT("_ZN2nn6socket7RecvMsgEiPNS0_6MsgHdrENS0_7MsgFlagE", "guarded named-ABI scatter/gather receive", long, h_sk_RecvMsg, int s, void *m, int f) { return dm_net_recvmsg(s, m, f); }
+HLE_FORCE_WAIT("_ZN2nn6socket7SendMsgEiPKNS0_6MsgHdrENS0_7MsgFlagE", "guarded named-ABI scatter/gather send", long, h_sk_SendMsg, int s, const void *m, int f) { return dm_net_sendmsg(s, m, f); }
 HLE_FORCE_WAIT("_ZN2nn6socket11GetAddrInfoEPKcS2_PKNS0_8AddrInfoEPPS3_", "name resolution (cut): EAI_FAIL", int, h_sk_GetAddrInfo, const char *h, const char *s, const void *hint, void **res) {
     return dm_net_getaddrinfo(h, s, hint, res);
 }
