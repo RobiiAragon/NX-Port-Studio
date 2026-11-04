@@ -46,4 +46,6 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
 
+I also corrected the [shader-progress observer](../../../docs/reference/packing.md#shader-progress-freezes-or-counts-unfinished-work-as-complete) after its displayed count lagged behind this game's base artifacts. The new synthetic schedules qualify progress reporting, not shader correctness, rendering or network play.
+
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition or tested its correction in the game; this result does not qualify the lobby return or establish its cause.

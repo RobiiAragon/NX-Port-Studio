@@ -4,7 +4,9 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,6 +28,7 @@ class Json(unittest.TestCase):
         self.now, self.out = 100.0, io.StringIO()
         self.prog = nsp.Progress('json')
         for cm in (contextlib.redirect_stdout(self.out), mock.patch.object(nsp.time, 'monotonic', side_effect=lambda: self.now),
+                   mock.patch.object(nsp.time, 'time', side_effect=lambda: self.now),
                    mock.patch.object(nsp.threading, 'Thread'), mock.patch.object(nsp, 'PROG', self.prog)):   # no real ticker: the tests tick it themselves
             cm.__enter__(); self.addCleanup(cm.__exit__, None, None, None)
 
@@ -69,6 +72,27 @@ class Json(unittest.TestCase):
             with self.assertRaisesRegex(nsp.BuildError, 'does not prompt'): nsp.ask('NSP folder: ', 'the NSP folder')
         inp.assert_not_called()
 
+    def test_eta_expires_without_inventing_count_changes(self):
+        self.prog.stage('compile', done=0, total=10)
+        self.now += 4; self.prog.set(done=1)
+        self.assertEqual(self.events('progress')[-1]['eta'], 36)
+        self.now += 61; self.prog._tick(OneTick())
+        # The JSON client must receive the lost estimate even without another
+        # count update. The unchanged count is not another completed artifact.
+        last = self.events('progress')[-1]
+        self.assertEqual(last['done'], 1)
+        self.assertIsNone(last['eta'])
+        self.assertEqual(self.prog.cur.changed, 104)
+
+    def test_step_change_discards_rate(self):
+        self.prog.stage('compile', done=0, total=10)
+        self.now += 4; self.prog.set(done=1)
+        self.assertIsNotNone(self.events('progress')[-1]['eta'])
+        self.prog.set(step='finishing variants and reflection')
+        self.assertIsNone(self.prog.cur.done)
+        self.assertIsNone(self.prog.cur.total)
+        self.assertIsNone(self.events('progress')[-1]['eta'])
+
     def test_failed_step(self):
         self.prog.stage('child')
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,6 +104,111 @@ class Json(unittest.TestCase):
         self.assertEqual([e['ev'] for e in es], ['stage', 'progress', 'stage_end', 'say'])
         self.assertFalse(es[2]['ok'])
         self.assertTrue('out' in es[3]['msg'] and 'err' in es[3]['msg'])
+
+class PollClock(unittest.TestCase):
+    def test_wall_clock_adjustment_does_not_suspend_polling(self):
+        prog = nsp.Progress(); prog.stage('compile')
+        class Stop:
+            done = False
+            def is_set(self): return self.done
+            def wait(self, delay): self.delay = delay; self.done = True
+        stop = Stop()
+        with mock.patch.object(nsp.time, 'time', side_effect=[100, 1000000]), \
+             mock.patch.object(nsp.time, 'monotonic', side_effect=[10, 10.2]):
+            prog._poll(prog.cur, lambda: None, stop)
+        self.assertAlmostEqual(stop.delay, 1)
+
+class ShaderArtifacts(unittest.TestCase):
+    """Original synthetic output schedules; no shader tools, game or GPU run."""
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name); self.work = self.root / 'work'; self.out = self.root / 'out'
+        self.work.mkdir(); self.out.mkdir()
+        self.keys = ['0000000000000001', '0000000000000002', 'ffffffffffffffff']
+        self.profile = mock.Mock(); self.profile.table.side_effect = lambda name: self.root / name
+        self.map(self.keys)
+
+    def map(self, keys):
+        (self.root / 'shader_map.tsv').write_text(''.join(f'p.bin\t{i}\tvs\t{k}\tsource\n' for i, k in enumerate(keys)))
+
+    def watch(self): return nsp.ShaderWatch(self.profile, self.out, self.work)
+
+    def marker(self):
+        self.w = self.work / 'dmsh_synthetic'; self.w.mkdir()
+        return self.w
+
+    def pair(self, key, mtime=None):
+        for suffix in ('_b.metallib', '_b.json'):
+            path = self.out / (key + suffix); path.write_text('{}' if suffix.endswith('json') else 'synthetic library')
+            if mtime is not None: os.utime(path, (mtime, mtime))
+
+    def compiling(self):
+        self.marker()
+        for key in self.keys:
+            for suffix in ('.bin', '.spv', '.metal'): (self.w / (key + suffix)).write_text('')
+
+    def test_old_outputs_and_old_work_marker_are_not_current_progress(self):
+        for key in self.keys: self.pair(key)
+        (self.work / 'dmsh_old').mkdir()
+        watch = self.watch(); before = watch()
+        self.assertEqual((before['step'], before['done']), ('cache check', 0))
+        for path in self.out.iterdir(): path.unlink()   # producer cleanup precedes its new marker
+        self.marker()
+        self.assertEqual(watch()['done'], 0)
+
+    def test_old_mtime_restores_count_after_the_new_marker(self):
+        watch = self.watch(); self.compiling()
+        self.pair(self.keys[0], mtime=1)
+        state = watch()
+        self.assertEqual((state['step'], state['done'], state['total'], state['unit']),
+                         ('preparing base artifacts', 1, 3, 'shader bases'))
+        self.pair(self.keys[1], mtime=1)
+        self.assertEqual(watch()['done'], 2)
+
+    def test_out_of_order_last_key_does_not_complete_other_keys(self):
+        watch = self.watch(); self.compiling()
+        key = self.keys[-1]
+        (self.out / (key + '_b.metallib')).write_text('synthetic library')
+        self.assertEqual(watch()['done'], 0)   # a library alone has no reflection pair
+        self.pair(key)
+        self.assertEqual(watch()['done'], 1)
+        (self.out / (self.keys[0] + '_b.json')).write_text('{}')
+        self.assertEqual(watch()['done'], 1)   # reflection alone is not a pair either
+
+    def test_directory_and_symlink_names_are_not_base_artifacts(self):
+        watch = self.watch(); self.compiling()
+        key = self.keys[0]
+        (self.out / (key + '_b.metallib')).mkdir()
+        (self.out / (key + '_b.json')).symlink_to(self.root / 'shader_map.tsv')
+        self.assertEqual(watch()['done'], 0)
+
+    def test_geometry_base_before_variants_is_not_stage_completion(self):
+        self.map(self.keys[:1]); watch = self.watch(); self.marker()
+        self.pair(self.keys[0])
+        (self.w / (self.keys[0] + '_g3.metal')).write_text('synthetic pending variant')
+        state = watch()
+        self.assertEqual(state['step'], 'finishing variants and reflection')
+        self.assertNotIn('done', state); self.assertNotIn('total', state)
+        prog = nsp.Progress(); prog.stage('shader build', step='preparing base artifacts', done=0, total=1)
+        prog.set(**state)
+        self.assertIsNotNone(prog.cur)   # the subprocess and stamp still own success
+        self.assertIsNone(prog.cur.done); self.assertIsNone(prog.cur.total)
+
+    def test_unknown_and_variant_files_do_not_inflate_translation(self):
+        watch = self.watch(); self.marker()
+        for key in self.keys: (self.w / (key + '.bin')).write_text('')
+        (self.w / (self.keys[0] + '.spv')).write_text('')
+        (self.w / (self.keys[0] + '_g0.spv')).write_text('')
+        (self.w / 'unknown.spv').write_text('')
+        state = watch()
+        self.assertEqual((state['step'], state['done'], state['total']), ('translating', 1, 3))
+
+    def test_removed_work_folder_does_not_invent_missing_outputs(self):
+        watch = self.watch(); self.compiling(); self.pair(self.keys[0]); watch()
+        shutil.rmtree(self.w)
+        state = watch()
+        self.assertEqual(state['step'], 'finishing variants and reflection')
+        self.assertIn('1/3', state['note']); self.assertNotIn('done', state)
 
 class ShadersStale(unittest.TestCase):
     """build_shaders tells a front end (event shaders_stale, json mode) that cached libraries cannot be reused, once, before it rebuilds them"""
