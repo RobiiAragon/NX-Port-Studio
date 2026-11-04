@@ -1,9 +1,25 @@
 // Original C ABI/transport fixture: real sockets, synthetic headers, no game data.
 #define main socket_regression_main
+#define dm_guest_host_wait_begin message_counted_wait_begin
 #include "t_net.c"
+#undef dm_guest_host_wait_begin
 #undef main
 #include <limits.h>
 #include <sys/select.h>
+// The shared fixture counts all entered waits. A count can belong to a send
+// that has already returned partial bytes, so it cannot establish which call
+// still owns the original descriptor generation when another thread closes it.
+// Hold this worker at its actual readiness boundary, after borrowing its ref,
+// until the main thread has closed/reused the guest slot. No runtime hook.
+struct message_wait_gate { pthread_mutex_t lock; pthread_cond_t changed; int entered, finished, released; };
+static __thread struct message_wait_gate *message_gate;
+void dm_guest_host_wait_begin(void) {
+    message_counted_wait_begin();struct message_wait_gate *gate=message_gate;
+    if(!gate)return;
+    pthread_mutex_lock(&gate->lock);gate->entered=1;pthread_cond_broadcast(&gate->changed);
+    while(!gate->released)pthread_cond_wait(&gate->changed,&gate->lock);
+    pthread_mutex_unlock(&gate->lock);
+}
 // Observe x0 exactly as an AArch64 caller does. A C cast to a mismatched function
 // type would itself be undefined and could hide the former int/ssize_t bug.
 extern long fixture_message_call(void *entry, int fd, const void *message, int flags);
@@ -135,14 +151,17 @@ static void message_errors(void) {
 struct message_job {
     int fd, sending; dm_net_msghdr message; dm_net_iovec vectors[2];
     char bytes[32768]; long result; int error; _Atomic int done;
+    struct message_wait_gate *gate;
 };
 static void *message_worker(void *input) {
-    struct message_job *j=input;
+    struct message_job *j=input;message_gate=j->gate;
     if(j->sending) {
         unsigned calls=0;
         do {j->result=MSEND(j->fd,&j->message,0);} while(j->result>=0 && ++calls<4096);
     } else j->result=MRECV(j->fd,&j->message,0);
-    j->error=dm_net_errno();atomic_store(&j->done,1);return NULL;
+    j->error=dm_net_errno();atomic_store(&j->done,1);
+    if(j->gate) {pthread_mutex_lock(&j->gate->lock);j->gate->finished=1;pthread_cond_broadcast(&j->gate->changed);pthread_mutex_unlock(&j->gate->lock);}
+    message_gate=NULL;return NULL;
 }
 static void message_waited(struct message_job *j,int before) {
     for(unsigned i=0;i<3000 && atomic_load(&waits)==before && !atomic_load(&j->done);i++)usleep(1000);
@@ -152,13 +171,18 @@ static void message_lifetimes(void) {
     for(int sending=0;sending<2;sending++) {
         int guest,peer;address unused;message_pair(1,&guest,&peer,&unused);
         if(sending){int native=dm_net_dup_native(guest),size=4096;CHECK(native>=0 && !setsockopt(native,SOL_SOCKET,SO_SNDBUF,&size,sizeof size),"bound native send buffer for backpressure");close(native);CHECK(!setsockopt(peer,SOL_SOCKET,SO_RCVBUF,&size,sizeof size),"bound peer receive window");}
-        struct message_job job={.fd=guest,.sending=sending};memset(job.bytes,0xa5,sizeof job.bytes);
+        struct message_wait_gate gate={.lock=PTHREAD_MUTEX_INITIALIZER,.changed=PTHREAD_COND_INITIALIZER};
+        struct message_job job={.fd=guest,.sending=sending,.gate=&gate};memset(job.bytes,0xa5,sizeof job.bytes);
         job.vectors[0]=(dm_net_iovec){job.bytes,sizeof job.bytes/2};job.vectors[1]=(dm_net_iovec){job.bytes+sizeof job.bytes/2,sizeof job.bytes/2};
         job.message=(dm_net_msghdr){.vectors=job.vectors,.count=2};
-        int before=atomic_load(&waits);pthread_t t;CHECK(!pthread_create(&t,NULL,message_worker,&job),"start blocked message operation");message_waited(&job,before);
+        pthread_t t;CHECK(!pthread_create(&t,NULL,message_worker,&job),"start blocked message operation");
+        pthread_mutex_lock(&gate.lock);while(!gate.entered&&!gate.finished)pthread_cond_wait(&gate.changed,&gate.lock);
+        CHECK(gate.entered&&!gate.finished,"message operation is held inside its actual readiness wait");pthread_mutex_unlock(&gate.lock);
         CHECK(CLOSE(guest)==0,"close descriptor while message operation is blocked");
         int replacement=SOCKET(2,2,17);CHECK(replacement==guest,"reuse exact guest slot with a different socket");
+        pthread_mutex_lock(&gate.lock);gate.released=1;pthread_cond_broadcast(&gate.changed);pthread_mutex_unlock(&gate.lock);
         CHECK(!pthread_join(t,NULL) && job.result==-1 && job.error==9,"blocked message is cancelled by its original descriptor generation");
+        pthread_cond_destroy(&gate.changed);pthread_mutex_destroy(&gate.lock);
         CHECK(FCNTL(replacement,4,0x800)==0,"replacement descriptor remains independently usable");
         CLOSE(replacement);close(peer);
     }
