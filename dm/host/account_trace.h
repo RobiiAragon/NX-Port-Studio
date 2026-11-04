@@ -1,12 +1,14 @@
 // Opt-in metadata only: no account values, network addresses or guest pointers.
 #pragma once
 #include <stdint.h>
+#include "nextendo_credential_diagnostic.h"
 
 typedef enum { DM_ACCOUNT_TRACE_AVAILABLE, DM_ACCOUNT_TRACE_NETWORK_RESULT } dm_account_trace_operation;
 typedef struct { int enabled, pending, hold, ip_queried; } dm_account_trace_network;
 typedef struct {
     int enabled, provider, cached, query_valid, child_available, expiry_valid, generation_changed;
     int stage, error, bytes, exit_code, signal;
+    int credential_reason, security_status;
 } dm_account_trace_provider_state;
 typedef enum {
     DM_ACCOUNT_RETURN_ENSURE, DM_ACCOUNT_RETURN_ID, DM_ACCOUNT_RETURN_TOKEN,
@@ -25,3 +27,5 @@ void dm_account_trace_nifm(dm_account_trace_operation operation, uint32_t result
 // Returns the result unchanged. Failed stages only; no extra account queries.
 uint32_t dm_account_trace_return(dm_account_trace_return_operation operation, uint32_t result,
                                 dm_account_trace_return_stage stage);
+uint32_t dm_account_trace_credential_return(dm_account_trace_return_operation operation, uint32_t result,
+                                          dm_nextendo_credential_diagnostic diagnostic);
