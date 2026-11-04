@@ -4,6 +4,33 @@
 #import <Security/Security.h>
 #include "nextendo_account.h"
 #include "nextendo_routes.h"
+#include "LauncherNextendoProfiles.h"
+
+// main selects a bundle profile before the mobile coordinator runs. Keep its
+// provenance separate from the route name: public profiles may be refreshed,
+// while explicit overrides and approved local peers must not be downgraded.
+enum { PROFILE_NONE, PROFILE_EXPLICIT, PROFILE_APPROVED_LOCAL,
+       PROFILE_EMBEDDED_PUBLIC, PROFILE_DOWNLOADED_PUBLIC };
+static int selected_profile_origin;
+void dm_launcher_configure_nextendo_routes(const char *directory) {
+    selected_profile_origin = getenv("DM_NEXTENDO_ROUTES") ? PROFILE_EXPLICIT : PROFILE_NONE;
+    if (!directory || selected_profile_origin == PROFILE_EXPLICIT) return;
+    @autoreleasepool {
+        NSString *root = [NSString stringWithUTF8String:directory];
+        if (!root) return;
+        NSFileManager *files = NSFileManager.defaultManager;
+        NSArray<NSString *> *names = @[@"nextendo-private/routes.tsv", @"nextendo/routes.tsv"];
+        for (NSUInteger i = 0; i < names.count; i++) {
+            NSString *path = [root stringByAppendingPathComponent:names[i]];
+            BOOL isDirectory = NO;
+            if ([files fileExistsAtPath:path isDirectory:&isDirectory] && !isDirectory) {
+                selected_profile_origin = i == 0 ? PROFILE_APPROVED_LOCAL : PROFILE_EMBEDDED_PUBLIC;
+                setenv("DM_NEXTENDO_ROUTES", path.fileSystemRepresentation, 0);
+                return;
+            }
+        }
+    }
+}
 
 void dm_guest_host_wait_begin(void);
 void dm_guest_host_wait_end(void);
@@ -36,7 +63,14 @@ int dm_mobile_nextendo_routes_state(void) {
 int dm_mobile_nextendo_apply_service_profile(const char *path) {
     // Called before guest boot. A successful immutable table is never replaced.
     if (dm_nextendo_routes_status() == DM_NEXTENDO_ROUTES_READY) return DM_NEXTENDO_ROUTES_READY;
-    if (!path || path[0] != '/' || !path[1] || setenv("DM_NEXTENDO_ROUTES", path, 1)) return DM_NEXTENDO_ROUTES_INVALID;
+    if (!path || path[0] != '/' || !path[1]) return DM_NEXTENDO_ROUTES_INVALID;
+    if (selected_profile_origin == PROFILE_NONE && getenv("DM_NEXTENDO_ROUTES")) selected_profile_origin = PROFILE_EXPLICIT;
+    if (selected_profile_origin == PROFILE_EXPLICIT || selected_profile_origin == PROFILE_APPROVED_LOCAL) {
+        if (!getenv("DM_NEXTENDO_ROUTES")) return DM_NEXTENDO_ROUTES_INVALID;
+    } else {
+        if (setenv("DM_NEXTENDO_ROUTES", path, 1)) return DM_NEXTENDO_ROUTES_INVALID;
+        selected_profile_origin = PROFILE_DOWNLOADED_PUBLIC;
+    }
     dm_nextendo_routes_retry_unconfigured();
     return dm_nextendo_routes_initialize();
 }

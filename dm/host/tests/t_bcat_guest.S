@@ -29,3 +29,35 @@ _bcat_guest_digest_call:
     ldp x19, x20, [sp, #16]
     ldp x29, x30, [sp], #64
     ret
+
+// Directory-scoped RequestSync: x0 = progress object, x1 = directory name.
+// top, entry, object, directory, returned result, returned guest stack pointer.
+.p2align 2
+.globl _bcat_guest_sync_call
+_bcat_guest_sync_call:
+    stp x29, x30, [sp, #-64]!
+    stp x19, x20, [sp, #16]
+    stp x21, x22, [sp, #32]
+    stp x23, x24, [sp, #48]
+    mov x29, sp
+    mov x19, sp
+    mov x20, x4
+    mov x21, x5
+    mov x22, x1
+    mov x23, x2
+    mov x24, x3
+    mov sp, x0
+    stp x29, x30, [sp, #-16]!
+    mov x0, x23
+    mov x1, x24
+    blr x22
+    str w0, [x20]
+    mov x9, sp
+    str x9, [x21]
+    ldp x29, x30, [sp], #16
+    mov sp, x19
+    ldp x23, x24, [sp, #48]
+    ldp x21, x22, [sp, #32]
+    ldp x19, x20, [sp, #16]
+    ldp x29, x30, [sp], #64
+    ret

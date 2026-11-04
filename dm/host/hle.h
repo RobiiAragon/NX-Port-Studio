@@ -36,7 +36,7 @@ void guest_clock_freeze_for(int reason, int on);   // Freeze by reason (1 backgr
 void guest_clock_read_wait(void);     // A guest read of the system counter: waits while the app is in the background (hle_os.c)
 
 // Forced takeover: even if the SDK module has a definition, all references to that symbol at load time (JUMP_SLOT/GLOB_DAT/ABS64) are resolved to the host implementation.
-// Used only for the service-layer nn:: (service clients of fs/oe/aoc/pctl...); the SDK's libc++ and nn::os internals do not go into this table.
+// Used for service-layer nn:: (service clients of fs/oe/aoc/pctl...) and the C errno pointer getters shared with native socket failures; the SDK's libc++ and nn::os internals do not go into this table.
 // Every entry must state the reason for the takeover; an entry in the table that no module references makes loading report a failure and abort (a wrong list must fail loudly).
 typedef struct { const char *name; void *fn; const char *why; } hle_force_ent;
 #define HLE_FORCE(mangled, why, ret, cname, ...)                                                   \

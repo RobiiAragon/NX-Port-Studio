@@ -3,7 +3,8 @@
 #import <QuartzCore/CAMetalLayer.h>
 @interface SilentDisplayLink : NSObject
 @property CAFrameRateRange preferredFrameRateRange;
-@property float preferredFrameLatency;
+@property(nonatomic) float preferredFrameLatency;
+@property(nonatomic) NSUInteger latencyWrites;
 @property (weak) id<CAMetalDisplayLinkDelegate> delegate;
 @property BOOL paused;
 @property BOOL invalidated;
@@ -12,6 +13,11 @@
 - (void)invalidate;
 @end
 @implementation SilentDisplayLink
+@synthesize preferredFrameLatency = _preferredFrameLatency;
+- (void)setPreferredFrameLatency:(float)value {
+    self.latencyWrites++;
+    _preferredFrameLatency = value < 1 ? 1 : value > 2 ? 2 : value;   // CAMetalDisplayLink accepts only 1 or 2
+}
 - (instancetype)initWithMetalLayer:(CAMetalLayer *)layer { (void)layer; return [super init]; }
 - (void)addToRunLoop:(NSRunLoop *)loop forMode:(NSRunLoopMode)mode { (void)mode; [loop addPort:[NSMachPort port] forMode:NSDefaultRunLoopMode]; }
 - (void)invalidate { self.invalidated = YES; }
@@ -108,7 +114,18 @@ static void latency(void) {   // Exercise the production link, including state c
     CHECK("fixed-refresh fullscreen entry retains latency 1", link.preferredFrameLatency == 1);
     for (int lat = 1; lat <= 3; lat++) for (int variable = 0; variable <= 1; variable++) for (int full = 0; full <= 1; full++) {
         g_present_latency = lat; test_variable_refresh = variable; test_fullscreen = full; link_sync();
-        CHECK("explicit latency wins in every screen/window mode", link.preferredFrameLatency == lat);
+        CHECK("explicit latency uses the supported value in every screen/window mode", link.preferredFrameLatency == (lat > 2 ? 2 : lat));
+    }
+    for (int variable = 0; variable <= 1; variable++) for (int fullscreen = 0; fullscreen <= 1; fullscreen++) {
+        test_variable_refresh = variable; test_fullscreen = fullscreen;
+        const int requests[] = {3, INT_MAX};
+        for (unsigned i = 0; i < sizeof requests / sizeof requests[0]; i++) {
+            g_present_latency = requests[i];
+            CHECK("an oversized override requests supported latency 2", link_latency() == 2);
+            link_sync(); NSUInteger writes = link.latencyWrites;
+            for (int frame = 0; frame < 10; frame++) link_sync();
+            CHECK("a clamped override does not rewrite the link every frame", link.latencyWrites == writes);
+        }
     }
     g_present_latency = 0; test_fullscreen = test_variable_refresh = 0; link_sync(); g_link = nil; g_link_started = 0;
 }

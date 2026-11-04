@@ -34,7 +34,7 @@ typedef struct { dm_ldn_network network; struct sockaddr_in endpoint; } ldn_room
 struct dm_ldn_context {
     pthread_mutex_t lock; pthread_cond_t changed; pthread_t worker;
     dm_ldn_transport transport; dm_ldn_notify notify; void *opaque;
-    int udp, listener, wake[2], stopping, state, reason, scanning, controller_restriction;
+    int udp, listener, wake[2], stopping, state, reason, scanning, controller_restriction, protocol;
     dm_net_discovery_plan scan_plan,scan_supplement; uint64_t scan_next; int scan_tx_failed;
     uint64_t generation; dm_ldn_network network; dm_ldn_network_config config;
     dm_ldn_update updates[8]; ldn_peer peers[8]; ldn_room rooms[LDN_ROOM_MAX]; int room_count;
@@ -240,7 +240,7 @@ dm_ldn_context *dm_ldn_start(const dm_ldn_transport *t, dm_ldn_notify notify, vo
     if (dm_net_multicast_allowed()) setsockopt(c->udp, SOL_SOCKET, SO_BROADCAST, &yes, sizeof yes);
     struct sockaddr_in a = ldn_endpoint(t->bind_address, t->port);
     if (bind(c->udp, (struct sockaddr *)&a, sizeof a)) goto fail;
-    c->state = LDN_INITIALIZED;
+    c->state = LDN_INITIALIZED; c->protocol = 1;
     if (pthread_create(&c->worker, NULL, ldn_worker, c)) goto fail;
     return c;
 fail:
@@ -377,6 +377,23 @@ uint32_t dm_ldn_controller_restriction(dm_ldn_context *c, int restriction) {
     if (c->state == LDN_INITIALIZED) { c->controller_restriction = restriction; result = 0; }
     pthread_mutex_unlock(&c->lock); return result;
 }
+uint32_t dm_ldn_set_protocol(dm_ldn_context *c, int protocol) {
+    // Public contract: LDN services SetProtocol (106), implemented from
+    // Horizon20; the SDK maps Default0 to NX1 on an NX execution platform.
+    // This bridge implements NX membership and NodeInfo.platform0. Public
+    // references label 3 Unknown3 (possibly NX/Ounce); its extra semantics
+    // are unqualified here and must not become a successful placeholder.
+    if (protocol != 0 && protocol != 1 && protocol != 3) return LDN_INVALID;
+    if (!c) return LDN_INVALID_STATE;
+    pthread_mutex_lock(&c->lock); uint32_t result = LDN_INVALID_STATE;
+    if (c->state == LDN_INITIALIZED) {
+        // This is the backend's explicit unsupported-dispatch rejection,
+        // not a measured Nintendo LDN Result for the valid alternate enum.
+        if (protocol == 3) result = 10u | (221u << 9);
+        else { c->protocol = 1; result = 0; }
+    }
+    pthread_mutex_unlock(&c->lock); return result;
+}
 uint32_t dm_ldn_reject(dm_ldn_context *c, uint32_t ip) {
     if (!c) return LDN_INVALID_STATE; pthread_mutex_lock(&c->lock); uint32_t result = c->state == LDN_CREATED ? LDN_NODE_NOT_FOUND : LDN_INVALID_STATE;
     if (c->state == LDN_CREATED) for (int i = 1; i < 8; ++i) if (c->peers[i].active && c->network.nodes[i].ip == ip) { ldn_drop(c, i); result = 0; break; }
@@ -445,6 +462,7 @@ HLE_FORCE("_ZN2nn3ldn22AttachStateChangeEventEPNS_2os15SystemEventTypeE", "real 
     die("LDN state event binding table full");
 }
 HLE_FORCE_WAIT("_ZN2nn3ldn32SetWirelessControllerRestrictionENS0_29WirelessControllerRestrictionE", "retain the requested console-radio policy on the native IP transport", Result, h_ldn_ControllerRestriction, int restriction) { LDN_USE(); return ldn_hook_result("ControllerRestriction", dm_ldn_controller_restriction(g_ldn, restriction)); }
+HLE_FORCE_WAIT("_ZN2nn3ldn11SetProtocolENS0_8ProtocolE", "select the implemented NX LDN protocol before opening a role; alternate protocol3 is unsupported", Result, h_ldn_SetProtocol, int protocol) { LDN_USE(); Result r=dm_ldn_set_protocol(g_ldn,protocol); ldn_trace("protocol requested=%d result=0x%08x",protocol,r); return ldn_hook_result("SetProtocol",r); }
 HLE_FORCE_WAIT("_ZN2nn3ldn11OpenStationEv", "native LDN station lifecycle", Result, h_ldn_OpenSt, void) { LDN_USE(); return ldn_hook_result("OpenSt", dm_ldn_open(g_ldn, 0)); }
 HLE_FORCE_WAIT("_ZN2nn3ldn12CloseStationEv", "native LDN station lifecycle", Result, h_ldn_CloseSt, void) { LDN_USE(); return ldn_hook_result("CloseSt", dm_ldn_close(g_ldn, 0)); }
 HLE_FORCE_WAIT("_ZN2nn3ldn15OpenAccessPointEv", "native LDN access point lifecycle", Result, h_ldn_OpenAp, void) { LDN_USE(); return ldn_hook_result("OpenAp", dm_ldn_open(g_ldn, 1)); }

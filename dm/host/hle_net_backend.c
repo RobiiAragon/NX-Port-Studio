@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <ifaddrs.h>
 #include <limits.h>
+#include <mach/mach.h>
 #include <net/if.h>
 #if TARGET_OS_OSX
 #include <net/route.h>
@@ -29,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <sys/ioctl.h>
 #include <sys/sockio.h>
 #include <time.h>
@@ -45,7 +47,8 @@ _Static_assert(sizeof(nx_addr) == 16, "Horizon sockaddr_in");
 _Static_assert(sizeof(dm_net_addrinfo) == 48 && offsetof(dm_net_addrinfo, addr) == 24, "Horizon addrinfo");
 _Static_assert(sizeof(dm_net_addrinfo_legacy) == 48 && offsetof(dm_net_addrinfo_legacy, addr) == 32, "SDK 4 addrinfo");
 _Static_assert(sizeof(dm_net_pollfd) == 8, "Horizon pollfd");
-typedef struct { int native, used, nonblock, type; uint64_t generation; int64_t send_ms, recv_ms; } net_slot;
+typedef struct net_event net_event;
+typedef struct { int native, used, nonblock, type; uint64_t generation; int64_t send_ms, recv_ms; net_event *event; } net_slot;
 typedef struct { int fd, guest, nonblock, type; uint64_t generation; int64_t send_ms, recv_ms; } net_ref;
 static net_slot g_sockets[NET_MAX];
 static pthread_mutex_t g_net_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -141,6 +144,7 @@ int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan
     int saved=t_net_errno,result=!net_discovery_unicast_plan(plan);t_net_errno=saved;return result;
 }
 int dm_net_errno(void) { return t_net_errno; }
+int *dm_net_errno_location(void) { return &t_net_errno; }
 void dm_net_set_errno(int e) { t_net_errno = e; }
 static int net_error(int e) { t_net_errno = e; return -1; }
 static int net_gate(void) { return dm_net_enabled() ? 1 : (net_error(100), 0); }
@@ -177,6 +181,7 @@ static int net_borrow(int guest, net_ref *r) {
     pthread_mutex_lock(&g_net_lock);
     if (guest < 0 || guest >= NET_MAX || !g_sockets[guest].used) { pthread_mutex_unlock(&g_net_lock); return net_error(9); }
     net_slot s = g_sockets[guest];
+    if (s.event) { pthread_mutex_unlock(&g_net_lock); return net_error(88); }
     int fd = fcntl(s.native, F_DUPFD_CLOEXEC, 0), err = errno;
     pthread_mutex_unlock(&g_net_lock);
     if (fd < 0) return net_error(net_errno(err));
@@ -203,11 +208,12 @@ static int net_register(int fd, int type, int nonblock) {
     if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one) < 0) { int e = errno; close(fd); return net_error(net_errno(e)); }
     pthread_mutex_lock(&g_net_lock);
     int i; for (i = 0; i < NET_MAX && g_sockets[i].used; i++) {}
-    if (i < NET_MAX) { uint64_t gen = g_sockets[i].generation + 1; g_sockets[i] = (net_slot){fd, 1, nonblock, type, gen, -1, -1}; }
+    if (i < NET_MAX) { uint64_t gen = g_sockets[i].generation + 1; g_sockets[i] = (net_slot){fd, 1, nonblock, type, gen, -1, -1, NULL}; }
     pthread_mutex_unlock(&g_net_lock);
     if (i == NET_MAX) { close(fd); return net_error(24); }
     return i;
 }
+#include "net_eventfd.inc"
 static int net_addr_in(const void *p, unsigned n, struct sockaddr_in *out) {
     if (!p) return net_error(14);
     if (n < sizeof(nx_addr)) return net_error(22);
@@ -253,13 +259,26 @@ static int net_close_owned(int guest, int check_generation, uint64_t generation)
         (check_generation && g_sockets[guest].generation != generation)) {
         pthread_mutex_unlock(&g_net_lock); return net_error(9);
     }
+    net_event *event = g_sockets[guest].event;
+    if (event) {
+        g_sockets[guest].used = 0; g_sockets[guest].event = NULL; event->closed = 1;
+        net_event_changed(event); net_event_release_locked(event);
+        pthread_mutex_unlock(&g_net_lock); return 0;
+    }
     int fd = g_sockets[guest].native; uint64_t old_generation = g_sockets[guest].generation; g_sockets[guest].used = 0;
     pthread_mutex_unlock(&g_net_lock);
     net_discovery_cancel(guest, old_generation);
     shutdown(fd, SHUT_RDWR); int result = close(fd), err = errno;
     return net_host_result(result, err);
 }
-int dm_net_close(int guest) { return net_gate() ? net_close_owned(guest, 0, 0) : -1; }
+int dm_net_close(int guest) {
+    // Event counters are local synchronization descriptors, including offline.
+    pthread_mutex_lock(&g_net_lock);
+    int event = guest >= 0 && guest < NET_MAX && g_sockets[guest].used && g_sockets[guest].event;
+    uint64_t generation = event ? g_sockets[guest].generation : 0;
+    pthread_mutex_unlock(&g_net_lock);
+    return event ? net_close_owned(guest, 1, generation) : net_gate() ? net_close_owned(guest, 0, 0) : -1;
+}
 int dm_net_close_generation(int guest, uint64_t generation) { return net_close_owned(guest, 1, generation); }
 void dm_net_finalize(void) { net_resolver_finalize(); for (int i = 0; i < NET_MAX; i++) { pthread_mutex_lock(&g_net_lock); int used = g_sockets[i].used; pthread_mutex_unlock(&g_net_lock); if (used) net_close_owned(i, 0, 0); } }
 int dm_net_bind(int guest, const void *addr, unsigned len) {
@@ -315,6 +334,17 @@ int dm_net_shutdown(int guest, int how) {
     int methods[] = {SHUT_RD, SHUT_WR, SHUT_RDWR}; int result = shutdown(r.fd, methods[how]), err = errno; close(r.fd); return net_host_result(result, err);
 }
 static int net_fcntl_impl(int guest, int cmd, int flags) {
+    net_event *event = net_event_acquire(guest);
+    if (event) {
+        pthread_mutex_lock(&g_net_lock);
+        int result;
+        if (event->closed) result = net_error(9);
+        else if (cmd == 3) result = event->nonblock ? NX_NONBLOCK : 0;
+        else if (cmd != 4) result = net_error(95);
+        else if ((unsigned)flags & ~(NX_NONBLOCK | 3u)) result = net_error(22);
+        else { event->nonblock = !!(flags & NX_NONBLOCK); net_event_changed(event); result = 0; }
+        net_event_release_locked(event); pthread_mutex_unlock(&g_net_lock); return result;
+    }
     net_ref r; if (net_borrow(guest, &r)) return -1;
     close(r.fd);
     if (cmd == 3) return r.nonblock ? NX_NONBLOCK : 0;
@@ -397,6 +427,8 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
     }
     close(r.fd); net_trace("send", guest, result); return result;
 }
+
+#include "net_message.inc"
 
 static int net_option(int level, int option, int *hostlevel, int *hostoption, unsigned *size) {
     *size = sizeof(int);
@@ -501,67 +533,96 @@ static int net_poll_return(dm_poll_stage stage, uint64_t count, int timeout, int
     return result;
 }
 int dm_net_poll(void *fds, uint64_t count, int timeout_ms) {
-    if (!net_gate()) return net_poll_return(DM_POLL_MODE, count, timeout_ms, -1, 0);
     if (count > NET_MAX) return net_poll_return(DM_POLL_COUNT, count, timeout_ms, net_error(22), 0);
     if (count && !fds) return net_poll_return(DM_POLL_BUFFER, count, timeout_ms, net_error(14), 0);
-    struct pollfd *host = calloc(count ? (size_t)count : 1, sizeof *host);
-    net_ref *refs = calloc(count ? (size_t)count : 1, sizeof *refs);
-    dm_net_pollfd *guest = fds;
-    if (!host || !refs) { free(host); free(refs); return net_poll_return(DM_POLL_ALLOC, count, timeout_ms, net_error(12), 0); }
+    size_t capacity = count ? (size_t)count : 1;
+    struct pollfd *host = calloc(capacity * 2, sizeof *host);
+    net_ref *refs = calloc(capacity, sizeof *refs);
+    net_event **events = calloc(capacity, sizeof *events);
+    dm_net_pollfd *guest = calloc(capacity, sizeof *guest);
+    if (!host || !refs || !events || !guest) {
+        free(host); free(refs); free(events); free(guest);
+        return net_poll_return(DM_POLL_ALLOC, count, timeout_ms, net_error(12), 0);
+    }
     int result = -1, invalid = 0;
     dm_poll_stage stage = DM_POLL_COMPLETE;
     unsigned eventmask = 0;
-    for (uint64_t i = 0; i < count; i++) refs[i].fd = -1;
+    for (uint64_t i = 0; i < count; i++) { refs[i].fd = -1; host[2*i].fd = host[2*i+1].fd = -1; }
+    // Snapshot inputs once, so concurrent guest edits cannot redirect a borrowed
+    // descriptor or change which output fields are written after a blocking wait.
+    if (count && net_guest_copyin(guest, fds, (size_t)count * sizeof *guest)) { stage = DM_POLL_BUFFER; goto done; }
     for (uint64_t i = 0; i < count; i++) {
-        refs[i].fd = host[i].fd = -1; guest[i].revents = 0;
+        guest[i].revents = 0;
         if (guest[i].fd < 0) continue;
         eventmask |= (uint16_t)guest[i].events;
         if ((uint16_t)guest[i].events & ~0x1ffu) { stage = DM_POLL_EVENTS; net_error(22); goto done; }
-        if (net_borrow(guest[i].fd, &refs[i])) { if (t_net_errno != 9) { stage = DM_POLL_BORROW; goto done; } guest[i].revents = 32; invalid = 1; }
-        else { host[i].fd = refs[i].fd; host[i].events = net_poll_events((uint16_t)guest[i].events); }
+        events[i] = net_event_acquire(guest[i].fd);
+        if (events[i]) {
+            if (guest[i].events & (1 | 64)) { host[2*i].fd = events[i]->notify[0][0]; host[2*i].events = POLLIN; }
+            if (guest[i].events & 4) { host[2*i+1].fd = events[i]->notify[1][0]; host[2*i+1].events = POLLIN; }
+        } else if (net_borrow(guest[i].fd, &refs[i])) {
+            if (t_net_errno != 9) { stage = DM_POLL_BORROW; goto done; }
+            guest[i].revents = 32; invalid = 1;
+        } else { host[2*i].fd = refs[i].fd; host[2*i].events = net_poll_events((uint16_t)guest[i].events); }
     }
     uint64_t start = net_ms();
     for (;;) {
         int wait = invalid ? 0 : NET_SLICE_MS;
         if (timeout_ms >= 0) { uint64_t elapsed = net_ms() - start; uint64_t left = elapsed < (uint64_t)timeout_ms ? (uint64_t)timeout_ms - elapsed : 0; if ((uint64_t)wait > left) wait = (int)left; }
-        dm_guest_host_wait_begin(); int ready = poll(host, (nfds_t)count, wait), err = errno; dm_guest_host_wait_end();
+        dm_guest_host_wait_begin(); int ready = poll(host, (nfds_t)(count * 2), wait), err = errno; dm_guest_host_wait_end();
         if (ready < 0 && err == EINTR) continue;
         if (ready < 0) { stage = DM_POLL_HOST; net_error(net_errno(err)); break; }
         result = 0;
         for (uint64_t i = 0; i < count; i++) {
-            if (refs[i].fd >= 0) guest[i].revents = net_live(&refs[i]) ? net_poll_revents(host[i].revents) : 32;
+            if (events[i]) {
+                pthread_mutex_lock(&g_net_lock);
+                net_event *event = events[i];
+                guest[i].revents = event->closed ? 32 :
+                    (event->value ? guest[i].events & (1 | 64) : 0) |
+                    (event->value < UINT64_MAX - 1 ? guest[i].events & 4 : 0);
+                pthread_mutex_unlock(&g_net_lock);
+            } else if (refs[i].fd >= 0) guest[i].revents = net_live(&refs[i]) ? net_poll_revents(host[2*i].revents) : 32;
             if (guest[i].revents) result++;
         }
         if (result || (timeout_ms >= 0 && net_ms() - start >= (uint64_t)timeout_ms)) break;
     }
+    if (result >= 0) for (uint64_t i = 0; i < count; i++) {
+        if (net_guest_copyout((char *)fds + i * sizeof *guest + offsetof(dm_net_pollfd, revents), &guest[i].revents, sizeof guest[i].revents)) { result = -1; stage = DM_POLL_BUFFER; break; }
+    }
 done:
-    for (uint64_t i = 0; i < count; i++) if (refs[i].fd >= 0) close(refs[i].fd);
-    free(host); free(refs); return net_poll_return(stage, count, timeout_ms, result, eventmask);
+    for (uint64_t i = 0; i < count; i++) {
+        if (refs[i].fd >= 0) close(refs[i].fd);
+        if (events[i]) { pthread_mutex_lock(&g_net_lock); net_event_release_locked(events[i]); pthread_mutex_unlock(&g_net_lock); }
+    }
+    free(host); free(refs); free(events); free(guest);
+    return net_poll_return(stage, count, timeout_ms, result, eventmask);
 }
 int dm_net_select(int nfds, void *read, void *write, void *except, const int64_t *timeout) {
-    if (!net_gate()) return -1;
     if (nfds < 0 || nfds > NET_MAX) return net_error(22);
     int ms = -1;
     if (timeout) {
-        int64_t sec = timeout[0], us = timeout[1];
+        int64_t input[2]; if (net_guest_copyin(input, timeout, sizeof input)) return -1;
+        int64_t sec = input[0], us = input[1];
         if (sec < 0 || us < 0 || us >= 1000000 || sec > INT_MAX / 1000) return net_error(22);
         int64_t total = sec * 1000 + (us + 999) / 1000; if (total > INT_MAX) return net_error(22); ms = (int)total;
     }
+    uint64_t sets[3][NET_MAX / 64] = {{0}};
+    void *outputs[] = {read, write, except};
+    for (int k = 0; k < 3; k++) if (outputs[k] && net_guest_copyin(sets[k], outputs[k], sizeof sets[k])) return -1;
     dm_net_pollfd *fds = calloc(nfds ? (size_t)nfds : 1, sizeof *fds);
     if (!fds) return net_error(12);
-    uint64_t *sets[] = {read, write, except};
     int count = 0;
     for (int i = 0; i < nfds; i++) {
         uint16_t ev = 0;
-        for (int k = 0; k < 3; k++) if (sets[k] && ((sets[k][i >> 6] >> (i & 63)) & 1)) ev |= (uint16_t[]){1, 4, 2}[k];
+        for (int k = 0; k < 3; k++) if ((sets[k][i >> 6] >> (i & 63)) & 1) ev |= (uint16_t[]){1, 4, 2}[k];
         if (ev) fds[count++] = (dm_net_pollfd){i, (int16_t)ev, 0};
     }
     int result = dm_net_poll(fds, (uint64_t)count, ms);
     if (result >= 0) for (int i = 0; i < count; i++) if (fds[i].revents & 32) { result = net_error(9); break; }
     if (result >= 0) {
-        for (int k = 0; k < 3; k++) if (sets[k]) memset(sets[k], 0, NET_MAX / 8);
-        result = 0;
-        for (int i = 0; i < count; i++) for (int k = 0; k < 3; k++) if (sets[k] && (fds[i].events & (int[]){1, 4, 2}[k]) && (fds[i].revents & (int[]){1 | 8 | 16, 4 | 8 | 16, 2}[k])) { sets[k][fds[i].fd >> 6] |= 1ull << (fds[i].fd & 63); result++; }
+        memset(sets, 0, sizeof sets); result = 0;
+        for (int i = 0; i < count; i++) for (int k = 0; k < 3; k++) if (outputs[k] && (fds[i].events & (int[]){1, 4, 2}[k]) && (fds[i].revents & (int[]){1 | 8 | 16, 4 | 8 | 16, 2}[k])) { sets[k][fds[i].fd >> 6] |= 1ull << (fds[i].fd & 63); result++; }
+        for (int k = 0; k < 3; k++) if (outputs[k] && net_guest_copyout(outputs[k], sets[k], sizeof sets[k])) { result = -1; break; }
     }
     free(fds); return result;
 }
@@ -596,12 +657,14 @@ static int net_resolver_name(const char *host, int flags, char expanded[DM_NSD_F
     }
     return 0;
 }
-static int net_getaddrinfo(const char *host, const char *service, const void *hints, void **result, int legacy) {
+typedef struct { int family; unsigned flags; } net_gai_metadata;
+static int net_getaddrinfo_impl(const char *host, const char *service, const void *hints, void **result, int legacy, net_gai_metadata *metadata) {
     if (!result) { net_error(14); return 11; }
     *result = NULL;
     if (!net_gate()) return 4;
     struct addrinfo h = {.ai_family = AF_INET}, *native = NULL;
     dm_net_addrinfo input = {0}; if (hints) memcpy(&input, hints, sizeof input);
+    *metadata = (net_gai_metadata){input.family, (unsigned)input.flags};
     if (input.family != 0 && input.family != 2) return 5;
     if (input.type && input.type != 1 && input.type != 2) return 10;
     if (input.protocol && input.protocol != 6 && input.protocol != 17) return 13;
@@ -641,6 +704,16 @@ static int net_getaddrinfo(const char *host, const char *service, const void *hi
     if (!first) { net_ai_destroy(allocation); return 7; }
     allocation->root = first; pthread_mutex_lock(&g_net_lock); allocation->next = g_ai; g_ai = allocation; pthread_mutex_unlock(&g_net_lock);
     *result = first; return 0;
+}
+static int net_getaddrinfo(const char *host, const char *service, const void *hints, void **result, int legacy) {
+    net_gai_metadata metadata = {.family = -1};
+    int code = net_getaddrinfo_impl(host, service, hints, result, legacy, &metadata), saved = errno;
+    const char *flag = getenv("DM_NET_TRACE");
+    // Observe only already-copied numeric hints. Early failures never dereference
+    // the hints again, and DNS names, addresses and credentials are not logged.
+    if (code && flag && atoi(flag))
+        fprintf(stderr, "net: getaddrinfo result=%d family=%d layout=%d flags=%u\n", code, metadata.family, legacy, metadata.flags);
+    errno = saved; return code;
 }
 int dm_net_getaddrinfo(const char *host, const char *service, const void *hints, void **result) { return net_getaddrinfo(host, service, hints, result, 0); }
 int dm_net_getaddrinfo_legacy(const char *host, const char *service, const void *hints, void **result) { return net_getaddrinfo(host, service, hints, result, 1); }

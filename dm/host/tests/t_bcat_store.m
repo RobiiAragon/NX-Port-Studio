@@ -9,9 +9,14 @@ static NSData *envelope(NSData *payload,EVP_PKEY *key){
     return jsonData(@{@"key_id":@"catalog-key-1",@"payload":[payload base64EncodedStringWithOptions:0],@"signature":[[NSData dataWithBytes:signature length:length] base64EncodedStringWithOptions:0]});
 }
 int main(int argc,const char **argv){@autoreleasepool{
-    if(argc==3){NSData *zip=boundedRead([NSString stringWithUTF8String:argv[1]],zipLimit+1);BOOL expected=atoi(argv[2])!=0;NSDictionary *files=unzip(zip,NULL);if((files!=nil)!=expected)return 1;return 0;}
+    if(argc==3||argc==4){NSData *zip=boundedRead([NSString stringWithUTF8String:argv[1]],zipLimit+1);BOOL expected=atoi(argv[2])!=0;NSString *title=argc==4?@(argv[3]):@"0100f8f0000a2000";NSDictionary *files=unzip(zip,title,NULL);if((files!=nil)!=expected)return 1;return 0;}
     CHECK(dm_bcat_supported("0100F8F0000A2000"));CHECK(!dm_bcat_supported("0100152000022000"));
     CHECK(!dm_bcat_supported("\xff"));
+    CHECK(dm_bcat_supported("0100C2500FC20000"));
+    CHECK(recipeVersion(@"0100c2500fc20000",@"11.3.0"));CHECK(!recipeVersion(@"0100c2500fc20000",@"5.5.2"));
+    CHECK(!recipeVersion(@"0100f8f0000a2000",@"11.3.0"));CHECK(!recipeVersion(@"0100152000022000",@"5.5.2"));
+    CHECK(!staticResources(@"0100c2500fc20000")&&staticResources(@"0100f8f0000a2000"));
+    CHECK(requiredSchedule(@"0100c2500fc20000").count==24);
     CHECK(validETag(@"\"fixture\""));CHECK(!validETag(@[]));CHECK(!validETag(NSNull.null));CHECK(!validETag(@"bad\nheader"));CHECK(!validETag(@""));
     CHECK(safePath(@"vsdata/VSSetting_0.byaml"));CHECK(!safePath(@"../data"));CHECK(!safePath(@"/absolute"));CHECK(!safePath(@"a//b"));CHECK(!safePath(@"a/../b"));CHECK(!safePath(@"a\\b"));CHECK(!safePath(@"c:/b"));
     CHECK(!json([@"{\"a\":1,\"a\":2}" dataUsingEncoding:NSUTF8StringEncoding]));
@@ -56,11 +61,23 @@ int main(int argc,const char **argv){@autoreleasepool{
     DmBcatRefresh *first=[DmBcatRefresh new];first.status=2;first.result=1;activeRefresh=first;
     void *observer=dm_bcat_sync_observe();CHECK(observer);unsigned outcome=123;uint64_t downloaded=123;
     CHECK(dm_bcat_sync_observer_status(observer,&outcome,&downloaded)==2);
-    activeRefresh=[DmBcatRefresh new];activeRefresh.status=9;activeRefresh.result=0;activeRefresh.bytes=99;
+    void *scoped=dm_bcat_sync_observe_directory("vsdata"),*absent=dm_bcat_sync_observe_directory("missing");CHECK(scoped&&absent);
+    CHECK(dm_bcat_sync_observer_status(scoped,&outcome,&downloaded)==2&&downloaded==0);
+    CHECK(!dm_bcat_sync_observe_directory("../vsdata")&&!dm_bcat_sync_observe_directory("")&&!dm_bcat_sync_observe_directory(NULL));
+    activeRefresh=[DmBcatRefresh new];activeRefresh.status=9;activeRefresh.result=0;activeRefresh.bytes=99;activeRefresh.directoryBytes=@{@"vsdata":@77};
     CHECK(dm_bcat_sync_observer_status(observer,&outcome,&downloaded)==2&&downloaded==0);
+    void *newer=dm_bcat_sync_observe_directory("vsdata");CHECK(newer);
+    CHECK(dm_bcat_sync_observer_status(newer,&outcome,&downloaded)==9&&outcome==0&&downloaded==77);
+    CHECK(!dm_bcat_sync_observe_directory("missing"));
     first.status=9;first.result=1;
     CHECK(dm_bcat_sync_observer_status(observer,&outcome,&downloaded)==9&&outcome==1);
-    dm_bcat_sync_release(observer);activeVersion=nil;activeRefresh=nil;startOnline=NO;
+    CHECK(dm_bcat_sync_observer_status(scoped,&outcome,&downloaded)==9&&outcome==1&&downloaded==0);
+    first.result=0;first.bytes=64;first.directoryBytes=@{@"vsdata":@32,@"coopdata":@32};
+    CHECK(dm_bcat_sync_observer_status(scoped,&outcome,&downloaded)==9&&outcome==0&&downloaded==32);
+    CHECK(dm_bcat_sync_observer_status(absent,&outcome,&downloaded)==9&&outcome==1&&downloaded==0);
+    CHECK(dm_bcat_sync_observer_status(newer,&outcome,&downloaded)==9&&outcome==0&&downloaded==77);
+    CHECK(dm_bcat_sync_observer_status(NULL,&outcome,&downloaded)==0&&outcome==1&&downloaded==0);
+    dm_bcat_sync_release(observer);dm_bcat_sync_release(scoped);dm_bcat_sync_release(absent);dm_bcat_sync_release(newer);activeVersion=nil;activeRefresh=nil;startOnline=NO;
     setenv("DM_OODLE_SERVE","1",1);dm_bcat_start("/absent", "0100f8f0000a2000", 1);CHECK(!startupAccepted&&!activeRefresh);unsetenv("DM_OODLE_SERVE");
     setenv("DM_OODLE_JOB","fixture-job",1);dm_bcat_start("/absent", "0100f8f0000a2000", 1);CHECK(!startupAccepted&&!activeRefresh);unsetenv("DM_OODLE_JOB");
     dm_bcat_start("/absent", "0100f8f0000a2000", 0);CHECK(!dm_bcat_overlay());CHECK(!dm_bcat_delivery());CHECK(!dm_bcat_request_sync());

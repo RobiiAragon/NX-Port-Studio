@@ -27,9 +27,11 @@ static void create(void *object,int kind){
     if(!object)return;pthread_mutex_lock(&bcatLock);
     for(int i=0;i<BCAT_OBJECTS;i++)if(objects[i].object==object){release(&objects[i]);break;}
     for(int i=0;i<BCAT_OBJECTS;i++)if(!objects[i].object){objects[i]=(BcatObject){.object=object,.kind=kind,.fd=-1,.result=kind==BCAT_PROGRESS?RES_OK:RES_FAIL};break;}
-    // The SDK 3 public constructors initialize this 8-byte implementation slot.
-    // Our storage stays host-owned and no SDK mutex/private allocation is used.
-    *(uint64_t *)object=0;pthread_mutex_unlock(&bcatLock);
+    // File/directory constructors initialize this 8-byte implementation slot.
+    // Progress also stays entirely host-owned: SDK 20 embeds mutex/event/state
+    // beyond it. All progress methods imported by S3, including scoped Sync,
+    // resolve to our hooks; no original Attach touches that private layout.
+    memset(object,0,sizeof(uint64_t));pthread_mutex_unlock(&bcatLock);
 }
 static void destroy(void *object,int kind){pthread_mutex_lock(&bcatLock);release(find(object,kind));pthread_mutex_unlock(&bcatLock);}
 static int component(const char *s){if(!s)return 0;size_t n=strnlen(s,32);if(!n||n==32||!strcmp(s,".")||!strcmp(s,".."))return 0;for(size_t i=0;i<n;i++)if((unsigned char)s[i]<32||(unsigned char)s[i]>126||s[i]=='/'||s[i]=='\\'||s[i]==':')return 0;return 1;}
@@ -94,6 +96,13 @@ HLE_FORCE("_ZN2nn4bcat24RequestSyncDeliveryCacheEPNS0_21DeliveryCacheProgressE",
     pthread_mutex_lock(&bcatLock);BcatObject *o=find(object,BCAT_PROGRESS);void *observer=o?dm_bcat_sync_observe():NULL;
     // SDK 3 attaches a successful request by releasing the previous service and
     // replacing its state. A failed request leaves that observer untouched.
+    if(observer){if(o->observer)dm_bcat_sync_release(o->observer);o->observer=observer;progress_update(o);}
+    pthread_mutex_unlock(&bcatLock);return observer?RES_OK:RES_FAIL;
+}
+HLE_FORCE("_ZN2nn4bcat24RequestSyncDeliveryCacheEPNS0_21DeliveryCacheProgressEPKc","observe the requested directory in a real verified delivery refresh",Result,h_bcat_SyncDirectory,void *object,const char *directory){
+    if(!dm_bcat_directory_name_valid(directory))return 0x27au; // BCAT InvalidArgument, as in the SDK's directory overload
+    pthread_mutex_lock(&bcatLock);BcatObject *o=find(object,BCAT_PROGRESS);void *observer=o?dm_bcat_sync_observe_directory(directory):NULL;
+    // A rejected request leaves the previous observer and its progress intact.
     if(observer){if(o->observer)dm_bcat_sync_release(o->observer);o->observer=observer;progress_update(o);}
     pthread_mutex_unlock(&bcatLock);return observer?RES_OK:RES_FAIL;
 }

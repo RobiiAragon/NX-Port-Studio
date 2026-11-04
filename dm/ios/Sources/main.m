@@ -16,6 +16,7 @@
 #include "romfs_image.h"
 #include "romfs_identity.h"
 #include "player_env.h"
+#include "LauncherNextendoProfiles.h"
 #ifndef DM_PLAYER_BUILD
 #define DM_PLAYER_BUILD 0
 #endif
@@ -194,8 +195,7 @@ static int boot_env(void) {
     if ([fm fileExistsAtPath:miiSeed]) setenv("DM_MII_SEED", miiSeed.fileSystemRepresentation, 0);
     setenv("DM_TEMP", [doc stringByAppendingPathComponent:@"temp"].fileSystemRepresentation, 0);
     NSString *dm = [res stringByAppendingPathComponent:@"dm"];
-    NSString *nextendoRoutes = [dm stringByAppendingPathComponent:@"nextendo/routes.tsv"];
-    if ([fm fileExistsAtPath:nextendoRoutes]) setenv("DM_NEXTENDO_ROUTES", nextendoRoutes.fileSystemRepresentation, 0);
+    dm_launcher_configure_nextendo_routes(dm.fileSystemRepresentation);
     setenv("DM_NVN_SHMAP", [dm stringByAppendingPathComponent:@"shader_map.tsv"].fileSystemRepresentation, 0);
     setenv("DM_MSL_DIR", [res stringByAppendingPathComponent:@"msl"].fileSystemRepresentation, 0);
     setenv("DM_FONT_DIR", [dm stringByAppendingPathComponent:@"font"].fileSystemRepresentation, 0);   // Shared-font stand-ins (standard.ttf / nintendo_ext.ttf): iOS lacks the macOS font path
