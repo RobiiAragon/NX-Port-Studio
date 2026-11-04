@@ -331,4 +331,29 @@ final class NextendoGameSignInTests: XCTestCase {
             model.nextendoRenewalTask?.cancel()
         }
     }
+    func testRetainedGrantResumesItsTimerAfterFailedOrCancelledRelinkAndStopsOnSignOut() async throws {
+        for cancelled in [false,true] {
+            let now = Date()
+            let grant = NextendoRenewalGrant(clientID:"nxnative-own-test-client",accessToken:"synthetic-old-access",refreshToken:"synthetic-old-refresh",expiresAt:now.addingTimeInterval(3000),scopes:["identity","friends","game.matchmaking"])
+            let old = previous(now:now).withRenewal(grant), store = GameSignInStore(old)
+            var responses = try replies(now:now)
+            if !cancelled { responses[0] = .init(data:Data(),statusCode:401) }
+            let http = GameSignInHTTP(responses,holdAt:cancelled ? 0 : nil), model = model(store:store,http:http,now:now)
+            await model.reloadNextendoAccount()
+            XCTAssertNotNil(model.nextendoRenewalTask)
+            model.beginNextendoSignIn()
+            XCTAssertNil(model.nextendoRenewalTask)
+            if cancelled {
+                try await waitUntilHeld(http)
+                model.cancelNextendoSignIn()
+                await http.release(); await model.nextendoCancellationTask?.value
+            } else { await model.nextendoAuthorizationTask?.value }
+            XCTAssertEqual(try store.load(),old)
+            XCTAssertNotNil(model.nextendoRenewalTask,"Retaining the old grant must also retain its background preparation")
+            await model.signOutNextendo()
+            XCTAssertNil(model.nextendoRenewalTask)
+            XCTAssertNil(model.nextendoAccount)
+            XCTAssertNil(try store.load())
+        }
+    }
 }
