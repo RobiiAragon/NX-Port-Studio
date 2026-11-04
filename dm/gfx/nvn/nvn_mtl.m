@@ -79,6 +79,7 @@ static uint64_t c2_handle(int stage, unsigned b);   // the handle c2 holds at by
 // Optional, submit-thread-owned facts about already-resolved resources. This is
 // independent of PASSDUMP: no buffers, addresses or texture content are read.
 static nvn_resource_trace g_resource_trace;
+static unsigned g_resource_trace_type_mask = NVN_RESOURCE_TRACE_ALL_TYPES;
 static int g_resource_trace_initialized;
 static int resource_trace_on(void) {
     // Mac bundle env.txt is applied after dylib constructors: mtl_init can be
@@ -86,6 +87,10 @@ static int resource_trace_on(void) {
     if (!g_resource_trace_initialized) {
         g_resource_trace_initialized = 1;
         if (!nvn_resource_trace_config(&g_resource_trace, getenv("DM_NVN_RESOURCE_TRACE_KEYS"))) MLOG("resource metadata trace disabled: invalid key list (up to 16 comma-separated 16-hex keys)");
+        if (!nvn_resource_trace_types(getenv("DM_NVN_RESOURCE_TRACE_TYPES"), &g_resource_trace_type_mask)) {
+            g_resource_trace.nkeys = 0;
+            MLOG("resource metadata trace disabled: invalid type list (up to 10 comma-separated single-digit Metal types 0..9)");
+        }
     }
     return nvn_resource_trace_live(&g_resource_trace);
 }
@@ -2875,6 +2880,7 @@ static void resource_attachment_snapshot(MTL4RenderPassDescriptor *pd) {
         __unsafe_unretained MTLRenderPassAttachmentDescriptor *a = i < 8 ? pd.colorAttachments[i] : i == 8 ? pd.depthAttachment : pd.stencilAttachment;
         __unsafe_unretained id<MTLTexture> t = a.texture; if (!t) continue;
         nvn_resource_fact f = resource_texture_fact(t);
+        if (!nvn_resource_trace_type_watches(g_resource_trace_type_mask, f.type)) continue;
         f.serial = i < 8 ? (R.rt.color[i] ? R.rt.color[i]->serial : 0) : (R.rt.depth ? R.rt.depth->serial : 0);
         f.role = i < 8 ? NVN_TRACE_COLOR : i == 8 ? NVN_TRACE_DEPTH : NVN_TRACE_STENCIL;
         f.slot = i < 8 ? i : 0; f.level = (uint32_t)a.level; f.slice = (uint32_t)a.slice; f.plane = (uint32_t)a.depthPlane;
@@ -7320,9 +7326,10 @@ static int encode_args_(id<MTLCommandEncoder> en, NvShader *sh, int nvn_stage, i
             if (!t) { t = dummy_tex(b->dtt, b->dpf); trid = g_dummy_tex_rid[b->dtt % DMY_NT][b->dpf & 3]; }
             else if (b->dtt == (uint8_t)MTLTextureTypeTextureBuffer) t = tbuf_shadow(t, &trid);   // see tbuf_shadow
             uint64_t resource_key;
-            if (b->kind == NVN_RB_TEX && resource_trace_on() && nvn_resource_trace_watches(&g_resource_trace, sh->key, &resource_key)) {
+            if (b->kind == NVN_RB_TEX && resource_trace_on() && nvn_resource_trace_type_watches(g_resource_trace_type_mask, b->dtt) && nvn_resource_trace_watches(&g_resource_trace, sh->key, &resource_key)) {
                 // Metadata of a declared ordinary binding, already resolved under
                 // this registry lock. A shader branch need not actually read it.
+                // Filter by declared type; keep reporting the actual resolved type.
                 // TEXU and bindless arrays remain untraced.
                 nvn_resource_fact f = resource_texture_fact(t);
                 f.key = resource_key; f.stage = nvn_stage; f.role = NVN_TRACE_TEXTURE; f.slot = reg;

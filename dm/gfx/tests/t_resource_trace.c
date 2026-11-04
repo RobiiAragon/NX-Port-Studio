@@ -6,6 +6,16 @@ static unsigned checks, failed;
 #define CHECK(c) do { checks++; if (!(c)) { failed++; fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); } } while (0)
 int main(void) {
     nvn_resource_trace t; uint64_t key = 0;
+    unsigned types = 0;
+    CHECK(nvn_resource_trace_types(NULL,&types)); CHECK(types==0x3ff);
+    CHECK(nvn_resource_trace_types("",&types)); CHECK(types==0x3ff);
+    CHECK(nvn_resource_trace_types("7",&types)); CHECK(types==(1u<<7));
+    CHECK(nvn_resource_trace_type_watches(types,7)); CHECK(!nvn_resource_trace_type_watches(types,2));
+    CHECK(!nvn_resource_trace_type_watches(types,10)); CHECK(!nvn_resource_trace_type_watches(types,UINT32_MAX));
+    CHECK(nvn_resource_trace_types("0,1,2,3,4,5,6,7,8,9",&types)); CHECK(types==0x3ff);
+    CHECK(nvn_resource_trace_types("7,2,7",&types)); CHECK(types==((1u<<7)|(1u<<2)));
+    const char *bad_types[]={"-1","10","07","7,","7,,2",",7"," 7","7, 2","7,2suffix","7,7,7,7,7,7,7,7,7,7,7"};
+    for (unsigned i=0;i<sizeof bad_types/sizeof *bad_types;i++) { CHECK(!nvn_resource_trace_types(bad_types[i],&types)); CHECK(types==0); }
     CHECK(nvn_resource_trace_config(&t, NULL)); CHECK(!nvn_resource_trace_live(&t));
     CHECK(nvn_resource_trace_config(&t, "")); CHECK(!nvn_resource_trace_live(&t));
     const char *bad[] = {"0123456789abcde", "0123456789abcdeg", "0123456789abcdef_b", "0123456789abcdef,", ",0123456789abcdef", "0123456789abcdef, 0123456789abcdef", "0123456789abcdef,../../file"};

@@ -18,7 +18,7 @@ uint64_t now_ns(void) { return bp_now(); }
 static int checks,failed;
 #define CHECK(c,s) do { checks++; if (!(c)) { failed++; fprintf(stderr,"FAIL: %s\n",s); } } while (0)
 static prog_t programs[2];
-static int own_texu;
+static int own_texu, own_pingpong;
 static id<MTLLibrary> shaders;
 
 static void programs_init(void) {
@@ -70,25 +70,30 @@ static void check_volume(const tex_t *texture,int phase,int output) {
     }
 }
 static void run(void) {
-    enum { SIZE=262144, TEX=65536, UBO=131072, INDEX=147456, OUTPUT=196608, HANDLE=163840 };
+    enum { SIZE=262144, TEX=65536, TEX2=98304, UBO=131072, INDEX=147456, OUTPUT=196608, OUTPUT2=229376, HANDLE=163840 };
     uint8_t *mem=mmap(NULL,SIZE,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0); if (mem==MAP_FAILED) abort();
     pool_t pool={0}; pool_builder_t pb={.mem=mem,.size=SIZE,.flags=NVN_MEMORY_POOL_FLAGS_CPU_CACHED|NVN_MEMORY_POOL_FLAGS_GPU_CACHED};
     CHECK(h_nvnMemoryPoolInitialize((NVNmemoryPool *)&pool,(const NVNmemoryPoolBuilder *)&pb),"own pool initializes");
     uint16_t indices[]={0,1,2}; memcpy(mem+INDEX,indices,sizeof indices);
     uint64_t own_handle=701; memcpy(mem+HANDLE,&own_handle,sizeof own_handle);
-    NVNtexture texture={0}; NVNtextureBuilder builder;
+    NVNtexture texture[2]={{0}}, output[2]={{0}}; NVNtextureBuilder builder;
     h_nvnTextureBuilderSetDefaults(&builder); h_nvnTextureBuilderSetTarget(&builder,NVN_TEXTURE_TARGET_3D);
     h_nvnTextureBuilderSetSize3D(&builder,8,8,8); h_nvnTextureBuilderSetFormat(&builder,NVN_FORMAT_R11G11B10F);
     h_nvnTextureBuilderSetStorage(&builder,(NVNmemoryPool *)&pool,TEX);
-    CHECK(h_nvnTextureInitialize(&texture,&builder),"exact 8x8x8 single-level flag-free 3D LUT initializes");
-    NVNtexture output={0}; h_nvnTextureBuilderSetDefaults(&builder);
+    CHECK(h_nvnTextureInitialize(&texture[0],&builder),"exact 8x8x8 single-level flag-free 3D LUT initializes");
+    if (own_pingpong) { h_nvnTextureBuilderSetStorage(&builder,(NVNmemoryPool *)&pool,TEX2); CHECK(h_nvnTextureInitialize(&texture[1],&builder),"late own replacement 3D LUT initializes"); }
+    h_nvnTextureBuilderSetDefaults(&builder);
     h_nvnTextureBuilderSetSize2D(&builder,8,64); h_nvnTextureBuilderSetFormat(&builder,NVN_FORMAT_RGBA32F);
     h_nvnTextureBuilderSetStorage(&builder,(NVNmemoryPool *)&pool,OUTPUT);
-    CHECK(h_nvnTextureInitialize(&output,&builder),"own consumer output initializes");
+    CHECK(h_nvnTextureInitialize(&output[0],&builder),"own consumer output initializes");
+    if (own_pingpong) { h_nvnTextureBuilderSetStorage(&builder,(NVNmemoryPool *)&pool,OUTPUT2); CHECK(h_nvnTextureInitialize(&output[1],&builder),"own second ping-pong output initializes"); }
     view_t sampled_view={.set_levels=1,.base_level=0,.nlevels=1};
-    mtl_reg_tex(701,(const tex_t *)&texture,&sampled_view);
-    for (int phase=0;phase<2;phase++) {
-        mtl_set_frame((uint64_t)phase+1);
+    const int frames=own_pingpong?40:2;
+    for (int frame=0;frame<frames;frame++) {
+        const int phase=frame&1, late=own_pingpong && frame==frames-1;
+        const NVNtexture *lut=&texture[late], *out_target=&output[own_pingpong?(frame&1):0];
+        if (!frame || late) mtl_reg_tex(701,(const tex_t *)lut,&sampled_view);
+        mtl_set_frame((uint64_t)frame+1);
         NVNcommandBuffer cmd; CHECK(h_nvnCommandBufferInitialize(&cmd,NULL),"own command buffer initializes");
         h_nvnCommandBufferAddCommandMemory(&cmd,(const NVNmemoryPool *)&pool,0,65536); h_nvnCommandBufferBeginRecording(&cmd);
         h_nvnCommandBufferSetViewport(&cmd,0,0,8,8); h_nvnCommandBufferSetScissor(&cmd,0,0,8,8);
@@ -98,7 +103,7 @@ static void run(void) {
         for (int i=0;i<8;i++) {
             h_nvnTextureViewSetDefaults(&view[i]); h_nvnTextureViewSetLevels(&view[i],0,1);
             h_nvnTextureViewSetLayers(&view[i],i,1); h_nvnTextureViewSetTarget(&view[i],NVN_TEXTURE_TARGET_2D);
-            targets[i]=&texture; views[i]=&view[i];
+            targets[i]=lut; views[i]=&view[i];
         }
         h_nvnCommandBufferSetRenderTargets(&cmd,8,targets,views,NULL,NULL);
         float value[]={.125f,phase?.5f:.25f,phase?.25f:.5f,1};
@@ -106,7 +111,6 @@ static void run(void) {
         h_nvnCommandBufferDrawElements(&cmd,NVN_DRAW_PRIMITIVE_TRIANGLES,NVN_INDEX_TYPE_UNSIGNED_SHORT,3,(uint64_t)(mem+INDEX));
         // Mutating the caller's data and views must not change the recorded commands.
         memset(value,0,sizeof value); for (int i=0;i<8;i++) h_nvnTextureViewSetLayers(&view[i],0,1);
-        const NVNtexture *out_target=&output;
         h_nvnCommandBufferSetRenderTargets(&cmd,1,&out_target,NULL,NULL,NULL);
         h_nvnCommandBufferSetViewport(&cmd,0,0,8,64); h_nvnCommandBufferSetScissor(&cmd,0,0,8,64);
         h_nvnCommandBufferBindProgram(&cmd,(const NVNprogram *)&programs[1],3);
@@ -117,23 +121,26 @@ static void run(void) {
         state_reset(); memset(&R,0,sizeof R); mtl_sub_begin(); mtl_exec((const uint8_t *)handle);
         CHECK(mtl_wait(mtl_sub_commit(),5000000000ull),"production draw submission completes");
         CHECK(!mtl_last_commit_error(),"production draw has no GPU error");
-        check_volume((const tex_t *)&texture,phase,0);
-        check_volume((const tex_t *)&output,phase,1); h_nvnCommandBufferFinalize(&cmd);
+        check_volume((const tex_t *)lut,phase,0);
+        check_volume((const tex_t *)out_target,phase,1); h_nvnCommandBufferFinalize(&cmd);
     }
-    mtl_reg_tex(701,NULL,NULL); h_nvnTextureFinalize(&output);
-    h_nvnTextureFinalize(&texture); h_nvnMemoryPoolFinalize((NVNmemoryPool *)&pool); mtl_drain(); munmap(mem,SIZE);
+    mtl_reg_tex(701,NULL,NULL); h_nvnTextureFinalize(&output[0]); h_nvnTextureFinalize(&texture[0]);
+    if (own_pingpong) { h_nvnTextureFinalize(&output[1]); h_nvnTextureFinalize(&texture[1]); } h_nvnMemoryPoolFinalize((NVNmemoryPool *)&pool); mtl_drain(); munmap(mem,SIZE);
 }
 int main(int argc,const char **argv) { @autoreleasepool {
     own_texu=argc==2 && !strcmp(argv[1],"texu");
+    own_pingpong=argc==2 && !strcmp(argv[1],"pingpong");
     const char *env=getenv("DM_NVN_RESOURCE_TRACE_KEYS"); char *late=env?strdup(env):NULL;
-    unsetenv("DM_NVN_RESOURCE_TRACE_KEYS"); mtl_init();
+    const char *type_env=getenv("DM_NVN_RESOURCE_TRACE_TYPES"); char *late_types=type_env?strdup(type_env):NULL;
+    unsetenv("DM_NVN_RESOURCE_TRACE_KEYS"); unsetenv("DM_NVN_RESOURCE_TRACE_TYPES"); mtl_init();
     CHECK(!g_resource_trace_initialized,"initialization before bundle environment does not lock trace off");
     if (late) { setenv("DM_NVN_RESOURCE_TRACE_KEYS",late,1); free(late); }
+    if (late_types) { setenv("DM_NVN_RESOURCE_TRACE_TYPES",late_types,1); free(late_types); }
     programs_init(); if (!shaders) return 1;
     run();
-    nvn_resource_trace frozen=g_resource_trace;
-    setenv("DM_NVN_RESOURCE_TRACE_KEYS","1111111111111111",1); (void)resource_trace_on();
-    int unchanged=frozen.nkeys==g_resource_trace.nkeys && frozen.nlast==g_resource_trace.nlast && frozen.emitted==g_resource_trace.emitted;
+    nvn_resource_trace frozen=g_resource_trace; unsigned frozen_types=g_resource_trace_type_mask;
+    setenv("DM_NVN_RESOURCE_TRACE_KEYS","1111111111111111",1); setenv("DM_NVN_RESOURCE_TRACE_TYPES","2",1); (void)resource_trace_on();
+    int unchanged=frozen_types==g_resource_trace_type_mask && frozen.nkeys==g_resource_trace.nkeys && frozen.nlast==g_resource_trace.nlast && frozen.emitted==g_resource_trace.emitted;
     for (unsigned i=0;unchanged && i<frozen.nkeys;i++) unchanged=frozen.keys[i]==g_resource_trace.keys[i];
     for (unsigned i=0;unchanged && i<frozen.nlast;i++) unchanged=nvn_resource_fact_same(&frozen.last[i],&g_resource_trace.last[i]);
     CHECK(unchanged,"later environment changes cannot reconfigure or rearm the process budget");
