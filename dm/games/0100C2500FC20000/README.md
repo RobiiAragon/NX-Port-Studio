@@ -54,4 +54,6 @@ While investigating unavailable credentials, I reproduced and corrected [game si
 
 I also added [read-versus-decoder rejection metadata](../../../docs/reference/services.md#account-credential-acquisition-fails-without-identifying-read-or-decode-rejection), tested with fake Security and synthetic providers. I have not captured the game's resulting reason or qualified an online session with it.
 
+A later coordinated trace reported an expired credential before any recorded guest socket. I corrected [retention and renewal of the provider's OAuth grant](../../../docs/reference/services.md#a-linked-nextendo-account-expires-and-forces-browser-sign-in-again) in the shared account service, with synthetic production-coordinator and two-process checks. The actual service must still accept the application's consent/refresh, and updated ports must be rebuilt; I do not treat this as a completed Splatoon 3 online session or a graphics fix.
+
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition or tested its correction in the game; this result does not qualify the lobby return or establish its cause.

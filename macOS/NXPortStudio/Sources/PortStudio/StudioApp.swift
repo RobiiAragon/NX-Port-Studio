@@ -11,10 +11,15 @@ struct StudioApp: App {
                 .environment(\.locale, localization.locale)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 900, minHeight: 660)
-                .task { await model.initialize() }
+                .task {
+                    async let account: Void = model.reloadNextendoAccount()
+                    await model.initialize()
+                    await account
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     model.runner.cancelImmediately()
                     model.miiRunner.cancelImmediately()
+                    model.nextendoRenewalTask?.cancel()
                 }
         }
         .defaultSize(width: 1160, height: 810)

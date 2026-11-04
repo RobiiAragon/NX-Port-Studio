@@ -92,7 +92,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         let catalogService = NextendoCatalogService(http: FixtureHTTP([.init(data: envelope, statusCode: 200), .init(data: Data(), statusCode: 503)]), cacheURL: nil, verifier: .init(publicKey: key.publicKey.rawRepresentation))
         let expiry = Int(now.addingTimeInterval(600).timeIntervalSince1970)
         let proof = "nx2." + Data("42.fixture.\(expiry)".utf8).nextendoBase64URL + "." + Data(repeating: 0, count: 32).nextendoBase64URL
-        let token = Data(#"{"access_token":"synthetic-oauth","token_type":"Bearer","scope":"identity","expires_in":600}"#.utf8)
+        let token = Data(#"{"access_token":"synthetic-oauth","refresh_token":"synthetic-refresh","token_type":"Bearer","scope":"identity friends game.matchmaking","expires_in":600}"#.utf8)
         let identity = Data(#"{"pid":42,"username":"fixture"}"#.utf8)
         let nex = try JSONSerialization.data(withJSONObject: ["nex_token":proof,"pid":42,"username":"fixture"])
         let store = FixtureStore(), callbacks = MobileNextendoCallbackPool(), browser = FixtureBrowser()
@@ -103,9 +103,10 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         try await eventually { !model.isAuthorizing }
         precondition(model.account?.tokenKind == .nex && model.hasGameCredential && !model.canRequestGameCredential,
                      "One sign-in must finish with the provider's game proof")
-        precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends"]))
+        precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends", "game.matchmaking"]))
         let storedNEX = try store.load()
         precondition(model.hasGameCredential && storedNEX?.tokenKind == .nex)
+        precondition(model.renewalTask != nil, "Successful game sign-in must schedule retained-grant preparation")
         await model.load()
         precondition(model.eligibility() == .versionNotAccepted(["4.0.1"]))
         model.updateRoutes(0)
@@ -132,6 +133,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         await model.signOut()
         let removed = try store.load()
         precondition(model.account == nil && removed == nil)
+        precondition(model.renewalTask == nil, "Sign-out must leave background preparation stopped")
 
         let cancelledStore = FixtureStore(), cancelledCallbacks = MobileNextendoCallbackPool(), pendingBrowser = FixtureBrowser()
         pendingBrowser.mode = .pending
@@ -161,8 +163,23 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         rejected.signIn()
         try await eventually { !rejected.isAuthorizing }
         let preservedNEX = try rejectedStore.load()
-        precondition(preservedNEX == storedNEX && rejected.account?.tokenKind == .nex && rejected.accountError == .httpStatus(401),
+        precondition(preservedNEX == storedNEX && rejected.account?.tokenKind == .nex && rejected.accountError == .accountHTTPStatus(.gameProof,401),
                      "An unsupported OAuth game-proof exchange must report failure and preserve the previous native credential")
+        precondition(rejected.renewalTask != nil, "A failed relink must rearm the retained grant after cleanup")
+        await rejected.signOut()
+
+        let retainedStore = FixtureStore(), retainedCallbacks = MobileNextendoCallbackPool(), retainedBrowser = FixtureBrowser()
+        try retainedStore.save(storedNEX!); retainedBrowser.mode = .pending
+        let retainedService = NextendoAccountService(store:retainedStore,http:FixtureHTTP([]),makeReceiver:{ try retainedCallbacks.make() })
+        let retained = MobileNextendoModel(bundle:bundle,preferences:preferences,accountService:retainedService,catalogService:catalogService,callbacks:retainedCallbacks,browser:retainedBrowser)
+        await retained.load(); precondition(retained.renewalTask != nil)
+        retained.signIn(); try await eventually { retainedBrowser.receiver != nil }
+        precondition(retained.renewalTask == nil)
+        retained.cancel(); await retainedBrowser.deliverLate()
+        try await eventually { retained.renewalTask != nil }
+        let retainedValue = try retainedStore.load()
+        precondition(retainedValue == storedNEX && !retained.isAuthorizing)
+        await retained.signOut(); precondition(retained.renewalTask == nil)
 
         let mismatchKeychain = FixtureStore(), mismatchLegacy = FixtureLegacy(legacyData)
         try mismatchKeychain.save(oauth)
