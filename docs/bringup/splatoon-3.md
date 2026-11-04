@@ -2,7 +2,7 @@
 
 My separate [LAN/local-wireless audit](splatoon-3-local-network.md) records the title's actual network modes, imported ABI, native protocol-selector correction and outstanding physical peer tests. Those checks do not establish a local or online match.
 
-My [November 4 Mac acceptance note](../../dm/games/0100C2500FC20000/README.md#mac-acceptance-on-november-4-2026) records the newer `9f3f6be1` result: I passed the title, entered the lobby and tour, created my player card and entered the Nextendo matchmaking queue. Severe graphics corruption remains, and I have not completed a match. The metadata receipt and current limits are recorded there; the diagnostic sequence below describes the earlier bring-up.
+My [November 4 Mac acceptance note](../../dm/games/0100C2500FC20000/README.md#mac-acceptance-on-november-4-2026) records the latest `8836235c` test with shader chain `8410a1435ffe`: lobby rendering improved substantially, with localized black stippling in bright floor reflections. My Territorial attempt reached the start-of-combat announcement and then a black loading screen; I have not completed a match. The metadata receipt and current limits are recorded there; the diagnostic sequence below describes the earlier bring-up.
 
 On November 2, 2026, I began a private macOS bring-up of my own Splatoon 3 **11.3.0** dump (`0100C2500FC20000`, main build `28c4287aee36f7499da60f3e68b54c70`, SDK **20.5.22**). This note records a backend finding; it does not register a complete game profile or establish a playable export.
 

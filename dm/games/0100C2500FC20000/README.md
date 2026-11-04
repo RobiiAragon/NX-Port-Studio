@@ -48,7 +48,9 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 I tested the rebuilt Mac application with relaxed shader math. The lobby scene improved substantially and rendered normally across most of the picture. My private capture showed 60 FPS, 4.28 ms GPU time and a 16.67 ms frame interval on an M5 Max. This is a single captured reading, not a benchmark or a long-session stability result. Localized black stippling and white/red highlights remained in some floor reflections; I have not attributed that residual defect to an image binding, sampler LOD or shader operation.
 
-The bounded metadata sample from the tone-map consumer contained six accepted facts with no rejected metadata line or crash marker. It identified real full-resolution and five-mip lower-resolution inputs, whose serials differed from the output attachment. This does not establish feedback in an earlier producer or show its sampler clamps. My online and LAN/LDN acceptance limits remain unchanged.
+The bounded metadata sample from the tone-map consumer contained six accepted facts with no rejected metadata line or crash marker. It identified real full-resolution and five-mip lower-resolution inputs, whose serials differed from the output attachment. This does not establish feedback in an earlier producer or show its sampler clamps.
+
+I also entered the Territorial matchmaking queue. After the game announced the start of combat, it remained on a black loading screen with saving/loading indicators; I did not reach a match or its results. During a 238-second metadata-only observation, some sockets continued exchanging bytes while two others repeatedly returned `EAGAIN` without successful sends or receives. That does not identify their protocol, establish a deadlock or prove a server fault. The ordinary log later stopped growing and the process was absent at the next process-list check, without a recorded crash marker; I have not established why it exited. LAN/LDN and iPhone acceptance remain pending.
 
 ### Earlier source 9f3f6be1
 
@@ -58,7 +60,7 @@ My bounded, metadata-only capture contained **7,384 ordinary log lines**, with n
 
 ## Found on this game
 
-- [Mac fast math removes exceptional values before precise operations](../../../docs/reference/shaders.md#mac-fast-math-removes-exceptional-values-before-precise-operations): I reproduced a general offline compiler defect with authored GPU controls, then corrected the shared Mac shader policy. The derived-arithmetic control changes from 330/800 failures to zero with relaxed mode. I have not established this as the cause of my game's remaining graphics corruption; the new shader chain and rebuilt port still need game validation.
+- [Mac fast math removes exceptional values before precise operations](../../../docs/reference/shaders.md#mac-fast-math-removes-exceptional-values-before-precise-operations): I reproduced a general offline compiler defect with authored GPU controls, then corrected the shared Mac shader policy. The derived-arithmetic control changes from 330/800 failures to zero with relaxed mode. My rebuilt `8836235c` port improved substantially in the lobby, but its residual reflection artifacts still need a separate cause and correction.
 
 - [A game credential is reused for account APIs](../../../docs/reference/services.md#a-game-credential-is-reused-for-account-apis): I separated the host social OAuth bearer from the NEX game proof in synthetic decoder/transport tests. The installed `9f3f6be1` test recorded a real friends API HTTP 200; other permissions and completed gameplay remain unqualified.
 
