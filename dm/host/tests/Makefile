@@ -237,6 +237,38 @@ ldn-endpoints: $(B)/t_ldn_endpoints
 	$(B)/t_ldn_endpoints "$(LDN_ENDPOINT_FIRST)" "$(LDN_ENDPOINT_SECOND)"
 ldn-endpoints-sanitize: $(B)/t_ldn_endpoints_asan
 	$(B)/t_ldn_endpoints_asan "$(LDN_ENDPOINT_FIRST)" "$(LDN_ENDPOINT_SECOND)"
+# The default target only exercises asset-free rejection cases. Real endpoint
+# pairs require explicit assigned interfaces; there is no automatic selection.
+LOCAL_SESSION_SOURCES = t_net_local_session.c $(filter-out t_ldn.c,$(LDN_SOURCES))
+LOCAL_SESSION_HEADERS = $(LDN_ENDPOINT_HEADERS) ../net_local_session.h ../net_local_session.inc
+$(B)/t_net_local_session: $(LOCAL_SESSION_SOURCES) $(LOCAL_SESSION_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_LDN_TEST -o $@ $(LOCAL_SESSION_SOURCES)
+$(B)/t_net_local_session_asan: $(LOCAL_SESSION_SOURCES) $(LOCAL_SESSION_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_LDN_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(LOCAL_SESSION_SOURCES)
+LOCAL_SESSION_LATE = t_local_session_late.c $(filter-out t_ldn.c,$(LDN_SOURCES))
+$(B)/t_local_session_late: $(LOCAL_SESSION_LATE) $(LOCAL_SESSION_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_LDN_TEST -o $@ $(LOCAL_SESSION_LATE)
+$(B)/t_local_session_late_asan: $(LOCAL_SESSION_LATE) $(LOCAL_SESSION_HEADERS) | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -DDM_LDN_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(LOCAL_SESSION_LATE)
+LOCAL_SESSION_ACCOUNT = t_local_session_account.m ../hle_account_trace.c ../hle_net_backend.c ../hle_nsd_backend.c t_net_write_stub.c
+$(B)/t_local_session_account: $(LOCAL_SESSION_ACCOUNT) $(LOCAL_SESSION_HEADERS) ../hle_nextendo_apple.m ../nextendo_account.h ../nextendo_credential_diagnostic.h ../nextendo_preflight_mac.h ../account_trace.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fobjc-arc -mmacosx-version-min=14.0 -o $@ $(filter-out ../hle_net_backend.c,$(LOCAL_SESSION_ACCOUNT)) -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_local_session_account_asan: $(LOCAL_SESSION_ACCOUNT) $(LOCAL_SESSION_HEADERS) ../hle_nextendo_apple.m ../nextendo_account.h ../nextendo_credential_diagnostic.h ../nextendo_preflight_mac.h ../account_trace.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -Wno-unused-function -fobjc-arc -mmacosx-version-min=14.0 -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(filter-out ../hle_net_backend.c,$(LOCAL_SESSION_ACCOUNT)) -framework Foundation -framework Security -framework LocalAuthentication
+.PHONY: net-local-session net-local-session-sanitize net-local-session-pair net-local-session-pair-sanitize
+net-local-session: $(B)/t_net_local_session $(B)/t_local_session_account $(B)/t_local_session_late
+	$(B)/t_net_local_session
+	$(B)/t_local_session_account
+	$(B)/t_local_session_late
+net-local-session-sanitize: $(B)/t_net_local_session_asan $(B)/t_local_session_account_asan $(B)/t_local_session_late_asan
+	$(B)/t_net_local_session_asan
+	$(B)/t_local_session_account_asan
+	$(B)/t_local_session_late_asan
+net-local-session-pair: $(B)/t_net_local_session
+	$(B)/t_net_local_session "$(LDN_ENDPOINT_FIRST)" "$(LDN_ENDPOINT_SECOND)"
+net-local-session-pair-sanitize: $(B)/t_net_local_session_asan
+	$(B)/t_net_local_session_asan "$(LDN_ENDPOINT_FIRST)" "$(LDN_ENDPOINT_SECOND)"
+run: net-local-session
 $(B)/t_symbols: t_symbols.c ../hle.c ../loader.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -Wno-deprecated-declarations -I.. $(GINC) -o $@ t_symbols.c
 .PHONY: symbols
@@ -768,7 +800,7 @@ eventfd: $(B)/t_eventfd
 run: eventfd
 # Backend includes are part of every direct networking test build, including
 # fixture translation units that include hle_net_backend.c themselves.
-$(addprefix $(B)/,t_net t_net_asan t_net_discovery t_net_discovery_asan t_net_interface t_net_interface_asan t_ldn t_ldn_asan t_ssl t_ssl_asan t_nextendo_routes t_nextendo_routes_asan t_net_write_prepare t_eventfd t_resolver_live t_online_policy t_online_policy_asan t_nextendo_preflight_capability t_nextendo_preflight_capability_asan): ../net_eventfd.inc ../net_message.inc
+$(addprefix $(B)/,t_net t_net_asan t_net_discovery t_net_discovery_asan t_net_interface t_net_interface_asan t_ldn t_ldn_asan t_ssl t_ssl_asan t_nextendo_routes t_nextendo_routes_asan t_net_write_prepare t_eventfd t_resolver_live t_online_policy t_online_policy_asan t_nextendo_preflight_capability t_nextendo_preflight_capability_asan): ../net_eventfd.inc ../net_message.inc ../net_local_session.h ../net_local_session.inc
 
 MESSAGE_IO_SOURCES = t_message_io.c $(filter-out t_net.c,$(NET_TEST_SOURCES))
 $(B)/t_message_io: $(MESSAGE_IO_SOURCES) $(NET_TEST_DEPS) $(B)/net_hle.o | $(B)
@@ -781,3 +813,6 @@ message-io: $(B)/t_message_io
 message-io-sanitize: $(B)/t_message_io_asan
 	$(B)/t_message_io_asan
 run: message-io
+
+$(addprefix $(B)/,t_message_io t_message_io_asan t_net_local_session t_net_local_session_asan t_local_session_account t_local_session_account_asan t_resolver_cancel t_resolver_cancel_asan t_ldn_endpoints t_ldn_endpoints_asan): ../net_local_session.h ../net_local_session.inc
+$(B)/t_ldn_events: ../net_local_session.h

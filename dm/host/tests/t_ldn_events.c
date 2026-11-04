@@ -31,6 +31,10 @@ int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan
 long dm_net_discovery_send_native(int fd,const void *bytes,size_t size,int flags,uint32_t address,uint16_t port) {
     struct sockaddr_in to={.sin_len=sizeof to,.sin_family=AF_INET,.sin_addr={address},.sin_port=port};return sendto(fd,bytes,size,flags,(struct sockaddr *)&to,sizeof to);
 }
+int dm_net_local_session_begin(void) { return 0; }
+int dm_net_local_session_get(dm_net_local_session *out) { if(out)*out=(dm_net_local_session){0};return 0; }
+int dm_net_local_session_route(uint32_t *address,int datagram,int binding) { (void)address;(void)datagram;(void)binding;return 0; }
+int dm_net_local_session_source(uint32_t address) { (void)address;return 1; }
 int dm_net_errno(void) { return 13; }
 int dm_net_multicast_allowed(void) { return 0; }
 static void *read_during_finalize(void *argument) {

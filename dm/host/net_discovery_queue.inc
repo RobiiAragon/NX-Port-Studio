@@ -28,6 +28,7 @@ static long net_discovery_packet(int fd,const void *bytes,size_t size,int flags,
     return sendto(fd,bytes,size,flags,(const struct sockaddr *)destination,sizeof *destination);
 }
 long dm_net_discovery_send_native(int fd,const void *bytes,size_t size,int flags,uint32_t address,uint16_t port) {
+    if (dm_net_local_session_route(&address, 1, 0) < 0) { errno = EACCES; return -1; }
     struct sockaddr_in destination={.sin_len=sizeof destination,.sin_family=AF_INET,.sin_port=port,.sin_addr={address}};
     return net_discovery_packet(fd,bytes,size,flags,&destination);
 }

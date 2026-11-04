@@ -67,11 +67,15 @@ static long net_message_receive(int guest, void *output, int flags) {
     if ((flags & (2 | 0x40)) == (2 | 0x40)) return net_error(95);
     net_message m; if (net_message_load(&m, output)) return -1;
     net_ref r; if (net_borrow(guest, &r)) { free(m.vectors); return -1; }
+    int isolated = r.type == 2 && dm_net_local_session_get(NULL) > 0;
+    size_t scratch_size = m.size > 65535 ? 65535 : m.size;
+    void *scratch = isolated ? malloc(scratch_size ? scratch_size : 1) : NULL;
+    if (isolated && !scratch) { close(r.fd); free(m.vectors); return net_error(12); }
     long result = -1; size_t total = 0; int output_flags = 0, count = m.header.count;
     struct iovec *vectors = m.vectors; uint64_t start = net_ms(); struct sockaddr_in address = {0};
     for (;;) {
         if (net_message_preflight(output, &m)) break;
-        for (int i = 0; i < count; i++) dm_guest_write_prepare(vectors[i].iov_base, vectors[i].iov_len);
+        if (!isolated) for (int i = 0; i < count; i++) dm_guest_write_prepare(vectors[i].iov_base, vectors[i].iov_len);
         // Darwin returns immediately for an entirely empty vector, without
         // dequeuing a UDP packet. Receive at most one private byte instead so
         // a zero-capacity datagram still has real arrival/consumption semantics.
@@ -79,8 +83,11 @@ static long net_message_receive(int guest, void *output, int flags) {
         // A null/zero Darwin control buffer suppresses even MSG_CTRUNC. One
         // private scratch byte preserves the actual truncation signal for the
         // guest's zero capacity; no native ancillary bytes/descriptors escape.
-        struct msghdr native = {.msg_name = m.header.name ? &address : NULL,
-            .msg_namelen = m.header.name ? sizeof address : 0, .msg_iov = m.size && count ? vectors : &empty, .msg_iovlen = m.size && count ? count : 1,
+        struct iovec private_vector = {scratch, scratch_size ? scratch_size : 1};
+        struct msghdr native = {.msg_name = m.header.name || isolated ? &address : NULL,
+            .msg_namelen = m.header.name || isolated ? sizeof address : 0,
+            .msg_iov = isolated ? &private_vector : m.size && count ? vectors : &empty,
+            .msg_iovlen = isolated ? 1 : m.size && count ? count : 1,
             .msg_control = &control_byte, .msg_controllen = 1};
         ssize_t got = recvmsg(r.fd, &native, native_flags); int error = errno;
         if (got < 0) {
@@ -88,6 +95,7 @@ static long net_message_receive(int guest, void *output, int flags) {
             if (net_wait(&r, (flags & 1) ? POLLPRI : POLLIN, r.recv_ms, start)) break;
             continue;
         }
+        if (isolated && (address.sin_family != AF_INET || !dm_net_local_session_source(address.sin_addr.s_addr))) { result = net_error(13); break; }
         if (!m.size && r.type == 2 && got) { native.msg_flags |= MSG_TRUNC; got = 0; }
         total += (size_t)got; result = (long)total; output_flags |= net_message_received_flags(native.msg_flags);
         if (!got || r.type != 1 || !(flags & 0x40) || r.nonblock || (flags & 0x80) || total == m.size) break;
@@ -95,6 +103,14 @@ static long net_message_receive(int guest, void *output, int flags) {
     }
     // A partial WAITALL read remains a real partial result on timeout/close.
     if (total && result >= 0) result = (long)total;
+    if (isolated && result > 0) {
+        size_t remaining = total, offset = 0;
+        for (int i = 0; i < m.header.count && remaining; i++) {
+            size_t size = m.vectors[i].iov_len < remaining ? m.vectors[i].iov_len : remaining;
+            if (size && net_guest_copyout(m.vectors[i].iov_base, (char *)scratch + offset, size)) { result = -1; break; }
+            offset += size; remaining -= size;
+        }
+    }
     if (result >= 0) {
         uint32_t name_size = m.header.name && address.sin_family ? sizeof(nx_addr) : 0;
         if (name_size && m.header.name_size) {
@@ -104,7 +120,7 @@ static long net_message_receive(int guest, void *output, int flags) {
         }
         if (result >= 0 && net_message_output(output, name_size, output_flags)) result = -1;
     }
-    close(r.fd); free(m.vectors); return result;
+    free(scratch); close(r.fd); free(m.vectors); return result;
 }
 static long net_message_send(int guest, const void *input, int flags) {
     if (!net_gate()) return -1;
@@ -121,6 +137,7 @@ static long net_message_send(int guest, const void *input, int flags) {
         if (net_guest_copyin(&copied, m.header.name, sizeof copied) || net_addr_in(&copied, sizeof copied, &address)) { free(m.vectors); return -1; }
     }
     net_ref r; if (net_borrow(guest, &r)) { free(m.vectors); return -1; }
+    if (local_session_send_fd(r.fd, r.type == 2, have_address ? &address : NULL)) { close(r.fd); free(m.vectors); return -1; }
     long result = -1; void *packet = NULL; int discovery = have_address && net_is_discovery(address.sin_addr.s_addr, r.type);
     if (discovery) {
         // Discovery queues inspect a contiguous datagram. Preserve their exact
