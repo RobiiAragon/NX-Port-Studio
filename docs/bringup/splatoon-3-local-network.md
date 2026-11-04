@@ -36,3 +36,20 @@ I need matching, privately owned game versions on two endpoints to complete thes
 4. After an iOS export exists, validate its Local Network permission, actual discovery framing and both host roles without manual peer configuration.
 
 I have not changed console firmware/modules, user saves, installed ports or the game's original network code during this audit. My synthetic protocol/session fixtures pass **14,859** checks under ASan/UBSan; the SDK-hook fixture also covers protocol state, context lifetime and concurrent finalization. These results prepare the backend; they do not certify a Splatoon 3 match.
+
+## Two native processes on one Mac
+
+On November 3, I checked why opening two ordinary port windows is insufficient for this test. Each process normally announces the same adapter IPv4 identity, and its LDN service binds a wildcard UDP listener on port 11452. A second listener without port sharing correctly fails with `EADDRINUSE`. Changing only the MAC identity or runtime/save directory does not isolate the game's IP endpoints.
+
+I also tested two possible native-socket changes before modifying production. On this Mac, a UDP receiver bound to an adapter's specific unicast address did not receive that adapter's directed broadcast, while its wildcard control did. Wildcard listeners with `IP_BOUND_IF` and `SO_REUSEPORT` did not receive my self-routed unicast or locally generated broadcast on either of two virtual bridges. Binding every wildcard socket to an address, or adding port sharing, would therefore not establish faithful automatic discovery between two ordinary game processes. I kept the production bind and routing defaults unchanged.
+
+My optional `t_ldn_endpoints` fixture instead exercises the existing explicit `dm_ldn_transport` API with two real processes and two different IPv4 addresses already assigned to the Mac. It checks the original wildcard collision, then uses the same control port on both distinct endpoints, real discovery/roster exchange and bidirectional UDP game-data fixtures on another shared port. It uses unicast discovery only, sends no broadcast or subnet sweep, changes no OS interface, and needs no game files. I select the two local interface names explicitly for this developer diagnostic:
+
+```sh
+make -C dm/host/tests ldn-endpoints \
+  LDN_ENDPOINT_FIRST=lo0 LDN_ENDPOINT_SECOND=YOUR_SECOND_INTERFACE
+make -C dm/host/tests ldn-endpoints-sanitize \
+  LDN_ENDPOINT_FIRST=lo0 LDN_ENDPOINT_SECOND=YOUR_SECOND_INTERFACE
+```
+
+The available local routes still matter: on this Mac, the loopback/virtual-bridge pairing exchanges data, while traffic sourced and addressed between two virtual bridges does not reach my receive socket. I report that failed topology rather than treating address assignment as proof of reachability. This fixture establishes the tested backend transport pairing; it does **not** open two Splatoon 3 games, qualify Pia6 automatic discovery, simulate the console radio, or establish a completed game match. The ordinary game path still needs independent reachable endpoint/network isolation or a separate real peer.
