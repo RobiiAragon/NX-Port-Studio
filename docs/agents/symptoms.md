@@ -4,6 +4,7 @@ One line per symptom in the [subsystem references](../reference/): what you see 
 
 ## Packing
 
+- a Mac app launched with a sufficiently long existing home path can use the same directory for saves and temporary files, or rotate a truncated log path. → [A long home path aliases Mac save and temporary directories](../reference/packing.md#a-long-home-path-aliases-mac-save-and-temporary-directories)
 - after editing a game's `README.md`, a host-only iteration repeats shader splitting and visits every cached shader and side variant even though the shader inputs and translation chain are unchanged. → [Editing a profile note repeats shader preparation](../reference/packing.md#editing-a-profile-note-repeats-shader-preparation)
 - the SDK-surface survey lists `nn::socket::Socket`, `Bind`, `Close`, `Listen` and `SetSockOpt` as unavailable even though the host registers their translated implementations. → [Network survey reports implemented socket imports as missing](../reference/packing.md#network-survey-reports-implemented-socket-imports-as-missing)
 - the first extraction stops with `nx_extract exit code 131` and `.NET location: Not found`, even though `dotnet` is on `PATH`. The shader translator can fail the same way. → [Homebrew .NET is on PATH but apphosts cannot find the runtime](../reference/packing.md#homebrew-net-is-on-path-but-apphosts-cannot-find-the-runtime)
