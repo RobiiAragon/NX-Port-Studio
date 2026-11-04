@@ -2868,7 +2868,7 @@ static nvn_resource_fact resource_texture_fact(id<MTLTexture> t) {
         .width=(uint32_t)t.width, .height=(uint32_t)t.height, .depth=(uint32_t)t.depth,
         .levels=(uint32_t)t.mipmapLevelCount, .layers=(uint32_t)t.arrayLength, .samples=(uint32_t)t.sampleCount};
 }
-static void resource_attachment_snapshot(MTLRenderPassDescriptor *pd) {
+static void resource_attachment_snapshot(MTL4RenderPassDescriptor *pd) {
     if (!resource_trace_on()) return;
     g_resource_nattachments = 0;
     for (int i = 0; i < 10; i++) {
