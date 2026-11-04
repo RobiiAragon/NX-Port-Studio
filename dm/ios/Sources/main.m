@@ -217,10 +217,12 @@ static int boot_env(void) {
     return 1;
 }
 static int g_boot_ok;
+void dm_mobile_prepare_game_account(void);
 
 static void *boot_thread(void *p) {
     (void)p;
     static char alt[65536]; stack_t ss = {.ss_sp = alt, .ss_size = sizeof alt}; sigaltstack(&ss, 0);   // crash printing must work on the host thread too
+    if (dm_net_nextendo_enabled()) dm_mobile_prepare_game_account();
     int rc = dm_main(g_argc, g_argv);
     fprintf(stderr, "boot: dm_main returned %d\n", rc);
     return NULL;
