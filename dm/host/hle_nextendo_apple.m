@@ -265,11 +265,12 @@ uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool {
     return 0;
 } }
 uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
-    if (!out) return DM_ACCOUNT_FAIL; *out = 0; DmNextendoCredential *c = credential(); if (!c) return DM_ACCOUNT_FAIL;
-    if (dm_nextendo_api_baas_namespace("account")) return dm_nextendo_api_baas_id(out);
+    if (!out) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
+    *out = 0; DmNextendoCredential *c = credential(); if (!c) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL);
+    if (dm_nextendo_api_baas_namespace("account")) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,dm_nextendo_api_baas_id(out),DM_ACCOUNT_STAGE_BAAS_ID);
     *out = c.pid; return 0;
 } }
-uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return credential() ? 0 : DM_ACCOUNT_FAIL; } }
+uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return dm_account_trace_return(DM_ACCOUNT_RETURN_ENSURE,credential() ? 0 : DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL); } }
 // Host-only API authorization. Never serialized into a game bundle or HLE output.
 NSString *dm_nextendo_api_bearer(void) { return credential().token; }
 NSData *dm_nextendo_api_identity(void) {
@@ -313,9 +314,12 @@ static NSData *id_token(DmNextendoCredential *c) {
     cachedFingerprint = fingerprint; cachedVersion = version; cachedToken = token; cachedExpiry = (NSTimeInterval)expiry; pthread_mutex_unlock(&accountLock); return token;
 }
 uint32_t dm_nextendo_account_load_token(uint64_t *size, char *buffer, uint64_t capacity) { @autoreleasepool {
-    if (!size) return DM_ACCOUNT_FAIL; *size = 0; if (!buffer && capacity) return DM_ACCOUNT_FAIL;
-    DmNextendoCredential *c = credential(); if (!c) return DM_ACCOUNT_FAIL; NSData *token = id_token(c); if (!token) return DM_ACCOUNT_FAIL;
-    *size = token.length; if (!buffer || capacity <= token.length) return DM_ACCOUNT_FAIL; memcpy(buffer, token.bytes, token.length); buffer[token.length] = 0; return 0;
+    if (!size) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
+    *size = 0; if (!buffer && capacity) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
+    DmNextendoCredential *c = credential(); if (!c) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL);
+    NSData *token = id_token(c); if (!token) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ID_TOKEN);
+    *size = token.length; if (!buffer || capacity <= token.length) return dm_account_trace_return(DM_ACCOUNT_RETURN_TOKEN,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_OUTPUT_BUFFER);
+    memcpy(buffer, token.bytes, token.length); buffer[token.length] = 0; return 0;
 } }
 
 @interface DmNextendoAsync : NSObject
@@ -371,9 +375,11 @@ uint32_t dm_nextendo_async_execute(void *object, dm_nextendo_async_operation ope
     return enabled() ? 0 : DM_ACCOUNT_FAIL;
 } }
 static uint32_t ensure_token_operation(const void *context) {
-    (void)context; DmNextendoCredential *c = credential(); return c && id_token(c) ? 0 : DM_ACCOUNT_FAIL;
+    (void)context; DmNextendoCredential *c = credential();
+    if (!c) return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_CREDENTIAL);
+    return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,id_token(c) ? 0 : DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ID_TOKEN);
 }
-uint32_t dm_nextendo_async_ensure(void *object) { return dm_nextendo_async_execute(object, ensure_token_operation, NULL); }
+uint32_t dm_nextendo_async_ensure(void *object) { return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_ENSURE,dm_nextendo_async_execute(object, ensure_token_operation, NULL),DM_ACCOUNT_STAGE_ASYNC_SETUP); }
 uint32_t dm_nextendo_async_cancel(void *object) { @autoreleasepool {
     DmNextendoAsync *state = request(object); if (!state) return DM_ACCOUNT_FAIL; [state.lock lock]; if (!state.started || state.destroyed) { [state.lock unlock]; return DM_ACCOUNT_FAIL; }
     NSArray *events = nil; if (!state.done) { state.generation++; state.done = YES; state.result = DM_ACCOUNT_FAIL; events = state.events.copy; } [state.lock unlock]; finish_events(events); return 0;
@@ -382,5 +388,8 @@ uint32_t dm_nextendo_async_done(void *object, uint8_t *out) { @autoreleasepool {
     if (!out) return DM_ACCOUNT_FAIL; *out = 0; DmNextendoAsync *state = request(object); if (!state) return DM_ACCOUNT_FAIL; [state.lock lock]; uint32_t result = !state.started || state.destroyed ? DM_ACCOUNT_FAIL : 0; if (!result) *out = state.done; [state.lock unlock]; return result;
 } }
 uint32_t dm_nextendo_async_result(void *object) { @autoreleasepool {
-    DmNextendoAsync *state = request(object); if (!state) return DM_ACCOUNT_FAIL; [state.lock lock]; uint32_t result = state.started && state.done && !state.destroyed ? state.result : DM_ACCOUNT_FAIL; [state.lock unlock]; return result;
+    DmNextendoAsync *state = request(object); if (!state) return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_RESULT,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ASYNC_CONTEXT);
+    [state.lock lock]; BOOL completed = state.started && state.done && !state.destroyed;
+    uint32_t result = completed ? state.result : DM_ACCOUNT_FAIL; [state.lock unlock];
+    return dm_account_trace_return(DM_ACCOUNT_RETURN_ASYNC_RESULT,result,completed ? DM_ACCOUNT_STAGE_ASYNC_COMPLETION : DM_ACCOUNT_STAGE_ASYNC_STATE);
 } }

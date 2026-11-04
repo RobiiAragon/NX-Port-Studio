@@ -643,7 +643,7 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Native settings:** Mac ports default to automatic service selection and persist an optional network disable/discovery peer per title in `org.nxnative.network`; environment overrides win and edits apply on the next launch. Labels distinguish built-in LAN for compatible stock or modified consoles from the experimental LDN bridge requiring a compatible module, and from Nextendo's credential/service requirements.
 
 I can temporarily set `DM_ACCOUNT_TRACE=1` for one port to distinguish an account
-availability rejection from an unavailable NIFM request. The shared trace emits
+availability rejection from an unavailable NIFM request. The availability trace emits
 at most 32 state changes for each of four sections (128 total) and remains disabled
 for every other value. Repeated identical states are suppressed independently,
 so NIFM polling cannot exhaust account observation.
@@ -1284,3 +1284,26 @@ My synthetic-provider and query-capture fixtures cover disabled-network access,
 credential rejection and unchanged game availability. The Foundation lifecycle
 fixture covers off-main execution, duplicate clicks, denial, explicit retry and
 close/reopen observation without opening a window or reading the real Keychain.
+
+### A generic account Result does not identify the failing operation
+
+- **Symptom:** a game reports the shared `0x2a2` failure before its first recorded socket call, but account/NIFM availability diagnostics do not identify whether account ensure, ID retrieval, token loading or asynchronous completion failed.
+- **Cause:** the existing availability trace did not cover these returned operations. The same Result comes from different guards and provider stages; it does not establish bad credentials, a remote rejection or a transport defect.
+- **Fix:** I extend the existing exact `DM_ACCOUNT_TRACE=1` opt-in with failed-return metadata for `acc.ensure`, `acc.id`, `acc.load_token`, `acc.async_ensure` and `acc.async_result`. Each has its own 32-transition budget (160 returned-operation records, separate from the 128 availability records), with consecutive identical failures suppressed. A record contains only the operation, unchanged numeric Result and the stage below. The trace preserves errno and makes no additional credential, interface or authenticated service request. Successful returns produce no failure record. The stages locate a phase, not its underlying cause; for example, credential-stage failure alone does not distinguish unavailable access from invalid data.
+- **Check:** my original synthetic-provider fixture reproduced the missing metadata at the actual HLE hooks before this change. It checks unchanged results, buffers, provider-query counts and errno; invalid handles, missing proof, token-generation failure, short output and async setup/context/completion; silent default/success paths, bounded independent budgets and exclusion of proof, claims, names and account identifiers. It never reads personal credentials or contacts a service.
+- **Found on:** my [Splatoon 3 investigation](../../dm/games/0100C2500FC20000/README.md), after a lobby attempt returned the generic Result. The underlying game failure remains open until a coordinated run records its actual failed operation.
+
+| Stage | Phase already evaluated by the operation |
+| --- | --- |
+| 0 | Output argument validation |
+| 1 | Local user-handle validation |
+| 2 | Credential acquisition/validation |
+| 3 | Local ID-token preparation |
+| 4 | Output buffer capacity |
+| 5 | Server-provided BAAS ID retrieval, only when the selected profile requests it |
+| 6 | Async request setup |
+| 7 | Async context lookup |
+| 8 | Async state not completed/valid |
+| 9 | The actual stored completion Result |
+
+For a Mac reproduction I close the current game first, then add `DM_ACCOUNT_TRACE=1` to that title's `~/Library/Application Support/nxnative/<title ID>/env.txt` and launch normally. The existing launcher reads this file at startup, ahead of the bundle's environment file; neither replaces a launch-environment variable. I remove the diagnostic line after the reproduction. This uses the documented per-title override and does not edit, rebuild or hot-update an active app. The normal player workflow does not require this setting.
