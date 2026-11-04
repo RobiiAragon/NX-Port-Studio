@@ -96,7 +96,8 @@ uint32_t dm_nextendo_social_friends_refresh(dm_social_friend **output,size_t *co
 
 uint32_t dm_nextendo_social_publish(unsigned status,const uint8_t *app_field,size_t size) { @autoreleasepool {
     if(status>2||size>DM_SOCIAL_APP_FIELD||(size&&!app_field))return DM_ACCOUNT_FAIL;
-    NSData *identity=dm_nextendo_api_identity();if(!identity)return DM_ACCOUNT_FAIL;
+    uint64_t generation=0; NSString *proof=dm_nextendo_api_passive_bearer(&generation);
+    if(!proof)return DM_ACCOUNT_FAIL;
     NSString *title=[@DM_GAME_ID lowercaseString];
     id name=[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
     if(![name isKindOfClass:NSString.class]||![name length])name=title;
@@ -106,6 +107,6 @@ uint32_t dm_nextendo_social_publish(unsigned status,const uint8_t *app_field,siz
     NSData *body=[NSJSONSerialization dataWithJSONObject:object options:0 error:nil];
     if(!body)return DM_ACCOUNT_FAIL;
     uint8_t response[4096];size_t count=0;
-    uint32_t result=dm_nextendo_api_request("presence",body.bytes,body.length,response,sizeof response,&count);
-    return !result&&[identity isEqual:dm_nextendo_api_identity()]?0:DM_ACCOUNT_FAIL;
+    uint32_t result=dm_nextendo_api_request_passive("presence",body.bytes,body.length,response,sizeof response,&count,proof,generation);
+    return !result&&dm_nextendo_api_passive_valid(proof,generation)?0:DM_ACCOUNT_FAIL;
 } }
