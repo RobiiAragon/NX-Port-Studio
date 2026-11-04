@@ -2,6 +2,14 @@
 
 ## Build tools
 
+### A long home path aliases Mac save and temporary directories
+
+- **Symptom:** a Mac app launched with a sufficiently long existing home path can use the same directory for saves and temporary files, or rotate a truncated log path.
+- **Cause:** the launcher ignored `snprintf` results while constructing six state paths. With a 968-byte home and a 1,024-byte path buffer, the save and temporary names both truncated to the same root plus a slash.
+- **Fix:** I check every state-path formatting result, including negative results and lengths at least the buffer capacity, before creating directories, rotating logs or exporting paths. An invalid result stops preparation; ordinary legacy paths and log rotation remain unchanged. This adds no per-instance namespace or applet/editor behavior.
+- **Check:** an asset-free fixture compiles the actual launcher setup block normally and under ASan/UBSan. It exercises a real long temporary home, the exact accepted capacity, all six negative/full formatting results, distinct save/temp directories, existing-data preservation and zero filesystem mutations/environment exports on rejection. No game, firmware or personal files are used.
+- **Found on:** synthetic Mac launcher state-path validation while separating unfinished original-applet work.
+
 ### Editing a profile note repeats shader preparation
 
 - **Symptom:** after editing a game's `README.md`, a host-only iteration repeats shader splitting and visits every cached shader and side variant even though the shader inputs and translation chain are unchanged.

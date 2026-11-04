@@ -172,10 +172,13 @@ int dm_mac_app_prepare(int *host_argc, char ***host_argv, const char *expected_t
     }
     const char *home = getenv("HOME"); if (!home || !*home) return 1;
     char sup[PATH_MAX], save[PATH_MAX], temp[PATH_MAX], logs[PATH_MAX], log[PATH_MAX], prev[PATH_MAX];
-    snprintf(sup, sizeof sup, "%s/Library/Application Support/nxnative/%s", home, id);
-    snprintf(save, sizeof save, "%s/save", sup); snprintf(temp, sizeof temp, "%s/temp", sup);
-    snprintf(logs, sizeof logs, "%s/Library/Logs/nxnative", home);
-    snprintf(log, sizeof log, "%s/%s.log", logs, id); snprintf(prev, sizeof prev, "%s/%s.prev.log", logs, id);
+    // Validate every path before creating state, rotating logs or exporting it.
+#define LAUNCHER_STATE_PATH(destination, ...) do { int written = snprintf(destination, sizeof destination, __VA_ARGS__); if (written < 0 || (size_t)written >= sizeof destination) { fputs("[RED] launcher: state path exceeds the platform path limit\n", stderr); return 1; } } while (0)
+    LAUNCHER_STATE_PATH(sup, "%s/Library/Application Support/nxnative/%s", home, id);
+    LAUNCHER_STATE_PATH(save, "%s/save", sup); LAUNCHER_STATE_PATH(temp, "%s/temp", sup);
+    LAUNCHER_STATE_PATH(logs, "%s/Library/Logs/nxnative", home);
+    LAUNCHER_STATE_PATH(log, "%s/%s.log", logs, id); LAUNCHER_STATE_PATH(prev, "%s/%s.prev.log", logs, id);
+#undef LAUNCHER_STATE_PATH
     mkdirs(save); mkdirs(temp); mkdirs(logs);
     rename(log, prev);
     int fd = open(log, O_WRONLY | O_CREAT | O_TRUNC, 0644);
