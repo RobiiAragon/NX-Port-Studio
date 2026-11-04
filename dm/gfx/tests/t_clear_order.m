@@ -28,6 +28,7 @@ static void seed(id<MTLCommandQueue> queue,id<MTLTexture> texture) {
 static int read_pixels(id<MTLCommandQueue> queue,id<MTLTexture> texture,int level,uint8_t *out) {
     unsigned size=8>>level;
     id<MTLBuffer> b=[g_dev newBufferWithLength:256*size options:MTLResourceStorageModeShared];
+    if(!b)return 0;
     id<MTLCommandBuffer> cb=[queue commandBuffer];id<MTLBlitCommandEncoder> e=[cb blitCommandEncoder];
     [e copyFromTexture:texture sourceSlice:0 sourceLevel:level sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(size,size,1)
               toBuffer:b destinationOffset:0 destinationBytesPerRow:256 destinationBytesPerImage:256*size];
@@ -46,6 +47,7 @@ int main(void) { @autoreleasepool {
     program->sh[0]=[NvShader new];program->sh[0]->fn=[library newFunctionWithName:@"v"];
     program->sh[1]=[NvShader new];program->sh[1]->fn=[library newFunctionWithName:@"f"];
     program->sh[1]->stage=1;program->sh[1]->rf.color_mask=1;serial_put(pg.serial,program);
+    // NOLINTNEXTLINE(clang-analyzer-osx.cocoa.RetainCount): serial_put transfers a CF retain to the serial table; serial_del below releases it after GPU completion.
     tex_t t[2]={0};id<MTLTexture> texture[2];id<MTLCommandQueue> queue=[g_dev newCommandQueue];
     for(int k=0;k<2;k++) {
         t[k].magic=MAGIC('T','E','X',0);t[k].serial=99802+k;
@@ -86,7 +88,8 @@ int main(void) { @autoreleasepool {
         CHECK(g_stat_draw-draws==(cases[k].no_draw?0:1),"the requested draw really replays");
         int good=1;
         for(int tex=0;tex<2;tex++)for(int level=0;level<2;level++) {
-            uint8_t pixels[8*8*4];CHECK(read_pixels(queue,texture[tex],level,pixels),"GPU readback completes");
+            uint8_t pixels[8*8*4];int read=read_pixels(queue,texture[tex],level,pixels);CHECK(read,"GPU readback completes");
+            if(!read){good=0;continue;}
             unsigned size=8>>level;
             for(unsigned y=0;y<size;y++)for(unsigned x=0;x<size;x++) {
                 uint8_t want[4]={0,0,255,255};
