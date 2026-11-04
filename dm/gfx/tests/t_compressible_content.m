@@ -45,6 +45,7 @@ static void fill(tex_t *t, uint8_t *linear, unsigned variant) {
 static void expect_bytes(id<MTLTexture> image, tex_t *t, const uint8_t *want, const char *label) {
     size_t row = (size_t)t->d.width * t->L.bpb;
     id<MTLBuffer> out = [g_dev newBufferWithLength:row * t->d.height options:MTLResourceStorageModeShared];
+    if (!out) abort();
     id<MTLCommandBuffer> cb = q_cb(); id<MTLBlitCommandEncoder> en = [cb blitCommandEncoder];
     [en copyFromTexture:image sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
         sourceSize:MTLSizeMake(t->d.width, t->d.height, 1) toBuffer:out destinationOffset:0 destinationBytesPerRow:row destinationBytesPerImage:row * t->d.height];
