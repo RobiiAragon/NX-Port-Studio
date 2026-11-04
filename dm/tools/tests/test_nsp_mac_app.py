@@ -32,10 +32,12 @@ TEST_ROOT = Path(os.environ.get('NXNATIVE_TEST_ROOT', tempfile.gettempdir()))
 
 HOST_C = r'''#include <signal.h>
 #include "bundle_mac.h"
+#include "net_socket.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 extern char **environ;
+dm_net_mode_t dm_net_mode(void) { return DM_NET_OFFLINE; }
 static void term(int s) { (void)s; _exit(3); }
 int main(int argc, char **argv) {
     int bootstrap = dm_mac_bundle_prepare(&argc, &argv); if (bootstrap >= 0) return bootstrap;
@@ -482,6 +484,7 @@ class App(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = Path(tempfile.mkdtemp(dir=TEST_ROOT)).resolve()
+        cls.addClassCleanup(shutil.rmtree, cls.tmp)
         t = cls.tmp
         (t / 'host.c').write_text(HOST_C)
         (t / 'game_profile.h').write_text(f'#define DM_GAME_ID "{TID}"\n')
@@ -515,9 +518,6 @@ class App(unittest.TestCase):
                                    '--name', 'Game: Test', '--version', '1.0.1', '--lang', 'fr', '--marker', 'region_common/audio/edward.bfsar', '--icon', str(t / 'icon.jpg'),
                                    '--category', 'public.app-category.games'])
         with contextlib.redirect_stdout(io.StringIO()): pack_app.pack(cls.args)
-
-    @classmethod
-    def tearDownClass(cls): shutil.rmtree(cls.tmp)
 
     def launch(self, wait=False, app=None, args=(), **env):
         home = self.tmp / 'home'
