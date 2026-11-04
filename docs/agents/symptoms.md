@@ -4,6 +4,7 @@ One line per symptom in the [subsystem references](../reference/): what you see 
 
 ## Packing
 
+- the displayed shader count stays behind the files being produced, a late key counts earlier unfinished keys, or an old ETA remains visible while no new count arrives. → [Shader progress freezes or counts unfinished work as complete](../reference/packing.md#shader-progress-freezes-or-counts-unfinished-work-as-complete)
 - a Mac app launched with a sufficiently long existing home path can use the same directory for saves and temporary files, or rotate a truncated log path. → [A long home path aliases Mac save and temporary directories](../reference/packing.md#a-long-home-path-aliases-mac-save-and-temporary-directories)
 - after editing a game's `README.md`, a host-only iteration repeats shader splitting and visits every cached shader and side variant even though the shader inputs and translation chain are unchanged. → [Editing a profile note repeats shader preparation](../reference/packing.md#editing-a-profile-note-repeats-shader-preparation)
 - the SDK-surface survey lists `nn::socket::Socket`, `Bind`, `Close`, `Listen` and `SetSockOpt` as unavailable even though the host registers their translated implementations. → [Network survey reports implemented socket imports as missing](../reference/packing.md#network-survey-reports-implemented-socket-imports-as-missing)

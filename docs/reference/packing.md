@@ -2,6 +2,14 @@
 
 ## Build tools
 
+### Shader progress freezes or counts unfinished work as complete
+
+- **Symptom:** the displayed shader count stays behind the files being produced, a late key counts earlier unfinished keys, or an old ETA remains visible while no new count arrives.
+- **Cause:** the observer inferred completion from a key's position in a supposed serial order and from reflection mtimes newer than a polling transition. The producer finishes keys in parallel; restored timestamps and work completed before that transition are not a completion protocol. A base geometry library/reflection pair can also precede the remaining topology variants. Poll pacing and rate samples used wall time, and a previously reported ETA had no expiry when observations stopped.
+- **Fix:** observe base library/reflection pairs only after discovering a new `dmsh_*` directory, which the producer creates after cleaning the output. Count actual pairs independently of key order and mtime, and label them **shader bases**, rather than completed shader jobs. All observed pairs or the removed work directory lead to a separate, uncounted **finishing variants and reflection** step. Studio clears the previous fraction for an uncounted step/progress event and keeps it for unrelated log messages. Only the successful subprocess and validated final shader stamp close the stage. Poll delays and rate samples use a monotonic clock; an ETA expires after 60 seconds without an actual count change, including a JSON update that removes the old estimate. No translation, cache eligibility, compiler identity or chain key changes.
+- **Checks:** synthetic schedules cover stale output/old work markers, restored old mtimes, out-of-order keys, missing library/reflection partners, auxiliary SPIR-V files and a geometry base published before its variants. Controlled-clock fixtures cover wall-clock changes, idle ETA expiry and the finishing-step reset without fabricating completion.
+- **Found on:** my [Splatoon 3 preparation](../../dm/games/0100C2500FC20000/README.md), whose old observer still reported 14,067 of 31,218 shaders while I observed all 31,218 base library/reflection pairs. I did not inspect the live Python process, and I have not attributed that historical freeze to one particular timing mechanism.
+
 ### A long home path aliases Mac save and temporary directories
 
 - **Symptom:** a Mac app launched with a sufficiently long existing home path can use the same directory for saves and temporary files, or rotate a truncated log path.

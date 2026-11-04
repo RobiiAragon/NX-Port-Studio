@@ -46,4 +46,6 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
 
+I also corrected the [shader-progress observer](../../../docs/reference/packing.md#shader-progress-freezes-or-counts-unfinished-work-as-complete) after its displayed count lagged behind this game's base artifacts. The new synthetic schedules qualify progress reporting, not shader correctness, rendering or network play.
+
 I added [failed account-operation metadata](../../../docs/reference/services.md#a-generic-account-result-does-not-identify-the-failing-operation) after a lobby attempt reported the shared `0x2a2` Result before a recorded socket call. I verified the diagnostic with synthetic providers; I have not attributed that game failure to an account, token or service without a new coordinated trace.
