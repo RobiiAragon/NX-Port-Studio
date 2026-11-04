@@ -131,7 +131,10 @@ int main(int argc,const char **argv) { @autoreleasepool {
     run();
     nvn_resource_trace frozen=g_resource_trace;
     setenv("DM_NVN_RESOURCE_TRACE_KEYS","1111111111111111",1); (void)resource_trace_on();
-    CHECK(!memcmp(&frozen,&g_resource_trace,sizeof frozen),"later environment changes cannot reconfigure or rearm the process budget");
+    int unchanged=frozen.nkeys==g_resource_trace.nkeys && frozen.nlast==g_resource_trace.nlast && frozen.emitted==g_resource_trace.emitted;
+    for (unsigned i=0;unchanged && i<frozen.nkeys;i++) unchanged=frozen.keys[i]==g_resource_trace.keys[i];
+    for (unsigned i=0;unchanged && i<frozen.nlast;i++) unchanged=nvn_resource_fact_same(&frozen.last[i],&g_resource_trace.last[i]);
+    CHECK(unchanged,"later environment changes cannot reconfigure or rearm the process budget");
     printf("RESOURCE_METADATA %d checks, %d failed\n",checks,failed);
     printf("PATH_COUNTS tex_mtl=%llu tex_id=%llu fast=%llu fit=%llu views=%llu passes=%llu draws=%llu copies=%u dispatches=%u\n",
         (unsigned long long)g_resource_test_tex_mtl,(unsigned long long)g_resource_test_tex_id,(unsigned long long)g_resource_test_fast,

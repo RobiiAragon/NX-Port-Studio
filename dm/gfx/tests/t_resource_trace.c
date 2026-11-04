@@ -30,7 +30,7 @@ int main(void) {
     FILE *out = tmpfile(); CHECK(out != NULL); if (!out) return 1;
     nvn_resource_trace_print(out, &a, 1, 2); nvn_resource_trace_print(out, &a, 99, 100);
     CHECK(!nvn_resource_trace_note(&t, &a)); CHECK(t.emitted == 3);
-    rewind(out); char line[1024]; CHECK(fgets(line, sizeof line, out) != NULL);
+    CHECK(fseek(out,0,SEEK_SET)==0); char line[1024]; CHECK(fgets(line, sizeof line, out) != NULL);
     CHECK(strstr(line, "key=0123456789abcdef frame=1 pass=2 stage=1 role=color slot=0 serial=7 descriptor=-1 type=7 format=92 width=8 height=8 depth=8") != NULL);
     CHECK(strstr(line, "plane=3") != NULL); CHECK(strstr(line, "0x") == NULL); CHECK(strstr(line, "addr") == NULL); CHECK(strstr(line, "uniform") == NULL); CHECK(strstr(line, "pixel") == NULL); CHECK(strstr(line, "hash") == NULL);
     fclose(out);
