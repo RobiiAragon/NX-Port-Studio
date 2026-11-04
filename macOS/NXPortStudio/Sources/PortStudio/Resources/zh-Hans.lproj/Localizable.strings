@@ -396,3 +396,9 @@
 "No saved game exists in this folder yet." = "此文件夹中尚无存档。";
 "An import is pending. Restart the port to apply it first." = "有待处理的导入。请先重启移植版以应用。";
 "Done" = "完成";
+
+"Nextendo could not exchange the sign-in code (HTTP %d)." = "Nextendo 无法交换登录授权码（HTTP %d）。";
+"Nextendo could not verify the account identity (HTTP %d)." = "Nextendo 无法验证账户身份（HTTP %d）。";
+"Nextendo could not issue the game credential (HTTP %d)." = "Nextendo 无法签发游戏凭据（HTTP %d）。";
+"Nextendo could not renew sign-in (HTTP %d)." = "Nextendo 无法续期登录（HTTP %d）。";
+"Another app is renewing the saved Nextendo account. Try again shortly." = "另一个应用正在续期已保存的 Nextendo 账户。请稍后重试。";

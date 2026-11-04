@@ -406,3 +406,9 @@
 "No saved game exists in this folder yet." = "Esta carpeta aún no tiene una partida guardada.";
 "An import is pending. Restart the port to apply it first." = "Hay una importación pendiente. Reinicia el port para aplicarla primero.";
 "Done" = "Listo";
+
+"Nextendo could not exchange the sign-in code (HTTP %d)." = "Nextendo no pudo canjear el código de inicio de sesión (HTTP %d).";
+"Nextendo could not verify the account identity (HTTP %d)." = "Nextendo no pudo verificar la identidad de la cuenta (HTTP %d).";
+"Nextendo could not issue the game credential (HTTP %d)." = "Nextendo no pudo emitir la credencial del juego (HTTP %d).";
+"Nextendo could not renew sign-in (HTTP %d)." = "Nextendo no pudo renovar la sesión (HTTP %d).";
+"Another app is renewing the saved Nextendo account. Try again shortly." = "Otra app está renovando la cuenta guardada de Nextendo. Inténtalo de nuevo en un momento.";
