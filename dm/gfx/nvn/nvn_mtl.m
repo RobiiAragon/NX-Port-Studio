@@ -10524,6 +10524,10 @@ static unsigned mtl_pf_chmask(MTLPixelFormat pf) {
 // View with changed format: clear on that view. Partial colour regions / channel masks use a triangle and preserve everything else.
 static void clear_tex_tri(id<MTLTexture> t, unsigned lv, unsigned l0, const p_clear_tex *c);
 static void clear_tex(const p_clear_tex *c) {
+    // Attachment clears recorded earlier may still be pending load actions.
+    // Land them before this explicit clear and its zero-content invalidation;
+    // otherwise a later draw/commit reapplies the older clear over this one.
+    rp_flush();
     if (c->tex) zskip_del(c->tex->serial);
     id<MTLTexture> t = tex_mtl(c->tex);
     PD("X ser=%llu view format %#x region %d,%d,%d %dx%dx%d mask %#x %s %g,%g,%g,%g", c->tex ? c->tex->serial : 0ull, c->has_view && c->view.set_format ? c->view.format : -1, c->r.xoffset, c->r.yoffset, c->r.zoffset, c->r.width, c->r.height, c->r.depth, c->mask,

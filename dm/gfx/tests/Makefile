@@ -395,6 +395,15 @@ t_clear_tex: t_clear_tex.m $(MTL_T_DEP)
 .PHONY: check_t_clear_tex
 check_t_clear_tex: t_clear_tex
 	MTL_DEBUG_LAYER=1 ./t_clear_tex
+t_clear_order: t_clear_order.m $(MTL_T_DEP)
+	clang $(CFLAGS) -fobjc-arc -o $@ t_clear_order.m $(MTL_T_SRC) $(FW)
+t_clear_order_asan: t_clear_order.m $(MTL_T_DEP) ../../sanitizers/ignorelist.txt
+	clang $(CFLAGS) $(ASAN_FLAGS) -fobjc-arc -o $@ t_clear_order.m $(MTL_T_SRC) $(FW)
+.PHONY: check_t_clear_order check_t_clear_order_asan
+check_t_clear_order: t_clear_order
+	MTL_DEBUG_LAYER=1 ./t_clear_order
+check_t_clear_order_asan: t_clear_order_asan
+	$(ASAN_ENV) MTL_DEBUG_LAYER=1 ./t_clear_order_asan
 t_attachment_capacity: t_attachment_capacity.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_attachment_capacity.m $(MTL_T_SRC) $(FW)
 .PHONY: check_t_attachment_capacity
