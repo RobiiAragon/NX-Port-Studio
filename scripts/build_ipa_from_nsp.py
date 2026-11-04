@@ -984,7 +984,7 @@ def derive_profile(g, pdir, ver, d, mods, app=None, shader_only=False):
             continue
         out.append(line)
     text, kf = '\n'.join(out) + '\n', derived_key(pdir)   # beside the profile, not in it: no tool reads it as a table
-    key = fingerprint(('files', src), text)
+    key = fingerprint(('files', [p for p in src if p.suffix.lower() != '.md']), text)   # notes are copied on regeneration, but cannot retire computed profile data
     if (pdir / 'game.tsv').is_file() and reused(kf, key) is not None:
         def rows(text):   # the same whitespace and comment rules as game.Game
             return [tuple(c.strip() for c in l.split(T)) for l in text.splitlines() if l.strip() and not l.lstrip().startswith('#')]

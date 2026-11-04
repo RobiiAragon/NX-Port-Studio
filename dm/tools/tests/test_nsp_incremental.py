@@ -73,6 +73,31 @@ class DeriveProfile(Base):
         self.assertEqual(game.Game(self.pdir).builds()['v65536']['main'], BID2)
         self.assertEqual(self.derive(), '1.1.0'); self.assert_kept()   # still kept on a third run
 
+    def test_documentation_does_not_retire_derived_stage_outputs(self):
+        for shader_only in (False, True):
+            with self.subTest(shader_only=shader_only):
+                pdir = self.tmp / f'derived-notes-{shader_only}'
+                def derive(pdir=pdir, shader_only=shader_only):
+                    nsp.derive_profile(game.Game(self.src), pdir, 'v65536', self.ex, ['main'], shader_only=shader_only)
+                (self.src / 'README.md').write_text('I documented the source build.\n')
+                derive()
+                nsp.set_keys(game.Game(pdir), {'mem_used': ('0x4800000', 'rewritten modules')}, 'After the rewrite')
+                (pdir / 'shader_map.tsv').write_text('# private computed shader split\n')
+                (pdir / 'heap-check.key').write_text('completed heap check\n')
+                before = {p.name: p.read_bytes() for p in pdir.iterdir() if p.is_file()}
+                for name in ('README.md', 'README.es.md', 'NOTES.MD'):
+                    note = self.src / name
+                    note.write_text('I checked a later scene.\n'); derive()
+                    self.assertEqual({p.name: p.read_bytes() for p in pdir.iterdir() if p.is_file()}, before)
+                    note.unlink(); derive()
+                    self.assertEqual({p.name: p.read_bytes() for p in pdir.iterdir() if p.is_file()}, before)
+                table = self.src / 'shader_facts_manual.tsv'
+                table.write_text('k\t{"manual": 2}\n'); derive()
+                self.assertNotIn('mem_used', [k for k, _ in game.Game(pdir).rows])
+                self.assertFalse((pdir / 'shader_map.tsv').exists())
+                self.assertFalse((pdir / 'heap-check.key').exists())
+                table.write_text('k\t{"manual": 1}\n')
+
     def test_changed_inputs_derive_again(self):
         changes = {
             'source game.tsv': lambda: (self.src / 'game.tsv').write_text((self.src / 'game.tsv').read_text() + 'pad_layout\tfull\n'),
@@ -667,7 +692,7 @@ class LayerShaders(Base):
         with mock.patch.object(nsp,'run',side_effect=translate),mock.patch.object(nsp,'toolchain',return_value=()),mock.patch.object(nsp.shutil,'which',return_value='/glslangValidator'),mock.patch.object(nsp.subprocess,'run',return_value=mock.Mock(stdout='compiler',stderr='')):
             for api,build in (('vk',nsp.build_vk_shaders),('gl',nsp.build_gl_shaders)):
                 sh=self.tmp/api;roots=[self.ex/'RomFS']+([self.ex/'ExeFS/main'] if api=='gl' else [])
-                def go():build(sys.executable,REPO,roots,sh,{'WORK':str(self.tmp),'PATH':''},logs,g,mac=True)
+                def go(build=build,roots=roots,sh=sh):build(sys.executable,REPO,roots,sh,{'WORK':str(self.tmp),'PATH':''},logs,g,mac=True)
                 before=len(runs);go();self.assertEqual(len(runs),before+1)
                 for name in ('README.md','README.es.md','NOTES.MD'):
                     (g.dir/name).write_text('I documented this scene.\n');go();self.assertEqual(len(runs),before+1)
