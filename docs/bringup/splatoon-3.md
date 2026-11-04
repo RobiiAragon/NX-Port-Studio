@@ -2,6 +2,8 @@
 
 My separate [LAN/local-wireless audit](splatoon-3-local-network.md) records the title's actual network modes, imported ABI, native protocol-selector correction and outstanding physical peer tests. Those checks do not establish a local or online match.
 
+My [November 4 Mac acceptance note](../../dm/games/0100C2500FC20000/README.md#mac-acceptance-on-november-4-2026) records the newer `9f3f6be1` result: I passed the title, entered the lobby and tour, created my player card and entered the Nextendo matchmaking queue. Severe graphics corruption remains, and I have not completed a match. The metadata receipt and current limits are recorded there; the diagnostic sequence below describes the earlier bring-up.
+
 On November 2, 2026, I began a private macOS bring-up of my own Splatoon 3 **11.3.0** dump (`0100C2500FC20000`, main build `28c4287aee36f7499da60f3e68b54c70`, SDK **20.5.22**). This note records a backend finding; it does not register a complete game profile or establish a playable export.
 
 I compiled all 31,218 shader libraries with the existing translation chain `a7dbbce711c3`. A full pipeline-archive prebuild failed inside Apple's compiler. I therefore ran one private graphical diagnostic with the documented `--gpu none` and `DM_PSO_PREBUILD=0` options: the archive and eager prebuild were omitted, while normal Metal rendering and all shader libraries remained available. This diagnostic is not a correction or a stable release. I also corrected [documentation-only cache invalidation](../reference/packing.md#editing-a-profile-note-repeats-shader-preparation): updating this profile's note had unnecessarily revisited all 31,218 cached base shaders and their side variants during a backend-only iteration.

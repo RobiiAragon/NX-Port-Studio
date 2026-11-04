@@ -1,6 +1,6 @@
 # Splatoon 3 (`0100C2500FC20000`)
 
-I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. I reached character creation, the tutorial, the train transition and the plaza in earlier private Mac diagnostics. **This profile remains experimental:** I observed serious color/texture corruption after returning from the online lobby, and the connection failed with `2321-4992`. I have not qualified a completed Nextendo, LAN or LDN match, iPhone rendering, DLC gameplay or a long session.
+I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. In my latest Mac test of candidate `9f3f6be1`, I passed the title screen, entered the lobby and its tour, created my player card, and entered the Nextendo matchmaking queue. **This profile remains experimental:** severe graphics corruption persisted during that run, and I have not completed a match. Earlier diagnostics reached character creation, the tutorial, the train transition and the plaza, then failed a lobby connection with `2321-4992`; that older error is not the result of this new queue attempt. Nextendo match completion, LAN/LDN discovery and matches, iPhone rendering, DLC gameplay and long-session stability remain unqualified.
 
 I record the detailed bring-up evidence and remaining tests in [Splatoon 3 bring-up](../../../docs/bringup/splatoon-3.md) and [local-network requirements](../../../docs/bringup/splatoon-3-local-network.md). Passing backend fixtures and recognizing a server profile do not establish working multiplayer in this game.
 
@@ -42,11 +42,17 @@ I check the versioned [calendar recipe](../../../docs/reference/nextendo-bcat.md
 
 Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Stick** there. I keep these protocols separate: native LAN uses IP sockets, while the LDN bridge requires a compatible IP peer/module. Two ordinary windows on one Mac do not establish two independent endpoints. I have not qualified discovery, joining, both host roles or a completed local match for this profile.
 
+## Mac acceptance on November 4, 2026
+
+I tested the installed Mac application built from `9f3f6be1`. I advanced beyond the title, entered the lobby, completed its tour, created my player card and started the Nextendo matchmaking queue. The picture became severely corrupted during this sequence. I have not finished an online match or established the cause of the remaining graphics defect.
+
+My bounded, metadata-only capture contained **7,384 ordinary log lines**, with no crash marker at capture time. Native account availability was one; no account-preparation or returned account-operation error was recorded. Friends creator command 0 returned success, the canonical friends API returned **HTTP 200**, and **2,893 socket operations** were recorded. No LDN event was recorded. These facts establish the observed startup/lobby progress and that API response, without qualifying matchmaking completion, a LAN/LDN session, hourly credential rotation or long-session stability. No token, account ID, payload, raw crash report or live-memory inspection was needed for this receipt.
+
 ## Found on this game
 
-- [A game credential is reused for account APIs](../../../docs/reference/services.md#a-game-credential-is-reused-for-account-apis): I reproduced and separated the host social OAuth bearer from the NEX game proof in synthetic decoder/transport tests. The bridge checks actual granted scopes; current service acceptance remains to be tested.
+- [A game credential is reused for account APIs](../../../docs/reference/services.md#a-game-credential-is-reused-for-account-apis): I separated the host social OAuth bearer from the NEX game proof in synthetic decoder/transport tests. The installed `9f3f6be1` test recorded a real friends API HTTP 200; other permissions and completed gameplay remain unqualified.
 
-- [Friends IPC initialization needs real objects and completion events](../../../docs/reference/services.md#friends-ipc-initialization-needs-real-objects-and-completion-events): the 11.3.0 SDK's lazy friends initializer reached unsupported `friend:u` after Play. The typed creator/event bridge passes synthetic IPC/kernel regressions; runtime launch and multiplayer validation remain open.
+- [Friends IPC initialization needs real objects and completion events](../../../docs/reference/services.md#friends-ipc-initialization-needs-real-objects-and-completion-events): the earlier 11.3.0 initializer reached unsupported `friend:u` after Play. My installed `9f3f6be1` candidate passed the title and reached the lobby/queue, with creator command 0 succeeding. The broader IPC surface and completed multiplayer remain open.
 
 I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
 
@@ -64,6 +70,6 @@ I reproduced [the local nickname hook ignoring a validated identity snapshot](..
 
 I corrected [retention and renewal of the provider's OAuth grant](../../../docs/reference/services.md#a-linked-nextendo-account-expires-and-forces-browser-sign-in-again) in the shared account service, with synthetic production-coordinator and two-process checks. The actual service must still accept the application's consent/refresh, and updated ports must be rebuilt; I do not treat this as a completed Splatoon 3 online session or a graphics fix.
 
-I ran the [Mac account transaction before SDK startup](../../../docs/reference/services.md#packed-mac-launch-does-not-prepare-a-renewable-game-account-before-sdk-startup) in candidate `d55215fb` after ordinary sign-in. Preparation reported no error and native account availability became one with a valid NEX record. Play then closed before the title screen at unsupported `friend:u` initialization. The typed IPC and host OAuth changes still need a rebuilt game test; I have not qualified an online session or observed a real hourly refresh/rotation.
+I ran the [Mac account transaction before SDK startup](../../../docs/reference/services.md#packed-mac-launch-does-not-prepare-a-renewable-game-account-before-sdk-startup) in the installed `9f3f6be1` candidate. I observed the [lobby and queue milestone above](#mac-acceptance-on-november-4-2026), with no preparation error in the captured ordinary prefix. I have not qualified a completed online match or observed a real hourly refresh/rotation.
 
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.
