@@ -175,6 +175,69 @@ static void trace_tests(void) {
     text=trace_capture_end(capture); unsigned lines=0; for(char *p=text;*p;p++) if(*p=='\n')lines++;
     CHECK(preserved==E2BIG && lines+previousLines==128 && strstr(text,"op=acc.available result=0x9000"),"four independent 32-event budgets preserve account evidence after NIFM polling and preserve errno"); free(text); unsetenv("DM_ACCOUNT_TRACE");
 }
+static void return_trace_tests(void) {
+    typedef uint32_t (*Ensure)(const void *);
+    typedef uint32_t (*Id)(uint64_t *,const void *);
+    typedef uint32_t (*Load)(uint64_t *,char *,uint64_t,const void *);
+    typedef uint32_t (*Async)(void *,const void *);
+    Ensure ensure=H(Ensure,"_ZN2nn7account36EnsureNetworkServiceAccountAvailableERKNS0_10UserHandleE");
+    Id getId=H(Id,"_ZN2nn7account26GetNetworkServiceAccountIdEPNS0_23NetworkServiceAccountIdERKNS0_10UserHandleE");
+    Load load=H(Load,"_ZN2nn7account37LoadNetworkServiceAccountIdTokenCacheEPmPcmRKNS0_10UserHandleE");
+    Async async=H(Async,"_ZN2nn7account44EnsureNetworkServiceAccountIdTokenCacheAsyncEPNS0_12AsyncContextERKNS0_10UserHandleE");
+    NSMutableDictionary *record=valid_record(); record[@"scopes"]=@[@"RETURN_TRACE_SECRET_SENTINEL"];
+    uint64_t wrong[3]={user[0]^1,user[1],user[2]}, id=0, size=0; char bytes[8192];
+    set_record(nil); unsetenv("DM_ACCOUNT_TRACE");
+    TraceCapture capture=trace_capture_begin(); uint32_t baseline=ensure(user); char *text=trace_capture_end(capture);
+    CHECK(baseline==DM_ACCOUNT_FAIL && !*text,"failed account return remains silent without the opt-in flag"); free(text);
+    setenv("DM_ACCOUNT_TRACE","1",1); capture=trace_capture_begin(); int before=atomic_load(&providerCalls);
+    errno=E2BIG; uint32_t invalid=ensure(wrong); int saved=errno;
+    CHECK(invalid==DM_ACCOUNT_FAIL && saved==E2BIG && getId(&id,wrong)==DM_ACCOUNT_FAIL &&
+          load(&size,bytes,sizeof bytes,wrong)==DM_ACCOUNT_FAIL && async(contextA,wrong)==DM_ACCOUNT_FAIL &&
+          atomic_load(&providerCalls)==before,"invalid user-handle traces do not query credentials or change errno");
+    CHECK(ensure(user)==baseline && getId(&id,user)==DM_ACCOUNT_FAIL &&
+          load(&size,bytes,sizeof bytes,user)==DM_ACCOUNT_FAIL && atomic_load(&providerCalls)==before+3,
+          "missing synthetic proof keeps each original failure and exactly one provider query");
+    dm_nextendo_async_construct(contextA);
+    CHECK(async(contextA,user)==0 && dm_nextendo_async_result(contextA)==DM_ACCOUNT_FAIL,
+          "queued token request still reports failure through its completion result");
+    dm_nextendo_async_destroy(contextA);
+    CHECK(dm_nextendo_async_result(contextA)==DM_ACCOUNT_FAIL && dm_nextendo_async_ensure(NULL)==DM_ACCOUNT_FAIL,
+          "invalid async state remains an honest failure");
+    set_record(record); dm_nextendo_set_game_version("3.0.5");
+    CHECK(load(&size,bytes,1,user)==DM_ACCOUNT_FAIL && size>1,"short output remains untouched and reports needed size");
+    dm_nextendo_set_game_version("");
+    CHECK(load(&size,bytes,sizeof bytes,user)==DM_ACCOUNT_FAIL,"invalid signing-version state remains a token failure");
+    dm_nextendo_set_game_version("3.0.5");
+    text=trace_capture_end(capture);
+    CHECK(strstr(text,"op=acc.ensure result=0x2a2 stage=1") && strstr(text,"op=acc.id result=0x2a2 stage=1") &&
+          strstr(text,"op=acc.load_token result=0x2a2 stage=1") && strstr(text,"op=acc.async_ensure result=0x2a2 stage=1"),
+          "actual HLE return metadata identifies invalid user handles without publishing identity");
+    CHECK(strstr(text,"op=acc.ensure result=0x2a2 stage=2") && strstr(text,"op=acc.id result=0x2a2 stage=2") &&
+          strstr(text,"op=acc.load_token result=0x2a2 stage=2") && strstr(text,"op=acc.async_ensure result=0x2a2 stage=2") &&
+          strstr(text,"op=acc.load_token result=0x2a2 stage=3") && strstr(text,"op=acc.load_token result=0x2a2 stage=4"),
+          "credential, token and output-buffer failures are distinct numeric stages");
+    CHECK(strstr(text,"op=acc.async_ensure result=0x2a2 stage=6") &&
+          strstr(text,"op=acc.async_result result=0x2a2 stage=7") && strstr(text,"op=acc.async_result result=0x2a2 stage=9"),
+          "async setup, absent context and real completion failure are distinct");
+    CHECK(!strstr(text,"RETURN_TRACE_SECRET_SENTINEL") && !strstr(text,"nx2.") &&
+          !strstr(text,"synthetic_user") && !strstr(text,"1800000042"),"return traces exclude proof, claims, account IDs and user names");
+    unsigned previousLines=0; for(char *p=text;*p;p++) if(*p=='\n')previousLines++; free(text);
+    capture=trace_capture_begin();
+    CHECK(!ensure(user) && !getId(&id,user) && !load(&size,bytes,sizeof bytes,user),"successful synthetic operations keep their actual outputs");
+    text=trace_capture_end(capture); CHECK(!*text,"successful returns do not emit failure metadata"); free(text);
+    capture=trace_capture_begin(); errno=E2BIG; uint32_t returned=dm_account_trace_return(DM_ACCOUNT_RETURN_ID,0x5432,DM_ACCOUNT_STAGE_BAAS_ID); saved=errno;
+    for(unsigned op=0;op<DM_ACCOUNT_RETURN_COUNT;op++) for(unsigned i=0;i<200;i++)
+        dm_account_trace_return((dm_account_trace_return_operation)op,0x9000+i,DM_ACCOUNT_STAGE_ARGUMENT);
+    text=trace_capture_end(capture); unsigned lines=0; for(char *p=text;*p;p++) if(*p=='\n')lines++;
+    CHECK(returned==0x5432 && saved==E2BIG && lines+previousLines==32*DM_ACCOUNT_RETURN_COUNT &&
+          strstr(text,"op=acc.id result=0x5432 stage=5"),"each return operation has its own bounded budget and preserves result/errno"); free(text);
+    capture=trace_capture_begin();
+    dm_account_trace_return((dm_account_trace_return_operation)-1,0x1234,DM_ACCOUNT_STAGE_ARGUMENT);
+    dm_account_trace_return(DM_ACCOUNT_RETURN_COUNT,0x1234,DM_ACCOUNT_STAGE_ARGUMENT);
+    dm_account_trace_return(DM_ACCOUNT_RETURN_ID,0x1234,(dm_account_trace_return_stage)-1);
+    dm_account_trace_return(DM_ACCOUNT_RETURN_ID,0x1234,(dm_account_trace_return_stage)10);
+    text=trace_capture_end(capture); CHECK(!*text,"unknown operation/stage values are not dereferenced or logged"); free(text); unsetenv("DM_ACCOUNT_TRACE");
+}
 static void local_authorization_tests(void) {
     mode=DM_NET_OFFLINE; set_record(valid_record()); int before=atomic_load(&providerCalls); uint8_t available=9;
     CHECK(dm_nextendo_account_authorize_local()==0 && atomic_load(&providerCalls)==before+1,"explicit local authorization validates the real synthetic proof once even with network disabled");
@@ -188,7 +251,7 @@ int main(void) { @autoreleasepool {
     unsetenv("DM_ACCOUNT_TRACE");
     setenv("DM_NEXTENDO_ROUTES","synthetic-account-profile",1);
     dm_nextendo_set_credential_provider(provider); dm_nextendo_set_game_version("3.0.5"); identity_tests(); token_tests(); async_tests();
-    local_authorization_tests(); trace_tests();
+    local_authorization_tests(); trace_tests(); return_trace_tests();
     CHECK(atomic_load(&entered) > 0 && atomic_load(&entered) == atomic_load(&left) && atomic_load(&waits) > 0, "blocking account hooks publish balanced guest contexts and mark host security waits");
     printf("Nextendo account: %d checks, %d failures; synthetic provider only, no user credentials read\n", checks, failures); return failures ? 1 : 0;
 } }
