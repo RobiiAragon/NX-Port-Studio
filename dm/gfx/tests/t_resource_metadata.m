@@ -52,7 +52,9 @@ static void programs_init(void) {
 }
 static void check_volume(const tex_t *texture,int phase,int output) {
     NSError *error=nil;
-    id<MTLComputePipelineState> ps=[g_dev newComputePipelineStateWithFunction:[shaders newFunctionWithName:output?@"read_output":@"read_lut"] error:&error];
+    id<MTLFunction> reader=[shaders newFunctionWithName:output?@"read_output":@"read_lut"];
+    if (!reader) { CHECK(0,"own GPU read function exists"); return; }
+    id<MTLComputePipelineState> ps=[g_dev newComputePipelineStateWithFunction:reader error:&error];
     id<MTLBuffer> result=[g_dev newBufferWithLength:8*8*8*16 options:MTLResourceStorageModeShared];
     id<MTLCommandQueue> queue=[g_dev newCommandQueue];
     CHECK(ps && result && queue,"own volume read resources initialize"); if (!ps || !result || !queue) return;
