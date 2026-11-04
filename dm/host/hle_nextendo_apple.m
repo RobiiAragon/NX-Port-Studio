@@ -89,7 +89,9 @@ static NSData *read_credentials(BOOL allowInteraction, BOOL guestWait) {
     NSString *path = [documents stringByAppendingPathComponent:@"nextendo-account.json"]; if (!path) return credential_rejected(DM_CRED_DOCUMENT_PATH);
     int fd = open(path.fileSystemRepresentation, O_RDONLY | O_CLOEXEC | O_NOFOLLOW); if (fd < 0) return credential_rejected(DM_CRED_DOCUMENT_OPEN);
     struct stat st; if (fstat(fd, &st) || !S_ISREG(st.st_mode) || (st.st_mode & 0777) != 0600 || st.st_uid != geteuid() || st.st_size <= 0 || st.st_size > 65536) { close(fd); return credential_rejected(DM_CRED_DOCUMENT_METADATA); }
-    NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)st.st_size]; size_t done = 0;
+    NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)st.st_size];
+    if (!data) { close(fd); return credential_rejected(DM_CRED_ALLOCATION); }
+    size_t done = 0;
     while (done < data.length) { ssize_t n = read(fd, (char *)data.mutableBytes + done, data.length - done); if (n <= 0) { close(fd); return credential_rejected(DM_CRED_DOCUMENT_READ); } done += (size_t)n; }
     close(fd); return data;
 #else
