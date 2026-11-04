@@ -323,7 +323,10 @@ int main(void) {
     EXPECT("event value: h1(7,+5), then h2 copies and runs h1(7,+5) again = 12", 12, P(nvnEventGetValue)(&ev));
     EXPECT("buffer copy 64 B identical", 0, memcmp(src, dst, 64));
     uint64_t ts[2]; memcpy(ts, cnt, 16);
-    EXPECT("timestamp report: zero counter and nonzero timestamp", 1, ts[0] == 0 && ts[1] != 0);
+    EXPECT("timestamp report: nonzero timestamp", 1, ts[1] != 0);
+    // The documented render_cond policy selects the hardware's zero counter;
+    // profiles without it retain the host's legacy duplicate timestamp field.
+    EXPECT("timestamp report: profile counter field policy", 1, ts[0] == (DM_GAME_RENDER_COND ? 0 : ts[1]));
     NVNcounterData fixed_counter = {0, 614400};
     EXPECT("614400 raw counter ticks = 1 ms", 1000000, P(nvnDeviceGetTimestampInNanoseconds)(&dev, &fixed_counter));
     NVNcounterData reported_counter; memcpy(&reported_counter, cnt, sizeof reported_counter);

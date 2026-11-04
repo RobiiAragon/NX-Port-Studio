@@ -16,6 +16,7 @@ static bool oversized, transport_failed;
 #define CHECK(x) do { checks++; if (!(x)) { failures++; fprintf(stderr,"API check failed at %d\n",__LINE__); } } while (0)
 NSString *dm_nextendo_api_bearer(void) { return linked ? @"synthetic-proof" : nil; }
 NSData *dm_nextendo_api_identity(void) { return nil; }
+bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t generation) { return linked && generation==7 && [proof isEqual:@"synthetic-proof"]; }
 void dm_guest_host_wait_begin(void) {}
 void dm_guest_host_wait_end(void) {}
 static bool transport(const char *url,const char *method,const char *authorization,const uint8_t *body,size_t body_size,
@@ -33,6 +34,9 @@ int main(void) { @autoreleasepool {
     CHECK(!dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size) && size==14);
     CHECK(!dm_nextendo_api_request("me",NULL,0,output,sizeof output,&size));
     CHECK(!dm_nextendo_api_request("presence",(const uint8_t*)"{}",2,output,sizeof output,&size));
+    CHECK(!dm_nextendo_api_request_passive("presence",(const uint8_t*)"{}",2,output,sizeof output,&size,@"synthetic-proof",7));
+    int passive_requests=requests;
+    CHECK(dm_nextendo_api_request_passive("presence",(const uint8_t*)"{}",2,output,sizeof output,&size,@"synthetic-proof",8)!=0 && !size && requests==passive_requests);
     for (unsigned status=300;status<=500;status+=100) { response_status=status; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && !size); }
     response_status=200; oversized=true; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && !size); oversized=false;
     transport_failed=true; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && !size); transport_failed=false;
@@ -44,19 +48,24 @@ int main(void) { @autoreleasepool {
     linked=NO; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0);
     CHECK(before==requests && !size);
     NSURLSession *dummy=[NSURLSession sessionWithConfiguration:NSURLSessionConfiguration.ephemeralSessionConfiguration];
-    NSURLSessionDataTask *dummy_task=[dummy dataTaskWithURL:[NSURL URLWithString:@"https://nextendo.network/api/friends"]]; // never resumed
+    NSURL *dummy_url=[NSURL URLWithString:@"https://nextendo.network/api/friends"];CHECK(dummy_url!=nil);if(!dummy_url)return 1;
+    NSURLSessionDataTask *dummy_task=[dummy dataTaskWithURL:dummy_url]; // never resumed
     DmNextendoApiTransfer *transfer=[DmNextendoApiTransfer new];
-    NSHTTPURLResponse *response=[[NSHTTPURLResponse alloc] initWithURL:[NSURL URLWithString:@"https://nextendo.network/api/friends"] statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:@{@"Content-Length":@"1048577"}];
+    NSHTTPURLResponse *response=[[NSHTTPURLResponse alloc] initWithURL:dummy_url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:@{@"Content-Length":@"1048577"}];
+    CHECK(response!=nil);if(!response)return 1;
     __block BOOL cancelled=NO;
     [transfer URLSession:dummy dataTask:dummy_task didReceiveResponse:response completionHandler:^(NSURLSessionResponseDisposition disposition){cancelled=disposition==NSURLSessionResponseCancel;}];
     CHECK(cancelled&&transfer.failed&&!transfer.data.length);
     transfer=[DmNextendoApiTransfer new];
-    [transfer URLSession:dummy dataTask:dummy_task didReceiveData:[NSMutableData dataWithLength:1024*1024]];
+    NSMutableData *large_data=[NSMutableData dataWithLength:1024*1024];CHECK(large_data!=nil);if(!large_data)return 1;
+    [transfer URLSession:dummy dataTask:dummy_task didReceiveData:large_data];
     CHECK(!transfer.failed&&transfer.data.length==1024*1024);
-    [transfer URLSession:dummy dataTask:dummy_task didReceiveData:[NSData dataWithBytes:"X" length:1]];
+    NSData *extra_data=[NSData dataWithBytes:"X" length:1];CHECK(extra_data!=nil);if(!extra_data)return 1;
+    [transfer URLSession:dummy dataTask:dummy_task didReceiveData:extra_data];
     CHECK(transfer.failed&&transfer.data.length==1024*1024);
     transfer=[DmNextendoApiTransfer new];__block BOOL redirect_refused=NO;
-    [transfer URLSession:dummy task:dummy_task willPerformHTTPRedirection:response newRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"https://untrusted.invalid/"]] completionHandler:^(NSURLRequest *request){redirect_refused=request==nil;}];
+    NSURL *redirect_url=[NSURL URLWithString:@"https://untrusted.invalid/"];CHECK(redirect_url!=nil);if(!redirect_url)return 1;
+    [transfer URLSession:dummy task:dummy_task willPerformHTTPRedirection:response newRequest:[NSURLRequest requestWithURL:redirect_url] completionHandler:^(NSURLRequest *request){redirect_refused=request==nil;}];
     CHECK(redirect_refused&&transfer.failed);
     [transfer URLSession:dummy task:dummy_task didCompleteWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]];
     CHECK(transfer.failed&&dispatch_semaphore_wait(transfer.completed,DISPATCH_TIME_NOW)==0);

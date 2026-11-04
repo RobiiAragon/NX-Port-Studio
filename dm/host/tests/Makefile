@@ -517,12 +517,12 @@ ssl-sanitize: $(B)/t_ssl_asan $(B)/t_ssl_trace_asan
 	$(PYTHON) test_ssl_transport.py $(B)/t_ssl_asan
 
 ACCOUNT_SOURCES = t_nextendo_account.m ../hle_account.c ../hle_account_trace.c ../hle_nextendo_apple.m ../hle_nextendo_preflight_mac.c ../hle_nextendo_api_apple.m ../hle_bigstack.c ../entry.S
-ACCOUNT_DEPS = t_gate_fixture.h t_trace_capture.h ../account_trace.h $(ACCOUNT_SOURCES) ../nextendo_account.h ../nextendo_preflight_mac.h ../net_socket.h ../hle.h $(GAME_H)
+ACCOUNT_DEPS = t_gate_fixture.h t_trace_capture.h ../nextendo_api_apple.h ../account_trace.h $(ACCOUNT_SOURCES) ../nextendo_account.h ../nextendo_preflight_mac.h ../net_socket.h ../hle.h $(GAME_H)
 $(B)/t_nextendo_account: $(ACCOUNT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -o $@ $(ACCOUNT_SOURCES) -framework Foundation -framework Security -framework LocalAuthentication
 $(B)/t_nextendo_account_asan: $(ACCOUNT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer -o $@ $(ACCOUNT_SOURCES) -framework Foundation -framework Security -framework LocalAuthentication
-PREFLIGHT_DEPS = ../hle_nextendo_apple.m ../hle_account_trace.c ../account_trace.h ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h ../nextendo_account.h ../net_socket.h
+PREFLIGHT_DEPS = ../nextendo_api_apple.h ../hle_nextendo_apple.m ../hle_account_trace.c ../account_trace.h ../hle_nextendo_preflight_mac.c ../nextendo_preflight_mac.h ../nextendo_account.h ../net_socket.h
 $(B)/t_nextendo_preflight: t_nextendo_preflight.m $(PREFLIGHT_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -o $@ t_nextendo_preflight.m ../hle_nextendo_preflight_mac.c ../hle_account_trace.c -framework Foundation -framework Security -framework LocalAuthentication
 $(B)/t_nextendo_preflight_asan: t_nextendo_preflight.m $(PREFLIGHT_DEPS) | $(B)
@@ -593,10 +593,25 @@ $(B)/t_nextendo_social: $(SOCIAL_SOURCES) ../nextendo_social.h ../nextendo_api_a
 $(B)/t_nextendo_social_asan: $(SOCIAL_SOURCES) ../nextendo_social.h ../nextendo_api_apple.h | $(B)
 	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -Isocial_profile -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(SOCIAL_SOURCES) -framework Foundation
 .PHONY: nextendo-social nextendo-social-sanitize
-nextendo-social: $(B)/t_nextendo_social
+nextendo-social: $(B)/t_nextendo_social $(B)/t_nextendo_passive
 	$(B)/t_nextendo_social
-nextendo-social-sanitize: $(B)/t_nextendo_social_asan
+	$(B)/t_nextendo_passive
+nextendo-social-sanitize: $(B)/t_nextendo_social_asan $(B)/t_nextendo_passive_asan
 	$(B)/t_nextendo_social_asan
+	$(ASAN_ENV) $(B)/t_nextendo_passive_asan
+
+# Passive presence uses a validated process-local proof, never storage access.
+PASSIVE_SOCIAL_SOURCES = t_nextendo_passive.m ../hle_nextendo_api_apple.m ../hle_nextendo_social_apple.m
+PASSIVE_SOCIAL_DEPS = Makefile social_profile/game_profile.h $(PASSIVE_SOCIAL_SOURCES) ../hle_nextendo_apple.m ../nextendo_account.h ../nextendo_api_apple.h ../nextendo_social.h ../net_socket.h ../nextendo_preflight_mac.h ../account_trace.h ../hle_account_trace.c
+$(B)/t_nextendo_passive: $(PASSIVE_SOCIAL_DEPS) | $(B)
+	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -Isocial_profile -o $@ $(PASSIVE_SOCIAL_SOURCES) ../hle_account_trace.c -framework Foundation -framework Security -framework LocalAuthentication
+$(B)/t_nextendo_passive_asan: $(PASSIVE_SOCIAL_DEPS) | $(B)
+	$(CLANG) -O1 -g -fobjc-arc -Wall -Wextra -Werror -DDM_NEXTENDO_API_TEST -Isocial_profile $(ASAN_FLAGS) -o $@ $(PASSIVE_SOCIAL_SOURCES) ../hle_account_trace.c -framework Foundation -framework Security -framework LocalAuthentication
+.PHONY: nextendo-passive nextendo-passive-sanitize
+nextendo-passive: $(B)/t_nextendo_passive
+	$(B)/t_nextendo_passive
+nextendo-passive-sanitize: $(B)/t_nextendo_passive_asan
+	$(ASAN_ENV) $(B)/t_nextendo_passive_asan
 
 # A native blocking notification wait must release the thread's guest core.
 $(B)/t_notify_sched: t_notify_sched.c t_condvar_stub.c ../hle_thread.c ../hle_oe.c ../hle.h ../dm.h $(GAME_H) | $(B)

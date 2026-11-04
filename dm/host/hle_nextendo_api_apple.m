@@ -95,14 +95,15 @@ static dm_nextendo_api_transport test_transport;
 void dm_nextendo_api_test_transport(dm_nextendo_api_transport transport) { test_transport = transport; }
 #endif
 
-uint32_t dm_nextendo_api_request(const char *resource, const uint8_t *body, size_t body_size,
-                               uint8_t *output, size_t capacity, size_t *output_size) { @autoreleasepool {
+static uint32_t api_request(const char *resource, const uint8_t *body, size_t body_size,
+    uint8_t *output, size_t capacity, size_t *output_size, NSString *proof, uint64_t generation, bool passive) { @autoreleasepool {
     if (output_size) *output_size = 0;
     if (!resource || !output || !output_size || !capacity || capacity > API_MAX || body_size > 4096 || (body_size && !body)) return DM_ACCOUNT_FAIL;
     BOOL presence = !strcmp(resource,"presence");
     if (!presence && strcmp(resource,"friends") && strcmp(resource,"me")) return DM_ACCOUNT_FAIL;
     if ((!presence && body_size) || (presence && !body_size)) return DM_ACCOUNT_FAIL;
-    NSString *proof = dm_nextendo_api_bearer(); if (!proof.length) return DM_ACCOUNT_FAIL;
+    if (!passive) proof = dm_nextendo_api_bearer();
+    if (!proof.length || (passive && !dm_nextendo_api_passive_valid(proof, generation))) return DM_ACCOUNT_FAIL;
     NSString *authorization = [@"Bearer " stringByAppendingString:proof];
     NSString *resourceName = [NSString stringWithUTF8String:resource]; if (!resourceName) return DM_ACCOUNT_FAIL;
     NSString *url = [@"https://nextendo.network/api/" stringByAppendingString:resourceName];
@@ -111,7 +112,7 @@ uint32_t dm_nextendo_api_request(const char *resource, const uint8_t *body, size
     if (test_transport) {
         size_t size = 0; unsigned status = 0;
         if (!test_transport(url.UTF8String,method.UTF8String,authorization.UTF8String,body,body_size,output,capacity,&size,&status) ||
-            status < 200 || status >= 300 || size > capacity) return DM_ACCOUNT_FAIL;
+            status < 200 || status >= 300 || size > capacity || (passive && !dm_nextendo_api_passive_valid(proof, generation))) return DM_ACCOUNT_FAIL;
         *output_size = size; return 0;
     }
 #endif
@@ -132,7 +133,17 @@ uint32_t dm_nextendo_api_request(const char *resource, const uint8_t *body, size
     if (timed_out) { [task cancel]; [session invalidateAndCancel]; return DM_ACCOUNT_FAIL; }
     [transfer.lock lock];
     BOOL valid = !transfer.failed && transfer.status >= 200 && transfer.status < 300 && transfer.data.length <= capacity;
+    valid = valid && (!passive || dm_nextendo_api_passive_valid(proof, generation));
     if (valid) { memcpy(output,transfer.data.bytes,transfer.data.length); *output_size = transfer.data.length; }
     [transfer.lock unlock]; [session finishTasksAndInvalidate];
     return valid ? 0 : DM_ACCOUNT_FAIL;
 } }
+
+uint32_t dm_nextendo_api_request(const char *resource, const uint8_t *body, size_t body_size,
+    uint8_t *output, size_t capacity, size_t *output_size) {
+    return api_request(resource,body,body_size,output,capacity,output_size,nil,0,false);
+}
+uint32_t dm_nextendo_api_request_passive(const char *resource, const uint8_t *body, size_t body_size,
+    uint8_t *output, size_t capacity, size_t *output_size, NSString *proof, uint64_t generation) {
+    return api_request(resource,body,body_size,output,capacity,output_size,proof,generation,true);
+}

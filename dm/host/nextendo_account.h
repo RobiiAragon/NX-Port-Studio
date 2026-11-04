@@ -9,6 +9,9 @@ enum { DM_ACCOUNT_OK = 0, DM_ACCOUNT_FAIL = 0x2a2 };
 // into the bounded caller buffer. No token is accepted through the environment.
 typedef bool (*dm_nextendo_credential_provider)(uint8_t *buffer, size_t capacity, size_t *size);
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider);
+// A host that signs out/replaces stored credentials in this process must invalidate
+// passive social authorization. This does not read storage or revoke a server token.
+void dm_nextendo_account_invalidate_social(void);
 // Bundle metadata is read from the original game's CFBundleShortVersionString.
 // An embedding host may provide its actual version before guest startup (not an update substitute).
 void dm_nextendo_set_game_version(const char *version);

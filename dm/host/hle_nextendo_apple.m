@@ -123,6 +123,52 @@ static DmNextendoCredential *decode_credential(NSData *data) {
     id scopes = json[@"scopes"]; if (![scopes isKindOfClass:NSArray.class] || [scopes count] > 128) return nil; for (id scope in scopes) if (![scope isKindOfClass:NSString.class] || [scope length] > 256) return nil;
     DmNextendoCredential *c = [DmNextendoCredential new]; c.pid = pid; c.username = username; c.token = token; c.expiry = until; return c;
 }
+// A passive social operation never reads the Keychain, a device document or an
+// embedding provider. Only an already validated explicit read can populate this
+// process-local snapshot. No raw JSON or token is persisted by this cache.
+static pthread_mutex_t socialCredentialLock = PTHREAD_MUTEX_INITIALIZER;
+static DmNextendoCredential *socialCredential;
+static uint64_t socialGeneration;
+static void social_lock(void) {
+    if (!pthread_mutex_trylock(&socialCredentialLock)) return;
+    dm_guest_host_wait_begin(); pthread_mutex_lock(&socialCredentialLock); dm_guest_host_wait_end();
+}
+static uint64_t social_reset_locked(void) {
+    socialCredential = nil;
+    if (!++socialGeneration) ++socialGeneration;
+    return socialGeneration;
+}
+void dm_nextendo_account_invalidate_social(void) {
+    social_lock(); social_reset_locked(); pthread_mutex_unlock(&socialCredentialLock);
+}
+static uint64_t social_begin_explicit(void) {
+    social_lock(); uint64_t generation = social_reset_locked(); pthread_mutex_unlock(&socialCredentialLock);
+    return generation;
+}
+static void social_remember(DmNextendoCredential *credential, uint64_t generation) {
+    social_lock();
+    if (generation == socialGeneration) socialCredential = credential;
+    pthread_mutex_unlock(&socialCredentialLock);
+}
+NSString *dm_nextendo_api_passive_bearer(uint64_t *generation) {
+    if (!generation) return nil;
+    *generation = 0;
+    if (!enabled()) return nil;
+    social_lock();
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    if (socialCredential && (!isfinite(now) || !isfinite(socialCredential.expiry) || socialCredential.expiry <= now)) social_reset_locked();
+    NSString *proof = socialCredential.token;
+    if (proof) *generation = socialGeneration;
+    pthread_mutex_unlock(&socialCredentialLock); return proof;
+}
+bool dm_nextendo_api_passive_valid(NSString *proof, uint64_t generation) {
+    if (!proof || !generation || !enabled()) return false;
+    social_lock();
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    BOOL valid = generation == socialGeneration && socialCredential && isfinite(now) &&
+        isfinite(socialCredential.expiry) && socialCredential.expiry > now && [socialCredential.token isEqual:proof];
+    pthread_mutex_unlock(&socialCredentialLock); return valid;
+}
 static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) {
     BOOL guestWait=YES;
 #if !TARGET_OS_IOS
@@ -130,14 +176,20 @@ static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) 
 #endif
     return enabled() ? decode_credential(read_credentials(allowInteraction,guestWait)) : nil;
 }
-static DmNextendoCredential *credential(void) { DmNextendoCredential *c = credential_with_interaction(YES); atomic_fetch_add(&preflightGeneration, 1); return c; }
+static DmNextendoCredential *credential(void) {
+    uint64_t generation = social_begin_explicit();
+    DmNextendoCredential *c = credential_with_interaction(YES);
+    social_remember(c, generation); atomic_fetch_add(&preflightGeneration, 1); return c;
+}
 uint32_t dm_nextendo_account_authorize_local(void) { @autoreleasepool {
+    uint64_t generation = social_begin_explicit();
     DmNextendoCredential *c=decode_credential(read_credentials(YES,NO));
-    atomic_fetch_add(&preflightGeneration,1); return c ? 0 : DM_ACCOUNT_FAIL;
+    social_remember(c, generation); atomic_fetch_add(&preflightGeneration,1); return c ? 0 : DM_ACCOUNT_FAIL;
 } }
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) {
     atomic_fetch_add(&preflightGeneration, 1);
-    atomic_store(&credentialProvider, provider); pthread_mutex_lock(&accountLock); cachedFingerprint = nil; cachedToken = nil; cachedVersion = nil; cachedExpiry = 0; pthread_mutex_unlock(&accountLock);
+    social_lock(); social_reset_locked(); atomic_store(&credentialProvider, provider); pthread_mutex_unlock(&socialCredentialLock);
+    pthread_mutex_lock(&accountLock); cachedFingerprint = nil; cachedToken = nil; cachedVersion = nil; cachedExpiry = 0; pthread_mutex_unlock(&accountLock);
 }
 void dm_nextendo_set_game_version(const char *version) {
     NSString *value = version ? [NSString stringWithUTF8String:version] : nil;
