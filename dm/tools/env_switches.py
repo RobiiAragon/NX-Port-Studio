@@ -23,6 +23,14 @@ def tracked():
     return [p for p in out if p and 'third_party' not in p.split('/')]
 
 
+def enum_constants(text):
+    """C enum members are constants too, not environment reads. Only member
+    declarations count; an enum type's name and its value references do not."""
+    text = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
+    bodies = re.findall(r'\benum(?:\s+\w+)?\s*\{([^{}]*)\}', text, re.S)
+    return {name for body in bodies for name in re.findall(r'(?:^|,)\s*(' + NAME + r')(?=\s*(?:=|,|$))', body)}
+
+
 def scan():
     """({switch: files that read it}, {name quoted in the docs: docs})"""
     reads, docs, macros, direct = {}, {}, set(), set()
@@ -34,8 +42,10 @@ def scan():
             for n in set(re.findall(r'`(' + NAME + r')', text)): docs.setdefault(n, set()).add(p)
             continue
         if not p.endswith(CODE) and not p.startswith('scripts/'): continue
-        # names the code defines as preprocessor macros (the generated profile header's DM_GAME_*, host constants) are not switches, unless something also reads
+        # Preprocessor macros and enum members (profile and host constants) are
+        # not switches unless something also reads
         # them from the environment (DM_GAME_ENV, which overrides the profile's macro of that name)
+        macros |= enum_constants(text)
         macros |= set(re.findall(r'#\s*define\s+(' + NAME + r')', text))
         if '/tests/' in p:   # a test's own switches only; the names in its fixtures are data
             found = re.findall(READ, text)
