@@ -402,6 +402,14 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
 - **Fix:** partial colour texture clears use the existing clear-triangle shaders in a load/store pass, with the requested channel mask and rectangle. The viewport comes from the selected mip, the region selects the slices or depth planes, and the current draw scissor does not affect the operation. Whole-level whole-channel clears keep the load-action path. `t_clear_tex` checks pixel and channel preservation, mip/layer selection, integer values, an empty mask and the whole-clear path under Metal validation.
 - **Found on:** [Persona 5 Royal](../../dm/games/01005CA01580E000/README.md), the opening casino.
 
+### Pending attachment clears precede an explicit texture clear
+
+- **Symptom:** I reproduced a newer whole or partial `ClearTexture` being overwritten by an earlier `ClearColor`, including in a submission with no draw.
+- **Cause:** a full attachment clear can wait in `R.clear_c` for the next render pass's load action. `clear_tex` ended an open encoder but did not land those pending clears. Its explicit clear reached the GPU first; the next draw or submission commit then applied the older attachment clear over it. The partial-clear triangle path had the same ordering gap.
+- **Fix:** `clear_tex` calls `rp_flush` before resolving the destination or invalidating its zero-content facts. This lands earlier attachment clears before either explicit clear path, preserving command order and the later invalidation of zero-source bookkeeping.
+- **Check:** my authored `t_clear_order` replays real commands and checks GPU pixels against literal colors. It covers whole/partial clears, reverse order, another texture, another mip and a clear-only submission; its draw opens a real render pass with channel writes disabled. The old renderer fails three cases. The corrected renderer passes all 57 checks both normally and with ASan/UBSan, under Metal validation. Existing whole/partial texture, depth/stencil and D16 clear fixtures also pass.
+- **Found on:** my synthetic GPU fixture during the [Splatoon 3 investigation](../../dm/games/0100C2500FC20000/README.md#found-on-this-game). I have not established that this command sequence causes the game's lobby-return corruption or tested the fix in the game.
+
 ### Scissored colour clears
 
 - **Cause:** NVN `ClearColor` honours the scissor. Clears are normally folded into the next pass's load action, which only works for a full-target clear; Mario clears sub-rectangles of small targets to zero (pyramid levels packed into 480×272, 256×256 and 64×36 targets).
