@@ -2,6 +2,17 @@
 
 The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. Each entry: symptom, cause, fix, the games it was found on. The [symptom index](../agents/symptoms.md) lists every symptom.
 
+## Diagnostics
+
+### Resource metadata without content dumps
+
+- **Symptom:** investigating a render transition needs the identity and shape of a resource written by one shader and sampled by another, without inspecting buffer or texture content.
+- **Cause:** existing pass / key / texture-info dumps also read payloads, so their output is broader than this question needs.
+- **Method:** `DM_NVN_RESOURCE_TRACE_KEYS=0123456789abcdef,fedcba9876543210` opts into at most 32 metadata changes for up to 16 comma-separated 16-hex shader keys. A malformed list disables the mode. Configuration is parsed once at the first ordinary resource hook, after the Mac bundle environment is loaded, rather than in `mtl_init` (which may run in a dylib constructor). No game gate or shader-chain change is involved.
+- **Output:** `[nvn-resource]` lines contain key, host frame/pass, stage/role/slot, registered serial/descriptor ID (`-1` for attachments), and numeric Metal type/format/extents/mip/slice/plane facts. The actual render-pass descriptor supplies `depthPlane` separately from array `slice`. The trace uses resources already resolved by normal replay: it does not read uniforms/pixels, print addresses, resolve additional descriptors, retain resources or submit GPU work. Keep `PASSDUMP`, `KEYDUMP`, `CBDUMP` and `TEXINFO` off when this limited contract is required; those are separate content-inspecting modes.
+- **Limits:** frame/pass alone do not consume the cap. Content changes with identical metadata produce no new line. Only ordinary `TEX` and scalar `TEXU` bindings are recorded when normal argument encoding resolves them; bindless arrays and reused argument buffers are not enumerated. Different serials can alias; matching serials do not prove content or shader math. This is a diagnostic, not a demonstrated game-rendering correction.
+- **Check:** I used own 8³ R11G11B10F MRT planes and a 3D consumer: all literal GPU outputs and ordinary texture-query, descriptor-resolution, view-creation and command counts match with tracing off/on. The pure helper checks invalid settings, the process-wide 32-change cap, metadata equality and output fields. Metal validation and ASan/UBSan pass. The GPU fixture sets the keys after `mtl_init`, as bundle launch does. No original game shaders or payloads are in the fixture.
+
 ## Textures and formats
 
 ### Null textures in diagnostic logs
