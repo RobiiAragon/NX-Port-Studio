@@ -157,7 +157,7 @@ static int ldn_read_peer(dm_ldn_context *c, int i) {
 static void ldn_read_udp(dm_ldn_context *c) {
     uint8_t data[DM_LDN_PACKET_MAX + 1], payload[sizeof(dm_ldn_network)]; struct sockaddr_in from; socklen_t len = sizeof from;
     ssize_t size = recvfrom(c->udp, data, sizeof data, 0, (struct sockaddr *)&from, &len); unsigned type;
-    if (size < 12 || size > DM_LDN_PACKET_MAX || from.sin_family != AF_INET) return;
+    if (size < 12 || size > DM_LDN_PACKET_MAX || from.sin_family != AF_INET || !dm_net_local_session_source(from.sin_addr.s_addr)) return;
     int n = dm_ldn_packet_decode(data, (size_t)size, &type, payload, sizeof payload); if (n < 0) return;
     if (type == DM_LDN_SCAN && c->state == LDN_CREATED && !(from.sin_addr.s_addr == c->transport.address && ntohs(from.sin_port) == c->transport.port)) {
         int count = dm_ldn_packet_encode(data, sizeof data, DM_LDN_SCAN_RESPONSE, &c->network, sizeof c->network, 1);
@@ -205,7 +205,9 @@ static void *ldn_worker(void *opaque) {
         }
         if (fds[1].revents & POLLIN) ldn_read_udp(c);
         if (fds[2].revents & POLLIN && c->listener == fds[2].fd) {
-            int fd = accept(c->listener, NULL, NULL);
+            struct sockaddr_in source; socklen_t source_size = sizeof source;
+            int fd = accept(c->listener, (struct sockaddr *)&source, &source_size);
+            if (fd >= 0 && !dm_net_local_session_source(source.sin_addr.s_addr)) { close(fd); fd = -1; }
             if (fd >= 0) { int slot = -1; for (int i = 1; i < c->network.max_nodes; ++i) if (c->peers[i].fd < 0) { slot = i; break; }
                 ldn_trace("tcp-accept slot=%d state=%d policy=%u", slot, c->state, c->network.accept_policy);
                 if (slot < 0 || c->state != LDN_CREATED || c->network.accept_policy == 1) close(fd);
@@ -230,6 +232,16 @@ static void *ldn_worker(void *opaque) {
 }
 dm_ldn_context *dm_ldn_start(const dm_ldn_transport *t, dm_ldn_notify notify, void *opaque) {
     if (!t || !t->address || !t->mask || !t->port || !t->discovery_port || !t->scan_ms || !t->connect_ms) return NULL;
+    if (dm_net_local_session_begin()) return NULL;
+    dm_net_local_session session; int local = dm_net_local_session_get(&session);
+    dm_ldn_transport selected = *t;
+    if (local < 0) return NULL;
+    if (local) {
+        if (t->address != session.own || (t->bind_address && t->bind_address != session.own)) return NULL;
+        if (dm_net_local_session_route(&selected.discovery, 1, 0) < 0) return NULL;
+        selected.mask = session.mask; selected.bind_address = session.own; selected.discovery = session.peer;
+        t = &selected;
+    }
     ldn_trace("start port=%u discovery-port=%u scan-ms=%u connect-ms=%u multicast=%d", t->port, t->discovery_port, t->scan_ms, t->connect_ms, dm_net_multicast_allowed());
     dm_ldn_context *c = calloc(1, sizeof *c); if (!c) return NULL;
     c->transport = *t; c->notify = notify; c->opaque = opaque; c->udp = c->listener = c->wake[0] = c->wake[1] = -1;
@@ -326,6 +338,7 @@ uint32_t dm_ldn_connect(dm_ldn_context *c, const dm_ldn_network *network, const 
     pthread_mutex_lock(&c->lock); if (c->state != LDN_STATION || c->peers[0].fd >= 0) { pthread_mutex_unlock(&c->lock); return LDN_INVALID_STATE; }
     struct sockaddr_in dest = ldn_endpoint(htonl(network->nodes[0].ip), 11452);
     for (int i = 0; i < c->room_count; ++i) if (!memcmp(&network->id, &c->rooms[i].network.id, sizeof network->id)) dest = c->rooms[i].endpoint;
+    if (dm_net_local_session_route(&dest.sin_addr.s_addr, 0, 0) < 0) { pthread_mutex_unlock(&c->lock); return LDN_CONNECT_FAILED; }
     int fd = socket(AF_INET, SOCK_STREAM, 0); if (fd < 0) { pthread_mutex_unlock(&c->lock); return LDN_CONNECT_FAILED; }
     ldn_nonblock(fd); struct sockaddr_in local = ldn_endpoint(c->transport.address, 0);
     if (bind(fd, (struct sockaddr *)&local, sizeof local)) { close(fd); pthread_mutex_unlock(&c->lock); return LDN_CONNECT_FAILED; }

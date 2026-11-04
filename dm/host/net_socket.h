@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include "net_discovery.h"
+#include "net_local_session.h"
 
 typedef struct { int32_t fd; int16_t events, revents; } dm_net_pollfd;
 typedef struct { void *base; uint64_t size; } dm_net_iovec;

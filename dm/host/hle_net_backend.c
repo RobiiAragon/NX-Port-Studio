@@ -71,7 +71,8 @@ void dm_net_test_set_interface(const dm_net_test_interface *p) {
 static __thread int t_net_errno = 100; // Horizon's BSD service and nn::socket expose Linux errno numbers (not Darwin's).
 static void net_resolver_finalize(void);
 
-dm_net_mode_t dm_net_mode(void) {
+#include "net_local_session.inc"
+static dm_net_mode_t net_mode_environment(void) {
 #if TARGET_OS_OSX || TARGET_OS_IOS
     const char *s = getenv("DM_NETWORK");
     if (s && !strcmp(s, "lan")) return DM_NET_LAN;
@@ -82,6 +83,12 @@ dm_net_mode_t dm_net_mode(void) {
 #else
     return DM_NET_OFFLINE;
 #endif
+}
+dm_net_mode_t dm_net_mode(void) {
+    dm_net_mode_t mode = net_mode_environment();
+    int local=atomic_load_explicit(&g_local_session_state,memory_order_acquire);
+    if (local == -1 || (local == 1 && !local_session_mode())) return DM_NET_OFFLINE;
+    return mode;
 }
 int dm_net_enabled(void) { return dm_net_mode() != DM_NET_OFFLINE; }
 void dm_net_set_multicast_allowed(int allowed) { atomic_store(&g_net_multicast_allowed, !!allowed); }
@@ -101,6 +108,9 @@ static int net_discovery_unicast_plan(dm_net_discovery_plan *p) {
 int dm_net_discovery_prepare(uint32_t destination, dm_net_discovery_plan *p) {
     if (!p) { dm_net_set_errno(14); return -1; }
     memset(p, 0, sizeof *p);
+    int local = dm_net_local_session_route(&destination, 1, 0);
+    if (local < 0) return -1;
+    if (local) { p->target = destination; p->count = 1; return 0; }
     const char *peer = getenv("DM_NET_DISCOVERY_PEER");
     if (peer && *peer) {
         struct in_addr address;
@@ -139,6 +149,7 @@ static int net_is_discovery(uint32_t address, int type) {
 }
 int dm_net_discovery_supplement(uint32_t destination,dm_net_discovery_plan *plan) {
     if(!plan)return 0;memset(plan,0,sizeof *plan);
+    if (dm_net_local_session_get(NULL)) return 0;
     const char *peer=getenv("DM_NET_DISCOVERY_PEER");dm_net_mode_t mode=dm_net_mode();
     if(!dm_net_multicast_allowed()||(peer&&*peer)||(mode!=DM_NET_LAN&&mode!=DM_NET_LDN&&mode!=DM_NET_AUTO)||!net_is_discovery(destination,2))return 0;
     int saved=t_net_errno,result=!net_discovery_unicast_plan(plan);t_net_errno=saved;return result;
@@ -249,6 +260,7 @@ int dm_net_socket(int family, int type, int protocol) {
     if (flags & ~0x20000000u) return net_error(22);
     if (base != 1 && base != 2) return net_error(94);
     if (protocol && protocol != (base == 1 ? 6 : 17)) return net_error(93);
+    if (dm_net_local_session_begin()) return -1;
     int fd = socket(AF_INET, base == 1 ? SOCK_STREAM : SOCK_DGRAM, protocol), err = errno;
     int result = fd < 0 ? net_error(net_errno(err)) : net_register(fd, base, !!flags);
     net_trace("socket", result, result); return result;
@@ -283,7 +295,7 @@ int dm_net_close_generation(int guest, uint64_t generation) { return net_close_o
 void dm_net_finalize(void) { net_resolver_finalize(); for (int i = 0; i < NET_MAX; i++) { pthread_mutex_lock(&g_net_lock); int used = g_sockets[i].used; pthread_mutex_unlock(&g_net_lock); if (used) net_close_owned(i, 0, 0); } }
 int dm_net_bind(int guest, const void *addr, unsigned len) {
     if (!net_gate()) return -1;
-    struct sockaddr_in a; if (net_addr_in(addr, len, &a)) return -1;
+    struct sockaddr_in a; if (net_addr_in(addr, len, &a) || dm_net_local_session_route(&a.sin_addr.s_addr, 0, 1) < 0) return -1;
     net_ref r; if (net_borrow(guest, &r)) return -1;
     int result = bind(r.fd, (struct sockaddr *)&a, sizeof a), err = errno; close(r.fd);
     result = net_host_result(result, err); net_trace("bind", guest, result); return result;
@@ -292,6 +304,7 @@ int dm_net_connect(int guest, const void *addr, unsigned len) {
     if (!net_gate()) return -1;
     struct sockaddr_in a; if (net_addr_in(addr, len, &a)) return -1;
     net_ref r; if (net_borrow(guest, &r)) return -1;
+    if (dm_net_local_session_route(&a.sin_addr.s_addr, r.type == 2, 0) < 0 || local_session_prepare_fd(r.fd)) { close(r.fd); return -1; }
     if (net_is_discovery(a.sin_addr.s_addr, r.type) && dm_net_discovery_target(a.sin_addr.s_addr, &a.sin_addr.s_addr)) { close(r.fd); return -1; }
     uint64_t start = net_ms(); int result = connect(r.fd, (struct sockaddr *)&a, sizeof a), err = errno;
     if (result < 0 && err == EINPROGRESS && !r.nonblock) {
@@ -300,7 +313,7 @@ int dm_net_connect(int guest, const void *addr, unsigned len) {
     } else result = net_host_result(result, err);
     close(r.fd); net_trace("connect", guest, result); return result;
 }
-int dm_net_listen(int guest, int backlog) { net_ref r; if (net_borrow(guest, &r)) return -1; int result = listen(r.fd, backlog), err = errno; close(r.fd); return net_host_result(result, err); }
+int dm_net_listen(int guest, int backlog) { net_ref r; if (net_borrow(guest, &r)) return -1; if (local_session_prepare_fd(r.fd)) { close(r.fd); return -1; } int result = listen(r.fd, backlog), err = errno; close(r.fd); return net_host_result(result, err); }
 int dm_net_accept(int guest, void *addr, unsigned *len) {
     if (!net_gate() || net_addr_output_ok(addr, len)) return -1;
     net_ref r; if (net_borrow(guest, &r)) return -1;
@@ -314,6 +327,7 @@ int dm_net_accept(int guest, void *addr, unsigned *len) {
     }
     close(r.fd);
     if (fd < 0) return -1;
+    if (!dm_net_local_session_source(a.sin_addr.s_addr)) { close(fd); return net_error(13); }
     int result = net_register(fd, 1, r.nonblock);
     if (result >= 0) net_addr_out(addr, len, &a);
     return result;
@@ -374,13 +388,24 @@ long dm_net_recv(int guest, void *buf, unsigned long len, int flags, void *addr,
     net_ref r; if (net_borrow(guest, &r)) return -1;
     if ((flags & 0x40) && (flags & 2)) { close(r.fd); return net_error(95); } // PEEK+WAITALL would need a separate buffered transport.
     uint64_t start = net_ms(); long result = -1; size_t total = 0;
-    struct sockaddr_in a;
+    struct sockaddr_in a = {0};
+    int isolated = r.type == 2 && dm_net_local_session_get(NULL) > 0;
+    size_t scratch_size = len > 65535 ? 65535 : len;
+    void *scratch = isolated ? malloc(scratch_size ? scratch_size : 1) : NULL;
+    if (isolated && !scratch) { close(r.fd); return net_error(12); }
     for (;;) {
         // Kernel copyout cannot fault into the dirty-page signal hook. A wait or
         // partial stream read may allow the renderer to protect this span again.
-        dm_guest_write_prepare(buf ? (char *)buf + total : NULL, len - total);
-        socklen_t n = sizeof a; ssize_t got = recvfrom(r.fd, buf ? (char *)buf + total : NULL, len - total, hostflags, addr ? (struct sockaddr *)&a : NULL, addr ? &n : NULL); int err = errno;
+        if (!isolated) dm_guest_write_prepare(buf ? (char *)buf + total : NULL, len - total);
+        socklen_t n = sizeof a; ssize_t got = recvfrom(r.fd, isolated ? scratch : buf ? (char *)buf + total : NULL,
+            isolated ? (scratch_size ? scratch_size : 1) : len - total, hostflags, addr || isolated ? (struct sockaddr *)&a : NULL, addr || isolated ? &n : NULL); int err = errno;
         if (got >= 0) {
+            if (isolated && (a.sin_family != AF_INET || !dm_net_local_session_source(a.sin_addr.s_addr))) { result = net_error(13); break; }
+            // Darwin's zero-capacity UDP call returns before dequeueing or
+            // reporting a source. One private byte preserves arrival/source
+            // admission while exposing zero payload bytes to the caller.
+            if (isolated && !len) got = 0;
+            if (isolated && got && net_guest_copyout(buf, scratch, (size_t)got)) { result = -1; break; }
             total += (size_t)got; result = (long)total;
             if (addr) net_addr_out(addr, addrlen, &a);
             if (!got || r.type != 1 || !(flags & 0x40) || r.nonblock || (flags & 0x80) || total == len) break;
@@ -389,7 +414,7 @@ long dm_net_recv(int guest, void *buf, unsigned long len, int flags, void *addr,
         if (err != EAGAIN || r.nonblock || (flags & 0x80)) { if (!total) result = net_error(net_errno(err)); break; }
         if (net_wait(&r, POLLIN, r.recv_ms, start)) { if (!total) result = -1; break; }
     }
-    close(r.fd); net_trace("recv", guest, result); return result;
+    free(scratch); close(r.fd); net_trace("recv", guest, result); return result;
 }
 long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const void *addr, unsigned addrlen) {
     if (!net_gate()) return -1;
@@ -398,6 +423,7 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
     struct sockaddr_in a; if (addr && net_addr_in(addr, addrlen, &a)) return -1;
     int hostflags = net_message_flags(flags, 1); if (hostflags < 0) return -1;
     net_ref r; if (net_borrow(guest, &r)) return -1;
+    if (local_session_send_fd(r.fd, r.type == 2, addr ? &a : NULL)) { close(r.fd); return -1; }
     int discovery=addr&&net_is_discovery(a.sin_addr.s_addr,r.type);
     if (discovery) {
         dm_net_discovery_plan plan;
@@ -468,6 +494,8 @@ static int net_option(int level, int option, int *hostlevel, int *hostoption, un
 static int net_sockopt_impl(int guest, int level, int option, void *value, unsigned *len, int set) {
     if (!net_gate()) return -1;
     if (!value || !len) return net_error(14);
+    if (dm_net_local_session_get(NULL) > 0 && set &&
+        ((level == 0 && (option == 12 || option == 13)) || (level == 0xffff && option == 512))) return net_error(95);
     if (set && level == 0 && option == 12 && !dm_net_multicast_allowed()) return net_error(13);
     net_ref r; if (net_borrow(guest, &r)) return -1;
     if (level == 0xffff && (option == 0x1005 || option == 0x1006)) {
@@ -643,6 +671,15 @@ static void net_ai_destroy(net_ai_allocation *p) { if (p) { for (size_t i = 0; i
 static int net_resolver_name(const char *host, int flags, char expanded[DM_NSD_FQDN_CAPACITY],
                              char redirected[INET_ADDRSTRLEN], const char **lookup) {
     *lookup = host;
+    dm_net_local_session session; int local = dm_net_local_session_get(&session);
+    if (local) {
+        struct in_addr literal;
+        if (local < 0) return 8;
+        if (!host) { if (!inet_ntop(AF_INET, &session.own, redirected, INET_ADDRSTRLEN)) return 8; *lookup = redirected; return 0; }
+        if (inet_pton(AF_INET, host, &literal) != 1 ||
+            (literal.s_addr != session.own && literal.s_addr != session.peer)) return 8;
+        return 0; // No hostname/DNS policy or service provider is invoked.
+    }
     if (dm_net_nextendo_enabled() && host) {
         struct in_addr literal; int numeric = inet_pton(AF_INET, host, &literal) == 1;
         if (!numeric && (flags & 4)) return 8;
@@ -995,6 +1032,13 @@ int dm_net_ipconfig(uint32_t *address, uint32_t *mask, uint32_t *gateway, uint32
     uint32_t values[5] = {0}; uint32_t *outputs[] = {address, mask, gateway, dns1, dns2};
     for (int i = 0; i < 5; i++) if (outputs[i]) *outputs[i] = 0;
     if (!dm_net_enabled()) return -1;
+    dm_net_local_session session; int local_session = dm_net_local_session_get(&session);
+    if (local_session) {
+        if (local_session < 0) return -1;
+        if (address) *address = session.own; if (mask) *mask = session.mask;
+        atomic_store(&g_net_broadcast, session.own | ~session.mask); atomic_store(&g_net_broadcast_known, 1);
+        return 0;
+    }
     net_interface adapter;
     dm_net_mode_t mode = dm_net_mode();
     if (net_interface_get(&adapter, mode == DM_NET_LAN || mode == DM_NET_LDN)) return -1;
