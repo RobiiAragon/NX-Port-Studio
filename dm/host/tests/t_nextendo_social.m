@@ -15,8 +15,8 @@ static uint32_t constructor[]={0x52804002,0x2a1f03e1,0x14000000};
 static uint32_t presence_constructor[]={0x52801c02,0x2a1f03e1,0x14000000};
 static uint32_t nick[]={0x91006000,0xd65f03c0},presence[]={0x91010000,0xd65f03c0},account[]={0xf9400800,0xd65f03c0},valid[]={0x3944a000,0xd65f03c0},favorite[]={0x39448000,0xd65f03c0};
 #define CHECK(x) do{checks++;if(!(x)){failures++;fprintf(stderr,"social check failed line %d\n",__LINE__);}}while(0)
-NSString *dm_nextendo_api_bearer(void){credential_reads++;return linked?@"synthetic-social-proof":nil;}
-NSData *dm_nextendo_api_identity(void){credential_reads++;return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
+NSString *dm_nextendo_api_bearer(const char *resource){(void)resource;credential_reads++;return linked?@"synthetic-social-proof":nil;}
+NSData *dm_nextendo_api_identity(const char *resource){(void)resource;credential_reads++;return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
 NSString *dm_nextendo_api_passive_bearer(uint64_t *value){if(value)*value=linked?generation:0;return linked?@"synthetic-social-proof":nil;}
 bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t value){return linked&&value==generation&&[proof isEqual:@"synthetic-social-proof"];}
 void dm_guest_host_wait_begin(void){} void dm_guest_host_wait_end(void){}

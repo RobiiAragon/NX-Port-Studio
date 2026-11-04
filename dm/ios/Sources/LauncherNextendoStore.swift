@@ -23,6 +23,7 @@ struct MobileNextendoNativeLegacy: MobileNextendoLegacyReading {
 /// Keychain wins even when it contains scoped OAuth rather than NEX. Legacy JSON
 /// is only a validated migration source; no second credential authority remains.
 struct MobileNextendoCredentialStore: NextendoCredentialStore, @unchecked Sendable {
+    func acquireExclusiveLease() async throws -> any NextendoCredentialLease { try await keychain.acquireExclusiveLease() }
     private let keychain: any NextendoCredentialStore
     private let legacy: any MobileNextendoLegacyReading
     private let preferences: UserDefaults

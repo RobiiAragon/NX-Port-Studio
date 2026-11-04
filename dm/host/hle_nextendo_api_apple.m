@@ -2,6 +2,7 @@
 // This uses normal system TLS, with no cookies, redirects or alternate origins.
 #import "nextendo_api_apple.h"
 #include "nextendo_account.h"
+#include "account_trace.h"
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -33,7 +34,7 @@ bool dm_nextendo_api_baas_namespace(const char *kind) { @autoreleasepool {
 
 uint32_t dm_nextendo_api_baas_id(uint64_t *output) { @autoreleasepool {
     if (!output) return DM_ACCOUNT_FAIL; *output = 0;
-    NSData *identity = dm_nextendo_api_identity(); if (!identity) return DM_ACCOUNT_FAIL;
+    NSData *identity = dm_nextendo_api_identity("me"); if (!identity) return DM_ACCOUNT_FAIL;
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; static NSData *cached_identity; static uint64_t cached_id;
     pthread_mutex_lock(&mutex); uint64_t existing = [cached_identity isEqual:identity] ? cached_id : 0; pthread_mutex_unlock(&mutex);
     if (existing) { *output=existing; return 0; }
@@ -42,7 +43,7 @@ uint32_t dm_nextendo_api_baas_id(uint64_t *output) { @autoreleasepool {
     NSData *bytes=result?nil:[NSData dataWithBytes:buffer length:size]; free(buffer);
     id document=bytes?[NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil]:nil;
     id field=[document isKindOfClass:NSDictionary.class]?document[@"nsa"]:nil;
-    if (![field isKindOfClass:NSString.class] || ![field length] || [field length]>16 || ![identity isEqual:dm_nextendo_api_identity()]) return DM_ACCOUNT_FAIL;
+    if (![field isKindOfClass:NSString.class] || ![field length] || [field length]>16 || ![identity isEqual:dm_nextendo_api_identity("me")]) return DM_ACCOUNT_FAIL;
     uint64_t value=0;
     for (NSUInteger i=0;i<[field length];i++) { unichar c=[field characterAtIndex:i]; unsigned digit;
         if (c>='0' && c<='9') digit=c-'0'; else if(c>='a' && c<='f') digit=c-'a'+10; else if(c>='A' && c<='F') digit=c-'A'+10; else return DM_ACCOUNT_FAIL;
@@ -101,8 +102,9 @@ static uint32_t api_request(const char *resource, const uint8_t *body, size_t bo
     if (!resource || !output || !output_size || !capacity || capacity > API_MAX || body_size > 4096 || (body_size && !body)) return DM_ACCOUNT_FAIL;
     BOOL presence = !strcmp(resource,"presence");
     if (!presence && strcmp(resource,"friends") && strcmp(resource,"me")) return DM_ACCOUNT_FAIL;
-    if ((!presence && body_size) || (presence && !body_size)) return DM_ACCOUNT_FAIL;
-    if (!passive) proof = dm_nextendo_api_bearer();
+    dm_account_trace_api_operation operation=presence?DM_ACCOUNT_API_PRESENCE:!strcmp(resource,"friends")?DM_ACCOUNT_API_FRIENDS:DM_ACCOUNT_API_ME;
+    if ((!presence && (body_size||passive)) || (presence && !body_size)) return DM_ACCOUNT_FAIL;
+    if (!passive) proof = dm_nextendo_api_bearer(resource);
     if (!proof.length || (passive && !dm_nextendo_api_passive_valid(proof, generation))) return DM_ACCOUNT_FAIL;
     NSString *authorization = [@"Bearer " stringByAppendingString:proof];
     NSString *resourceName = [NSString stringWithUTF8String:resource]; if (!resourceName) return DM_ACCOUNT_FAIL;
@@ -111,7 +113,9 @@ static uint32_t api_request(const char *resource, const uint8_t *body, size_t bo
 #ifdef DM_NEXTENDO_API_TEST
     if (test_transport) {
         size_t size = 0; unsigned status = 0;
-        if (!test_transport(url.UTF8String,method.UTF8String,authorization.UTF8String,body,body_size,output,capacity,&size,&status) ||
+        bool transferred=test_transport(url.UTF8String,method.UTF8String,authorization.UTF8String,body,body_size,output,capacity,&size,&status);
+        dm_account_trace_api(operation,status);
+        if (!transferred ||
             status < 200 || status >= 300 || size > capacity || (passive && !dm_nextendo_api_passive_valid(proof, generation))) return DM_ACCOUNT_FAIL;
         *output_size = size; return 0;
     }
@@ -130,12 +134,14 @@ static uint32_t api_request(const char *resource, const uint8_t *body, size_t bo
     NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration delegate:transfer delegateQueue:nil];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request]; [task resume];
     dm_guest_host_wait_begin(); long timed_out = dispatch_semaphore_wait(transfer.completed,dispatch_time(DISPATCH_TIME_NOW,15 * NSEC_PER_SEC)); dm_guest_host_wait_end();
-    if (timed_out) { [task cancel]; [session invalidateAndCancel]; return DM_ACCOUNT_FAIL; }
+    if (timed_out) { [task cancel]; [session invalidateAndCancel]; dm_account_trace_api(operation,0);return DM_ACCOUNT_FAIL; }
     [transfer.lock lock];
     BOOL valid = !transfer.failed && transfer.status >= 200 && transfer.status < 300 && transfer.data.length <= capacity;
+    unsigned status=transfer.status>=100&&transfer.status<=599?(unsigned)transfer.status:0;
     valid = valid && (!passive || dm_nextendo_api_passive_valid(proof, generation));
     if (valid) { memcpy(output,transfer.data.bytes,transfer.data.length); *output_size = transfer.data.length; }
     [transfer.lock unlock]; [session finishTasksAndInvalidate];
+    dm_account_trace_api(operation,status);
     return valid ? 0 : DM_ACCOUNT_FAIL;
 } }
 

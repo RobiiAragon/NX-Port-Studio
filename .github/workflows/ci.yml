@@ -54,6 +54,7 @@ jobs:
           dm.tools.tests.test_nextendo_local_peers
           dm.tools.tests.test_env_switches
           dm.tools.tests.test_nextendo_patches
+          dm.tools.tests.test_nextendo_renewal
           dm.tools.tests.test_dotnet_environment
           dm.tools.tests.test_nsp_nsz
           dm.tools.tests.test_nso_syms
@@ -64,6 +65,7 @@ jobs:
           dm.tools.tests.test_display_mods
           dm.ios.tests.test_launcher_storage
           dm.ios.tests.test_mobile_nextendo
+          dm.ios.tests.test_game_account_preparation
           dm.ios.tests.test_nextendo_resources
           dm.ios.tests.test_nextendo_embed
           tools.maintainers.test_prepare_export
@@ -75,7 +77,7 @@ jobs:
           DM_SAVE_ARCHIVE_SANITIZE=1 python3 dm/host/tests/test_save_archives.py
       - name: Native save controls / both Apple SDKs
         run: |
-          xcrun swiftc -typecheck -swift-version 5 -target arm64-apple-macos26.0 -import-objc-header dm/host/save_archive.h dm/mac/Launcher.swift dm/ios/Sources/LauncherSettings.swift dm/ios/Sources/LauncherRow.swift dm/ios/Sources/LauncherLocalization.swift dm/ios/Sources/LauncherSavesView.swift
+          xcrun swiftc -typecheck -swift-version 5 -target arm64-apple-macos26.0 -import-objc-header dm/host/save_archive.h dm/mac/Launcher.swift dm/mac/GameAccount.swift macOS/NXPortStudio/Sources/PortCore/NextendoAccount.swift macOS/NXPortStudio/Sources/PortCore/NextendoLoopback.swift dm/ios/Sources/LauncherSettings.swift dm/ios/Sources/LauncherRow.swift dm/ios/Sources/LauncherLocalization.swift dm/ios/Sources/LauncherSavesView.swift
           xcrun --sdk iphoneos swiftc -typecheck -swift-version 5 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" -target arm64-apple-ios26.0 -import-objc-header dm/ios/Sources/DmIOS-Bridging-Header.h dm/ios/Sources/LauncherLocalization.swift dm/ios/Sources/LauncherSavesView.swift
       - name: Personal Mii database / synthetic records and sanitizers
         run: make -C dm/host/tests GAME=0100152000022000 mii mii-sanitize
