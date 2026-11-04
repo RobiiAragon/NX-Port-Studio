@@ -17,6 +17,8 @@ static uint32_t nick[]={0x91006000,0xd65f03c0},presence[]={0x91010000,0xd65f03c0
 #define CHECK(x) do{checks++;if(!(x)){failures++;fprintf(stderr,"social check failed line %d\n",__LINE__);}}while(0)
 NSString *dm_nextendo_api_bearer(void){credential_reads++;return linked?@"synthetic-social-proof":nil;}
 NSData *dm_nextendo_api_identity(void){credential_reads++;return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
+NSString *dm_nextendo_api_passive_bearer(uint64_t *value){if(value)*value=linked?generation:0;return linked?@"synthetic-social-proof":nil;}
+bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t value){return linked&&value==generation&&[proof isEqual:@"synthetic-social-proof"];}
 void dm_guest_host_wait_begin(void){} void dm_guest_host_wait_end(void){}
 dm_net_mode_t dm_net_mode(void){return mode;}
 int dm_account_uid_exists(const void *value){return local_present&&value&&!memcmp(value,uid,16);}
