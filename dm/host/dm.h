@@ -136,6 +136,12 @@ void hle_clear_system_event(void *g);    // hle_thread.c: clear a bound service-
 int hle_signal_bound_system_event(void *g);   // hle_thread.c: signal a service-layer SystemEvent only if it is bound (any thread); 0 when it is not
 uint64_t hle_system_event_binding(void *g);   // Opaque lifetime ID of a binding, 0 if unbound; a rebind gets a new ID even if its address and handle are reused
 int hle_signal_system_event_binding(uint64_t binding);   // Signal only this binding lifetime (any thread); 0 after its write handle closes
+// Server-owned IPC completion events. The opaque binding owns the write end;
+// each copy allocates a separate client read handle. No guest SDK callback.
+uint32_t hle_service_event_create(uint64_t *binding);
+uint32_t hle_service_event_copy(uint64_t binding, uint32_t *read_handle);
+void hle_service_event_close(uint64_t binding);
+int hle_service_event_clear(uint64_t binding);
 // Page fault hook / hook before the host writes guest memory (crash.c; used for write-protect dirty page tracking)
 void dm_fault_hook_register(int (*fn)(void *addr, int is_write, void *uc));
 void dm_guest_write_prep_register(void (*fn)(void *addr, size_t len));

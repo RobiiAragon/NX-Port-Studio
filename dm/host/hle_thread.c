@@ -39,6 +39,7 @@ static int g_nse;
 static uint64_t g_next_se_id = 1;   // g_se_lock: binding identity survives neither address nor handle reuse
 static pthread_mutex_t g_se_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t se_find(void *ev) {   // caller holds g_se_lock
+    if (!ev) return 0;   // server-owned IPC bindings have no guest SystemEvent
     for (int i = 0; i < g_nse; i++) if (g_se[i].ev == ev) return g_se[i].wh;
     return 0;
 }
@@ -1133,6 +1134,69 @@ static int svc_thread_impl(int num, uint64_t *regs) {
 }
 
 // ---------- SystemEvent of the service layer ----------
+// Native IPC services own a write end and return separately owned read handles.
+// Reuse the binding lifetime checked by completion producers; a late completion
+// must not signal a new event after a handle number has been recycled.
+uint32_t hle_service_event_create(uint64_t *binding) {
+    if (!binding) return R_BAD_STATE;
+    event_t *event = calloc(1, sizeof *event);
+    if (!event) return R_OUT_OF_RES;
+    pthread_mutex_lock(&G);
+    unsigned slot = 1; while (slot < MAX_H && g_h[slot].type) slot++;
+    pthread_mutex_lock(&g_se_lock);
+    uint32_t result = slot == MAX_H || g_nse == (int)(sizeof g_se / sizeof *g_se) ? R_OUT_OF_RES : 0;
+    if (!result) {
+        event->refs = 1;
+        uint32_t handle = h_new(O_EVENT_W, event);
+        uint64_t id = g_next_se_id++;
+        g_se[g_nse].ev = NULL; g_se[g_nse].wh = handle; g_se[g_nse++].id = id;
+        *binding = id;
+    }
+    pthread_mutex_unlock(&g_se_lock); pthread_mutex_unlock(&G);
+    if (result) free(event);
+    return result;
+}
+uint32_t hle_service_event_copy(uint64_t binding, uint32_t *read_handle) {
+    if (!binding || !read_handle) return R_BAD_HANDLE;
+    pthread_mutex_lock(&G);
+    uint32_t write_handle = 0;
+    pthread_mutex_lock(&g_se_lock);
+    for (int i = 0; i < g_nse; i++) if (g_se[i].id == binding && !g_se[i].ev) { write_handle = g_se[i].wh; break; }
+    pthread_mutex_unlock(&g_se_lock);
+    event_t *event = write_handle ? h_peek(write_handle, O_EVENT_W) : NULL;
+    unsigned slot = 1; while (slot < MAX_H && g_h[slot].type) slot++;
+    uint32_t result = !event ? R_BAD_HANDLE : slot == MAX_H ? R_OUT_OF_RES : 0;
+    if (!result) { event->refs++; *read_handle = h_new(O_EVENT_R, event); }
+    pthread_mutex_unlock(&G);
+    return result;
+}
+void hle_service_event_close(uint64_t binding) {
+    if (!binding) return;
+    pthread_mutex_lock(&G);
+    uint32_t write_handle = 0;
+    pthread_mutex_lock(&g_se_lock);
+    for (int i = 0; i < g_nse; i++) if (g_se[i].id == binding && !g_se[i].ev) { write_handle = g_se[i].wh; break; }
+    pthread_mutex_unlock(&g_se_lock);
+    event_t *event = write_handle ? h_peek(write_handle, O_EVENT_W) : NULL;
+    if (event) {
+        se_unbind(write_handle);
+        unsigned slot = write_handle - 0x1000;
+        g_h[slot].type = O_FREE; g_h[slot].obj = NULL;
+        if (!--event->refs) free(event);
+    }
+    pthread_mutex_unlock(&G);
+}
+int hle_service_event_clear(uint64_t binding) {
+    pthread_mutex_lock(&G);
+    uint32_t write_handle = 0;
+    pthread_mutex_lock(&g_se_lock);
+    for (int i = 0; i < g_nse; i++) if (g_se[i].id == binding && !g_se[i].ev) { write_handle = g_se[i].wh; break; }
+    pthread_mutex_unlock(&g_se_lock);
+    event_t *event = write_handle ? h_peek(write_handle, O_EVENT_W) : NULL;
+    if (event) event->signaled = 0;
+    pthread_mutex_unlock(&G);
+    return event != NULL;
+}
 // Real device: the service hands the read end of a kernel event to the client, and the guest waits on it through SDK nn::os. Host: on a guest thread, call the SDK's own
 // CreateSystemEvent(inter-process=true), and the SDK creates the kernel event through SVC 0x45; the write-end handle is recorded, after which any thread (including the host audio thread) can signal it.
 // The binding table (g_se) sits with the handle table at the top: CloseHandle unbinds through it

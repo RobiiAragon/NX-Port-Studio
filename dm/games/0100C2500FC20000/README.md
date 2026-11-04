@@ -44,6 +44,8 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 ## Found on this game
 
+- [Friends IPC initialization needs real objects and completion events](../../../docs/reference/services.md#friends-ipc-initialization-needs-real-objects-and-completion-events): the 11.3.0 SDK's lazy friends initializer reached unsupported `friend:u` after Play. The typed creator/event bridge passes synthetic IPC/kernel regressions; runtime launch and multiplayer validation remain open.
+
 I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
 
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.
