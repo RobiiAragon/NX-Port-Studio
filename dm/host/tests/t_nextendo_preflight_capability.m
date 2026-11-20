@@ -33,10 +33,10 @@ static bool fixtureProvider(uint8_t *buffer,size_t capacity,size_t *size) {
 }
 #define CHECK(c,message) do { checks++;if (!(c)) { fprintf(stderr,"Preflight capability failure: %s\n",message);return 1;} } while(0)
 int main(int argc,char **argv) { @autoreleasepool {
-    if (argc==2 && !strcmp(argv[1],DM_NEXTENDO_PREFLIGHT_ARG)) {
+    if (argc==2 && (!strcmp(argv[1],DM_NEXTENDO_PREFLIGHT_ARG) || !strcmp(argv[1],DM_NEXTENDO_PREFLIGHT_DIAGNOSTIC_ARG))) {
         if (inheritedPrivateEnvironment) return 70;
         dm_nextendo_set_credential_provider(fixtureProvider);
-        return dm_nextendo_account_preflight_child(DM_NEXTENDO_PREFLIGHT_FD);
+        return !strcmp(argv[1],DM_NEXTENDO_PREFLIGHT_DIAGNOSTIC_ARG) ? dm_nextendo_account_preflight_diagnostic_child(DM_NEXTENDO_PREFLIGHT_FD) : dm_nextendo_account_preflight_child(DM_NEXTENDO_PREFLIGHT_FD);
     }
     unsetenv("DM_NEXTENDO_ROUTES");setenv("DM_NETWORK","auto",1);
     dm_nextendo_set_credential_provider(fixtureProvider);uint8_t available=9;
@@ -49,7 +49,7 @@ int main(int argc,char **argv) { @autoreleasepool {
     dm_nextendo_set_credential_provider(NULL);available=9;
     CHECK(!dm_nextendo_account_available(&available) && available,"configured parent receives a usable result from its route-free bounded child");
     dm_nextendo_preflight_status status=dm_nextendo_preflight_last_status();
-    CHECK(status.stage==DM_PREFLIGHT_DONE && status.bytes==sizeof(dm_nextendo_preflight_reply) && !status.exit_code && !status.signal,"actual child returns the complete validated protocol and exits cleanly");
+    CHECK(status.stage==DM_PREFLIGHT_DONE && status.bytes==sizeof(dm_nextendo_preflight_reply)+sizeof(dm_nextendo_preflight_diagnostic) && status.credential.reason==DM_CRED_OK && !status.credential.security_status && !status.exit_code && !status.signal,"actual child returns the complete validated opt-in protocol and exits cleanly");
     CHECK(dm_net_mode()==DM_NET_AUTO && !strcmp(getenv("DM_NEXTENDO_ROUTES"),"parent-only-profile"),"the child capability never changes the parent's mode/profile");
     CHECK(!atomic_load(&providerCalls),"parent never reads a credential in the passive probe path");
     unsetenv("DM_NEXTENDO_ROUTES");available=9;

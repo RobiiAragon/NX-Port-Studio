@@ -276,6 +276,7 @@ public actor NextendoAccountService {
     private struct Pending: Sendable {
         let id: UUID, configuration: NextendoOAuthConfiguration, redirect: URL, verifier: String, state: String, expiresAt: Date
     }
+    private enum GameCredentialOperation: Sendable { case signIn(UUID), upgrade(UUID) }
     private let store: any NextendoCredentialStore
     private let http: any NextendoHTTPClient
     private let makeReceiver: @Sendable () throws -> any NextendoCallbackReceiver
@@ -302,28 +303,39 @@ public actor NextendoAccountService {
     public func upgradeGameCredential() async throws -> NextendoAccountSummary {
         guard operationID == nil, gameCredentialRequestID == nil, let session = try store.load(), !session.summary(at: now()).isExpired else { throw NextendoError.authorizationUnavailable }
         if session.tokenKind == .nex { return session.summary(at: now()) }
-        guard session.scopes.contains("identity") else { throw NextendoError.authorizationDenied }
         let id = UUID(); gameCredentialRequestID = id
         defer { if gameCredentialRequestID == id { gameCredentialRequestID = nil } }
+        let next = try await gameCredential(using: session, operation: .upgrade(id))
+        guard try store.load() == session else { throw NextendoError.authorizationUnavailable }
+        try store.save(next)
+        return next.summary(at: now())
+    }
+    private func checkGameCredentialOperation(_ operation: GameCredentialOperation, session: NextendoSession) throws {
+        try Task.checkCancellation()
+        switch operation {
+        case .signIn(let id): guard operationID == id else { throw CancellationError() }
+        case .upgrade(let id): guard gameCredentialRequestID == id else { throw CancellationError() }
+        }
+        guard !session.summary(at: now()).isExpired else { throw NextendoError.authorizationExpired }
+    }
+    private func gameCredential(using session: NextendoSession, operation: GameCredentialOperation) async throws -> NextendoSession {
+        try checkGameCredentialOperation(operation, session: session)
+        guard session.tokenKind == .oauth, session.scopes.contains("identity") else { throw NextendoError.authorizationDenied }
         func get(_ path: String) async throws -> NextendoHTTPResponse {
             var request = URLRequest(url: URL(string: "https://nextendo.network")!.appendingPathComponent(path))
             request.httpMethod = "GET"; request.setValue("Bearer " + session.token, forHTTPHeaderField: "Authorization")
             do { return try await http.send(request) } catch is CancellationError { throw CancellationError() } catch { throw NextendoError.requestFailed }
         }
         let userinfo = try await get("api/oauth/userinfo")
-        try Task.checkCancellation()
-        guard gameCredentialRequestID == id else { throw CancellationError() }
+        try checkGameCredentialOperation(operation, session: session)
         guard userinfo.statusCode == 200 else { throw NextendoError.httpStatus(userinfo.statusCode) }
         let identity = try NextendoSession.decodeUserInfoResponse(userinfo.data)
         if let previous = session.identity?.pid, previous != identity.pid { throw NextendoError.invalidResponse }
         let response = try await get("api/nex-token")
-        try Task.checkCancellation()
-        guard gameCredentialRequestID == id else { throw CancellationError() }
+        try checkGameCredentialOperation(operation, session: session)
         guard response.statusCode == 200 else { throw NextendoError.httpStatus(response.statusCode) }
         let next = try NextendoSession.decodeNEXCredentialResponse(response.data, identity: identity, now: now())
-        guard try store.load() == session else { throw NextendoError.authorizationUnavailable }
-        try store.save(next)
-        return next.summary(at: now())
+        return try NextendoSession.decodeStored(next.encodedForStorage())
     }
     public func beginSignIn(configuration: NextendoOAuthConfiguration) async throws -> NextendoSignInRequest {
         await cancelSignIn()
@@ -348,10 +360,13 @@ public actor NextendoAccountService {
             await listener.cancel(); throw error
         }
     }
-    public func finishSignIn(_ id: UUID) async throws -> NextendoAccountSummary {
+    /// Game callers keep OAuth transient and replace active storage only after
+    /// the provider issues a coherent NEX proof. An unsupported grant stays an error.
+    public func finishSignIn(_ id: UUID, forGames: Bool = false) async throws -> NextendoAccountSummary {
         guard let attempt = pending, attempt.id == id, operationID == id, let listener = receiver else { throw NextendoError.authorizationUnavailable }
         pending = nil // consume once, before the first suspension (including invalid callbacks)
         do {
+            let previous = forGames ? try store.load() : nil
             guard attempt.expiresAt > now() else { throw NextendoError.authorizationExpired }
             let callback = try await withTaskCancellationHandler { try await listener.callback() } onCancel: { Task { await listener.cancel() } }
             try Task.checkCancellation()
@@ -370,7 +385,15 @@ public actor NextendoAccountService {
             try Task.checkCancellation()
             guard operationID == id else { throw CancellationError() }
             guard response.statusCode == 200 else { throw NextendoError.httpStatus(response.statusCode) }
-            let session = try NextendoSession.decodeTokenResponse(response.data, now: now())
+            var session = try NextendoSession.decodeTokenResponse(response.data, now: now())
+            if forGames {
+                if session.tokenKind == .oauth { session = try await gameCredential(using: session, operation: .signIn(id)) }
+                session = try NextendoSession.decodeStored(session.encodedForStorage())
+                try Task.checkCancellation()
+                guard operationID == id else { throw CancellationError() }
+                guard !session.summary(at: now()).isExpired else { throw NextendoError.authorizationExpired }
+                guard try store.load() == previous else { throw NextendoError.authorizationUnavailable }
+            }
             try store.save(session)
             operationID = nil; receiver = nil; await listener.cancel()
             return session.summary(at: now())

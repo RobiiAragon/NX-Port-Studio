@@ -18,6 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 _Static_assert(sizeof(dm_nextendo_preflight_reply) == 32, "preflight wire size");
+_Static_assert(sizeof(dm_nextendo_preflight_diagnostic) == 16, "preflight diagnostic wire size");
 static _Thread_local dm_nextendo_preflight_status diagnostic;
 dm_nextendo_preflight_status dm_nextendo_preflight_last_status(void) { return diagnostic; }
 static int preflight_failed(int stage, int error) { diagnostic.stage=stage; diagnostic.error=error; return 0; }
@@ -41,7 +42,7 @@ static void preflight_cancel(pid_t child) {
     dispatch_async_f(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), (void *)(intptr_t)child, preflight_reap_cancelled);
 }
 int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeout_ms) {
-    diagnostic=(dm_nextendo_preflight_status){DM_PREFLIGHT_ARGUMENT,0,-1,-1,0};
+    diagnostic=(dm_nextendo_preflight_status){.stage=DM_PREFLIGHT_ARGUMENT,.bytes=-1,.exit_code=-1};
     if (!out) return preflight_failed(DM_PREFLIGHT_ARGUMENT,EINVAL); memset(out, 0, sizeof *out);
     if (!timeout_ms || timeout_ms > 5000) return preflight_failed(DM_PREFLIGHT_ARGUMENT,EINVAL);
     char raw[PATH_MAX], executable[PATH_MAX]; uint32_t size = sizeof raw;
@@ -61,7 +62,8 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
     posix_spawnattr_t attributes; int initialized = !posix_spawnattr_init(&attributes);
     if (!initialized && !error) error = EINVAL;
     if (initialized && !error) error = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
-    char *arguments[] = {executable, DM_NEXTENDO_PREFLIGHT_ARG, NULL}; pid_t child = -1;
+    const char *flag=getenv("DM_ACCOUNT_TRACE");int trace=flag && !strcmp(flag,"1");
+    char *arguments[] = {executable, trace ? DM_NEXTENDO_PREFLIGHT_DIAGNOSTIC_ARG : DM_NEXTENDO_PREFLIGHT_ARG, NULL}; pid_t child = -1;
     uint64_t now = preflight_now(), deadline = now + (uint64_t)timeout_ms * 1000000;
     if (!now && !error) error = EINVAL;
     // This is not a renderer launch. In particular, dyld must not run inherited
@@ -92,11 +94,12 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
     // An already-exited child may reject registration. waitpid and pipe EOF
     // still establish completion; no PID is signalled merely for this error.
     (void)kevent(queue, &change, 1, NULL, 0, NULL);
-    uint8_t bytes[sizeof *out + 1]; size_t count = 0; int status = 0, reaped = 0, owned = 1;
+    size_t expected=sizeof *out+(trace ? sizeof(dm_nextendo_preflight_diagnostic) : 0),capacity=expected+1;
+    uint8_t bytes[sizeof *out + sizeof(dm_nextendo_preflight_diagnostic) + 1]; size_t count = 0; int status = 0, reaped = 0, owned = 1;
     while (registered) {
         ssize_t n;
-        do { n = read(pair[0], bytes + count, sizeof bytes - count); if (n > 0) count += (size_t)n; } while (n > 0 && count < sizeof bytes);
-        if (count == sizeof bytes) { diagnostic.stage=DM_PREFLIGHT_PACKET; break; }
+        do { n = read(pair[0], bytes + count, capacity - count); if (n > 0) count += (size_t)n; } while (n > 0 && count < capacity);
+        if (count == capacity) { diagnostic.stage=DM_PREFLIGHT_PACKET; break; }
         if (n < 0 && errno != EAGAIN && errno != EINTR) { diagnostic.stage=DM_PREFLIGHT_READ; diagnostic.error=errno; break; }
         pid_t got = preflight_reap(child, &status);
         if (got == child) { reaped = 1; owned = 0; break; }
@@ -109,8 +112,8 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
     if (owned) preflight_cancel(child);
     // A child may exit between the first drain and waitpid; take its final
     // bytes after reaping as well, and reject truncation or trailing payload.
-    if (reaped && count < sizeof bytes) {
-        ssize_t n; do { n = read(pair[0], bytes + count, sizeof bytes - count); if (n > 0) count += (size_t)n; } while (n > 0 && count < sizeof bytes);
+    if (reaped && count < capacity) {
+        ssize_t n; do { n = read(pair[0], bytes + count, capacity - count); if (n > 0) count += (size_t)n; } while (n > 0 && count < capacity);
     }
     close(queue); close(pair[0]);
     diagnostic.bytes=(int)count;
@@ -118,9 +121,17 @@ int dm_nextendo_preflight_query(dm_nextendo_preflight_reply *out, unsigned timeo
     diagnostic.exit_code=WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     diagnostic.signal=WIFSIGNALED(status) ? WTERMSIG(status) : 0;
     if (!WIFEXITED(status) || WEXITSTATUS(status)) return preflight_failed(DM_PREFLIGHT_EXIT,0);
-    if (count != sizeof *out) return preflight_failed(DM_PREFLIGHT_PACKET,0);
+    if (count != expected) return preflight_failed(DM_PREFLIGHT_PACKET,0);
     dm_nextendo_preflight_reply reply; memcpy(&reply, bytes, sizeof reply);
     if (reply.magic != DM_NEXTENDO_PREFLIGHT_MAGIC || reply.version != 1 || reply.pid != (uint32_t)child || reply.available > 1 || reply.reserved || (!reply.available && reply.expires_ms) || (reply.available && !reply.expires_ms)) return preflight_failed(DM_PREFLIGHT_PROTOCOL,0);
+    if (trace) {
+        dm_nextendo_preflight_diagnostic detail;memcpy(&detail,bytes+sizeof reply,sizeof detail);
+        uint32_t reason=detail.credential.reason;int32_t security=detail.credential.security_status;
+        if (detail.magic!=DM_NEXTENDO_PREFLIGHT_DIAGNOSTIC_MAGIC || detail.version!=2 || reason<=DM_CRED_UNOBSERVED || reason>=DM_CRED_REASON_COUNT ||
+            (reply.available && reason!=DM_CRED_OK) || (!reply.available && reason==DM_CRED_OK) ||
+            ((reason==DM_CRED_SECURITY_STATUS) != (security!=0))) return preflight_failed(DM_PREFLIGHT_PROTOCOL,0);
+        diagnostic.credential=detail.credential;
+    }
     diagnostic.stage=DM_PREFLIGHT_DONE; diagnostic.error=0; *out = reply; return 1;
 }
 #endif

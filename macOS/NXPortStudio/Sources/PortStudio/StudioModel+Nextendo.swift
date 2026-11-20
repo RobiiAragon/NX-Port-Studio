@@ -2,7 +2,7 @@ import AppKit
 import PortCore
 
 extension StudioModel {
-    static let nextendoScopes = ["identity", "friends", "presence", "game.matchmaking", "emulator.status"]
+    static let nextendoScopes = ["identity", "friends"]
 
     func loadNextendoPage() async {
         await reloadNextendoAccount()
@@ -52,7 +52,7 @@ extension StudioModel {
                     self.nextendoAccountError = t("The sign-in page could not be opened. Check your default browser and try again.")
                     return
                 }
-                let summary = try await nextendoAccountService.finishSignIn(request.id)
+                let summary = try await nextendoAccountService.finishSignIn(request.id, forGames: true)
                 try Task.checkCancellation()
                 guard self.nextendoAuthorizationID == id else { return }
                 self.nextendoAccount = summary
