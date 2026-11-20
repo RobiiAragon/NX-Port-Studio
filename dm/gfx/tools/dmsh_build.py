@@ -101,7 +101,11 @@ PRE_STATS = collections.Counter()
 # -O1: the front end's -O2 (CorrelatedValuePropagation, then SimplifyCFG) folds the translated shaders' repeated tests of one value into switches whose cases jump past their own join.
 # Apple's GPU backend then exceeds its control-flow ID budget ("Max Unstruct ID 758 ... exceeds supported limit", a note, not an error) and falls back to a slower lowering:
 # Odyssey's alRenderMaterialUber took 25 minutes and 17.3 MB of GPU code, 31 s and 1.3 MB at -O1. Ordinary shaders come out within a few percent either way (the backend optimizes again)
-MAC_METAL = ['xcrun', '-sdk', 'macosx', 'metal', '-c', '-O1', '-fpreserve-invariance']
+# Preserve NaN/Inf semantics around translated arithmetic and isnan guards. The
+# CLI's default fast mode may fold x/x to 1 even for zero/Inf/NaN; precise::min,
+# max and clamp cannot recover a NaN that was removed earlier. Relaxed retains
+# reassociation/contraction while preserving these exceptional values, as iOS.
+MAC_METAL = ['xcrun', '-sdk', 'macosx', 'metal', '-c', '-O1', '-fmetal-math-mode=relaxed', '-fpreserve-invariance']
 MAC_RECORD = ' '.join(MAC_METAL) + '; xcrun -sdk macosx metallib'
 # The outer shader and fetch-variant caches restore compiled libraries directly,
 # before the MSL compile cache can check their compiler. Keep override builds separate there too.
