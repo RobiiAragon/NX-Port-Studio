@@ -60,6 +60,8 @@ My bounded, metadata-only capture contained **7,384 ordinary log lines**, with n
 
 ## Found on this game
 
+- [A revised signed patch rejects the whole catalog](../../../docs/reference/services.md#a-revised-signed-patch-rejects-the-whole-catalog): on November 21, 2026 the provider published revision 2 of this build's adapter, with an additional guarded record, and my export stopped at the adapter step until I accepted positive patch revisions. I have not yet tested whether the revised patch changes the [match-start failure](#mac-acceptance-on-november-4-2026).
+
 - [Mac fast math removes exceptional values before precise operations](../../../docs/reference/shaders.md#mac-fast-math-removes-exceptional-values-before-precise-operations): I reproduced a general offline compiler defect with authored GPU controls, then corrected the shared Mac shader policy. The derived-arithmetic control changes from 330/800 failures to zero with relaxed mode. My rebuilt `8836235c` port improved substantially in the lobby, but its residual reflection artifacts still need a separate cause and correction.
 
 - [A game credential is reused for account APIs](../../../docs/reference/services.md#a-game-credential-is-reused-for-account-apis): I separated the host social OAuth bearer from the NEX game proof in synthetic decoder/transport tests. The installed `9f3f6be1` test recorded a real friends API HTTP 200; other permissions and completed gameplay remain unqualified.
