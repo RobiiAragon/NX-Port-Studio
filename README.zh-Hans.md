@@ -6,7 +6,7 @@
 
 我的独立项目基于 [seedds/nxnative](https://github.com/seedds/nxnative)，我保留了原引擎作者署名、MIT 许可和版权声明。请参阅[致谢](CREDITS.md)与[许可证](LICENSE)。
 
-> **1.6.0 RC10：**我添加了一张表格，列出我测试过在线、LAN与本地通信的游戏；在Nextendo模式下，当Pia关闭并重新绑定UDP端口时，主机现在会保留该套接字在路由器上的映射，这被怀疑是玩家间连接失败的原因。包含RC9的Splatoon 3 12.0.0修正。Splatoon 3完整对战与大乱斗快速对战仍待验证。[候选版说明与测试范围](docs/releases/1.6.0-rc.10.md)。
+> **1.6.0 RC10：**我添加了一张表格，列出我测试过在线、LAN与本地通信的游戏，并消除了少量NaN纹素在Splatoon 3广场留下的黑红色块；在Nextendo模式下，当Pia关闭并重新绑定UDP端口时，主机现在会保留该套接字在路由器上的映射，这被怀疑是玩家间连接失败的原因。包含RC9的Splatoon 3 12.0.0修正。Splatoon 3完整对战与大乱斗快速对战仍待验证。[候选版说明与测试范围](docs/releases/1.6.0-rc.10.md)。
 
 我在Studio与新构建的Mac/iPhone移植版中加入了**JKSV ZIP存档导入和导出**，保留旧存档，提供文件夹浏览与iOS文件共享。请参阅[存档传输与验证范围](docs/save-data.md)。
 

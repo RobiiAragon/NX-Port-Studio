@@ -46,6 +46,11 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 ## Mac acceptance on November 21, 2026
 
+### Rare NaN texels after a return from the lobby
+
+In a 12.0.0 build from upstream nxnative's code with the same stale-storage fix, the plaza showed black and red blocks on its buildings after a failed attempt to enter the lobby. A dump of the 128×128×78 environment-probe array found 14 NaN texels (0.001 %): its storage had been under the 1 % threshold, so the texture kept it. Those elements now start from 0 and the rest of the storage stays the content ([stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use)). In the rebuilt run, eight textures had such elements, up to 58,632 (0.85 %) in one probe array, and the plaza rendered cleanly.
+
+
 ### 12.0.0 with shader chain e00d4dfc770d
 
 I built 12.0.0 from this source with the online variant and tested it on an M5 Max. Before the graphics fix, the plaza showed black dots and colored halos, and the lobby and Salmon Run practice area came out blown out in black and white. My frame captures found NaN in the HDR scene target, about 690,000 pixels in the lobby. I traced it to the environment-probe array's initial content ([stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use)): 35 % of its texels were NaN that the Switch's blender discards and Apple's does not. With the fix, five textures start from zeros, the replay's probe array has no NaN, and the plaza, the lobby and its practice area render as they do on my Switch. The [zero-weight blend guard](../../../docs/reference/shaders.md#a-nan-colour-with-a-zero-blend-weight) ported from upstream runs on 17,950 of the pixel shaders; on its own it did not change this defect.

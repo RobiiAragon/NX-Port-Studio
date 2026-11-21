@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC10:** agregué una tabla de los juegos cuyo juego en línea, LAN e inalámbrico local probé, y en modo Nextendo el host ahora conserva el mapeo del router de un socket UDP cuando Pia cierra y vuelve a abrir su puerto, una causa sospechada de conexiones fallidas entre jugadores. Incluye las correcciones de Splatoon 3 12.0.0 de la RC9. Las partidas completas de Splatoon 3 y el modo rápido de Smash siguen pendientes. [Notas y límites](docs/releases/1.6.0-rc.10.md).
+> **1.6.0 RC10:** agregué una tabla de los juegos cuyo juego en línea, LAN e inalámbrico local probé, quité los bloques negros y rojos que unos pocos texels NaN dejaban en la plaza de Splatoon 3, y en modo Nextendo el host ahora conserva el mapeo del router de un socket UDP cuando Pia cierra y vuelve a abrir su puerto, una causa sospechada de conexiones fallidas entre jugadores. Incluye las correcciones de Splatoon 3 12.0.0 de la RC9. Las partidas completas de Splatoon 3 y el modo rápido de Smash siguen pendientes. [Notas y límites](docs/releases/1.6.0-rc.10.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 

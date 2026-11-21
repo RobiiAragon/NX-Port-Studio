@@ -1,6 +1,7 @@
 // Floating-point textures over stale storage (storage_nonfinite / tex_init_fill in nvn_mtl.m). A render target placed in a CPU_NO_ACCESS pool whose storage still holds other
 // data starts as that data; where it decodes as NaN or infinity in more than 1 % of its texels it is not a picture the game loaded, and the texture starts from zeros instead
-// (Splatoon 3's lobby probe array: Metal blends NaN x 0 = NaN where NVIDIA's float blender gives 0). Finite data, and data with a rare non-finite texel, is still the content.
+// (Splatoon 3's lobby probe array: Metal blends NaN x 0 = NaN where NVIDIA's float blender gives 0). Finite data is still the content; where 1 % or fewer of the texels are
+// non-finite, those alone start from 0 (another run of the same game: 14 NaN texels in the probe array spread as black and red blocks). DM_NVN_STALE_FLOAT=1 keeps all of it.
 #include "../nvn/nvn_mtl.m"
 void *front_metal_layer(void) { return NULL; }
 module_t *module_of(const void *p) { (void)p; return NULL; }
@@ -39,7 +40,7 @@ static void readback(int format, size_t bpp, const void *linear, uint64_t serial
     }
     mtl_tex_release(&t); mtl_drain();
 }
-int main(void) { @autoreleasepool { mtl_init();
+int main(void) { @autoreleasepool { mtl_init(); const char *e = getenv("DM_NVN_STALE_FLOAT"); int keep = e && atoi(e) == 1;
     uint32_t in[W * H], out[W * H]; uint16_t hin[W * H * 4], hout[W * H * 4];
     // Stale storage: half the texels decode as NaN; the texture starts from zeros
     for (int i = 0; i < W * H; i++) in[i] = i & 1 ? RG11B10_NAN : RG11B10_ONE;
@@ -51,12 +52,18 @@ int main(void) { @autoreleasepool { mtl_init();
     readback(NVN_FORMAT_R11G11B10F, 4, in, 9851, out);
     int same = 1; for (int i = 0; i < W * H; i++) same &= out[i] == RG11B10_ONE;
     CHECK("finite RG11B10 storage is the content", same);
-    // One non-finite texel in 256 (under 1 %) is data, not stale storage: kept as it is
+    // One non-finite texel in 256 (under 1 %): that texel starts from 0, the rest is the content
     in[37] = RG11B10_NAN;
     readback(NVN_FORMAT_R11G11B10F, 4, in, 9852, out);
-    // (Metal's upload makes the NaN canonical: each channel's exponent stays all ones)
-    same = 1; for (int i = 0; i < W * H; i++) same &= i == 37 ? rg11b10_nan3(out[i]) : out[i] == RG11B10_ONE;
-    CHECK("a rare non-finite texel is kept with the content", same);
+    // (with DM_NVN_STALE_FLOAT=1 the NaN stays; Metal's upload makes it canonical, each channel's exponent all ones)
+    same = 1; for (int i = 0; i < W * H; i++) same &= i == 37 ? (keep ? rg11b10_nan3(out[i]) : out[i] == 0) : out[i] == RG11B10_ONE;
+    CHECK("a rare non-finite texel starts from 0, the rest is the content", same);
+    // RGBA16F: one NaN channel in 1024; only that channel starts from 0
+    for (int i = 0; i < W * H * 4; i++) hin[i] = HALF_ONE;
+    hin[4 * 9 + 2] = HALF_NAN;
+    readback(NVN_FORMAT_RGBA16F, 8, hin, 9855, hout);
+    same = 1; for (int i = 0; i < W * H * 4; i++) same &= i == 4 * 9 + 2 ? (keep ? (hout[i] & 0x7c00) == 0x7c00 : hout[i] == 0) : hout[i] == HALF_ONE;
+    CHECK("a rare NaN channel starts from 0, its texel's other channels are the content", same);
     // RGBA16F: a quarter of the halves are NaN
     for (int i = 0; i < W * H * 4; i++) hin[i] = i % 4 == 3 ? HALF_NAN : HALF_ONE;
     readback(NVN_FORMAT_RGBA16F, 8, hin, 9853, hout);

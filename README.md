@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC10:** I added a table of the games whose online, LAN and local wireless play I have tested, and in Nextendo mode the host now keeps a UDP socket's router mapping when Pia closes and rebinds its port, a suspected cause of failed peer connections. RC9's Splatoon 3 12.0.0 fixes are included. Completed Splatoon 3 matches and Smash Quickplay remain open. [Candidate notes and test limits](docs/releases/1.6.0-rc.10.md).
+> **1.6.0 RC10:** I added a table of the games whose online, LAN and local wireless play I have tested, removed the black and red blocks a few NaN texels left in Splatoon 3's plaza, and in Nextendo mode the host now keeps a UDP socket's router mapping when Pia closes and rebinds its port, a suspected cause of failed peer connections. RC9's Splatoon 3 12.0.0 fixes are included. Completed Splatoon 3 matches and Smash Quickplay remain open. [Candidate notes and test limits](docs/releases/1.6.0-rc.10.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 
