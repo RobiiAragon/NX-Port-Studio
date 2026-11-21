@@ -6,7 +6,7 @@
 
 我的独立项目基于 [seedds/nxnative](https://github.com/seedds/nxnative)，我保留了原引擎作者署名、MIT 许可和版权声明。请参阅[致谢](CREDITS.md)与[许可证](LICENSE)。
 
-> **1.6.0 RC8：**我在Studio与Apple原生移植版的启动界面中加入了JKSV ZIP存档传输，保留旧存档，并在iOS加载游戏前应用导入。我之前的游戏与联网测试仍保持其已记录的验证范围。[候选版说明与测试范围](docs/releases/1.6.0-rc.8.md)。
+> **1.6.0 RC9：**我修正了让Splatoon 3大厅过曝成黑白的旧内存NaN，登记了Splatoon 3 12.0.0，并让其Nextendo在线版本能够连接；导出的Mac游戏现在可以自行关联Nextendo账户。Splatoon 3的完整在线对战仍待验证。[候选版说明与测试范围](docs/releases/1.6.0-rc.9.md)。
 
 我在Studio与新构建的Mac/iPhone移植版中加入了**JKSV ZIP存档导入和导出**，保留旧存档，提供文件夹浏览与iOS文件共享。请参阅[存档传输与验证范围](docs/save-data.md)。
 

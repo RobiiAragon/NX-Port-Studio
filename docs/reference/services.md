@@ -1089,6 +1089,22 @@ This suspension path remains applicable to iOS and explicit host suspension. Mac
 - **Checks:** `dm/tools/tests/test_nextendo_patches.py` covers accepted and rejected revisions. I rebuilt my Splatoon 3 11.3.0 Mac export against the live revision-18 catalog: the adapter step compiled the exact-build signed patch into its separate Nextendo code pages. That does not qualify the revised patch's gameplay effect.
 - **Found on:** [Splatoon 3](../../dm/games/0100C2500FC20000/README.md) 11.3.0.
 
+### A signed adapter adds code in the text segment's page padding
+
+- **Symptom:** an online export stops at the Nextendo game adapter step with `A signed patch targets an unmapped NSO gap`, for an adapter whose guards and digest verify.
+- **Cause:** Horizon maps each segment in whole pages, so the zero padding between the end of text (or rodata) and the page boundary is mapped with that segment's permissions. Nextendo's Splatoon 3 12.0.0 adapter writes about 2 KB of new code and data there, right after `main`'s text. `prepare_nso` accepted only writes inside a segment's file size.
+- **Fix:** `nextendo_patches.py` accepts a write in text's or rodata's own last page, before the next segment starts, and grows that segment in the copy, so the native rewriter translates the added code with the rest. Any other gap, and the data segment's tail (where bss begins), stays refused. The segment hashes in the copied header are recomputed.
+- **Found on:** [Splatoon 3](../../dm/games/0100C2500FC20000/README.md) 12.0.0. The added text includes a PEM, which the rewriter must leave alone ([embedded text in the text segment](rewriter.md#embedded-text-in-the-text-segment)).
+- **Check:** `dm/tools/tests/test_nextendo_patches.py` covers code in text's page padding (the segment grows and rodata stays in place), the data tail and a true gap between segments (both refused), and the last bytes of text's page (accepted).
+
+### A signed adapter names a provider host by its own public name
+
+- **Symptom:** after the adapter is applied, the game's name lookup for a provider host fails, and the game reports `2321-4992` without connecting.
+- **Cause:** Splatoon 3 12.0.0's adapter points the game's NPLN client at `npln.eevee.ink`, the provider's own public host, whose certificate is publicly trusted. Nextendo routing admits only the names its signed policy lists and redirects each to the provider's address, so an unlisted name was refused.
+- **Fix:** a version-2 route may give `@dns` as its address (`hle_nextendo_routes.c`): one exact, non-numeric name, admitted and resolved by the system resolver, with no redirection, TLS peer or provider CA. `nextendo_services.py` writes it from a `public-dns` server entry, which must be `exact` and without provider TLS. `nextendo-services.json` lists `npln.eevee.ink` for Splatoon 3 only.
+- **Found on:** [Splatoon 3](../../dm/games/0100C2500FC20000/README.md) 12.0.0. The provider's reference emulator client leaves that name unredirected as well.
+- **Check:** `t_nextendo_routes` admits a public-DNS name to the system resolver with the system's own answer. It refuses names below it and grants no TLS peer. `test_nextendo_routes.py` rejects suffix, label, peer, CA, numeric, duplicate and version-1 forms; `test_nextendo_services.py` keeps the route to Splatoon 3 and rejects its suffix and TLS forms.
+
 ### Nextendo friends and SDK application presence
 
 - **Symptom:** a native title receives a failed or empty friend query regardless of the linked account, or its SDK application-presence field never reaches the service.

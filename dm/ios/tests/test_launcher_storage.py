@@ -31,6 +31,7 @@ class LauncherStorageTests(unittest.TestCase):
             compile_result = subprocess.run(['xcrun', '-sdk', 'macosx', 'swiftc', '-swift-version', '5', '-parse-as-library', '-module-cache-path', str(tmp / 'module-cache'),
                             '-import-objc-header', str(REPO / 'dm/host/save_archive.h'), '-larchive', str(archive), str(REPO / 'dm/ios/Sources/LauncherSavesView.swift'),
                             '-o', str(exe), str(REPO / 'dm/ios/Sources/LauncherLocalization.swift'), str(REPO / 'dm/ios/Sources/LauncherSettings.swift'), str(REPO / 'dm/ios/Sources/LauncherRow.swift'), str(REPO / 'dm/mac/Launcher.swift'),
+                            str(REPO / 'macOS/NXPortStudio/Sources/PortCore/NextendoAccount.swift'), str(REPO / 'macOS/NXPortStudio/Sources/PortCore/NextendoLoopback.swift'),   # the launcher's Nextendo sign-in (pack_app.py swift_sources)
                             str(Path(__file__).with_name('launcher_layout_check.swift')), str(Path(__file__).with_name('launcher_storage_check.swift'))], capture_output=True, text=True, timeout=300)
             self.assertEqual(compile_result.returncode, 0, compile_result.stdout + compile_result.stderr)
             r = subprocess.run([str(exe), str(tmp / 'launcher.json'), str(tmp / 'launcher_mac.json')], capture_output=True, text=True, timeout=60)

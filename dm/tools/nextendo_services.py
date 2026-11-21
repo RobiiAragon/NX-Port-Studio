@@ -66,6 +66,12 @@ def rules(value, title_id, protocol=None):
             raise ValueError('Invalid service label wildcard')
         if (kind, host) in seen: continue
         seen.add((kind, host))
+        if item['server'] == 'public-dns':
+            # A provider service under its own public name (a signed game adapter names it directly). The host
+            # admits and resolves only this exact name with the system resolver; its certificate is the
+            # service's own publicly trusted one, so the route carries no address, peer or provider CA.
+            if kind != 'exact' or item.get('tls'): raise ValueError('A public-DNS route is one exact name without a provider CA')
+            output.append('\t'.join([kind, host, '@dns', '-', '-', '-'])); continue
         address = value['provider'][item['server']]
         tail = ['@host', 'provider-ca.der', value['provider']['caSHA256']] if item['tls'] else ['-', '-', '-']
         output.append('\t'.join([kind, host, address] + tail))

@@ -192,16 +192,30 @@ def prepare_nso(source, destination, title_id, document):
         image[mo:mo + size] = raw
     changed, applied = apply_image(image, title_id, data[0x40:0x60].hex(), document)
     if changed is None: return []
+    # Horizon maps each segment in whole pages, so the zero padding between the end of text (or rodata) and its
+    # page boundary is mapped with that segment's permissions. Providers place new code there (Splatoon 3 12.0.0's
+    # adapter writes about 2 KB right after text). Such a write grows that segment in the copy, so the native
+    # rewriter translates the added code with the rest; any other gap, and the data segment's tail (where bss
+    # begins), stays unmapped.
+    ends = [mo + size for _, mo, size in segments]
     for patch in document['patches']:
         if patch.get('id') in applied:
             for offset in records(patch)[1]:
                 position = offset - 0x100
-                if not any(mo <= position < mo + size for _, mo, size in segments):
+                for i, (_, mo, size) in enumerate(segments):
+                    if mo <= position < mo + size: break
+                    following = min([m for _, m, _ in segments if m > mo], default=None)
+                    page_end = (mo + size + 0xfff) & ~0xfff
+                    if i < 2 and mo + size <= position < page_end and (following is None or position < following):
+                        ends[i] = max(ends[i], (position + 4) & ~3); break
+                else:
                     raise ValueError('A signed patch targets an unmapped NSO gap')
     header = bytearray(data[:0x100]); struct.pack_into('<I', header, 0xc, flags & ~7)
     body = bytearray()
-    for i, (_, mo, size) in enumerate(segments):
+    for i, (_, mo, _) in enumerate(segments):
+        size = ends[i] - mo
         raw = changed[mo:mo + size]
+        struct.pack_into('<I', header, 0x18 + i * 0x10, size)
         struct.pack_into('<I', header, 0x10 + i * 0x10, len(body) + 0x100)
         struct.pack_into('<I', header, 0x60 + i * 4, size)
         header[0xa0 + i * 32:0xc0 + i * 32] = hashlib.sha256(raw).digest(); body.extend(raw)

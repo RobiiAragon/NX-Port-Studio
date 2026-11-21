@@ -14,8 +14,10 @@ import tempfile
 import uuid
 import warnings
 
-RECIPES = {'0100f8f0000a2000': '5.5.2', '01003bc0000a0000': '5.5.2',
-           '01003c700009c800': '5.5.2', '0100c2500fc20000': '11.3.0'}
+# Exact versions each calendar recipe is qualified for. The provider's ZIP is per title (/api/bcat/<title>);
+# its signed game catalog separately decides which versions may use it (Splatoon 3: 11.3.0 and 12.0.0).
+RECIPES = {'0100f8f0000a2000': ('5.5.2',), '01003bc0000a0000': ('5.5.2',),
+           '01003c700009c800': ('5.5.2',), '0100c2500fc20000': ('11.3.0', '12.0.0')}
 TITLES = set(RECIPES)
 
 
@@ -52,7 +54,7 @@ def private_directory(path):
 
 def recipe(source, title_id, version):
     """A recipe descriptor is not a successful or populated delivery cache."""
-    if title_id.lower() not in RECIPES or RECIPES[title_id.lower()] != version: raise ValueError('Unsupported calendar recipe version')
+    if title_id.lower() not in RECIPES or version not in RECIPES[title_id.lower()]: raise ValueError('Unsupported calendar recipe version')
     source = private_directory(source)
     setup = {'formatVersion': 1, 'titleID': title_id.lower(), 'version': version}
     temporary = source / ('.setup-' + uuid.uuid4().hex)
@@ -87,7 +89,7 @@ def stage(repository, source, destination, title_id, version=None, allow_missing
     if type(setup.get('formatVersion')) is not int or setup['formatVersion'] != 1 or setup.get('titleID') != title_id.lower() or setup.get('version') != (version or setup.get('version')):
         raise ValueError('Calendar belongs to another game/version')
     version = setup['version']
-    if title_id.lower() not in RECIPES or RECIPES[title_id.lower()] != version: raise ValueError('Unsupported calendar recipe')
+    if title_id.lower() not in RECIPES or version not in RECIPES[title_id.lower()]: raise ValueError('Unsupported calendar recipe')
     validated = subprocess.run([str(helper(repository)), 'validate', title_id.lower(), version, str(source)], capture_output=True).returncode == 0
     if not validated and not allow_missing: raise ValueError('No complete validated calendar snapshot')
     pointer: str | None = None

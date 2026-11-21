@@ -76,7 +76,36 @@ class NextendoPatchTests(unittest.TestCase):
             new=out.read_bytes(); self.assertEqual(source.read_bytes(),original)
             self.assertEqual(new[0x40:0x60],bytes.fromhex(BUILD)); self.assertEqual(new[0x104:0x108],b'WXYZ')
             self.assertEqual(new[0xa0:0xc0],hashlib.sha256(b'0000WXYZ').digest())
-            with self.assertRaises(ValueError): p.prepare_nso(source,out,TITLE,catalog(offset=0x108,original=b'\0'*4))
+            with self.assertRaises(ValueError): p.prepare_nso(source,out,TITLE,catalog(offset=0x124,original=b'\0'*4))   # data's tail is bss
+    def synthetic_nso(self, root):
+        header=bytearray(0x100); header[:4]=b'NSO0'; header[0x40:0x60]=bytes.fromhex(BUILD)
+        chunks=[b'0000abcd',b'ro00',b'data']
+        for i,(memory,chunk) in enumerate(zip([0,0x10,0x20],chunks)):
+            struct.pack_into('<III',header,0x10+0x10*i,0x100+sum(map(len,chunks[:i])),memory,len(chunk))
+            struct.pack_into('<I',header,0x60+4*i,len(chunk))
+        source=root/'main'; source.write_bytes(header+b''.join(chunks)); return source
+    def test_code_in_the_text_page_padding_grows_the_segment(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); source=self.synthetic_nso(root); out=root/'online/main'
+            self.assertEqual(p.prepare_nso(source,out,TITLE,catalog(offset=0x108,original=b'\0'*4,changed=b'CAVE')),['synthetic'])
+            new=out.read_bytes()
+            self.assertEqual(struct.unpack_from('<III',new,0x10)[1:],(0,12))   # text now ends after the added code
+            self.assertEqual(new[0x100:0x10c],b'0000abcdCAVE'); self.assertEqual(new[0xa0:0xc0],hashlib.sha256(b'0000abcdCAVE').digest())
+            ro=struct.unpack_from('<III',new,0x20); self.assertEqual(ro[1:],(0x10,4)); self.assertEqual(new[ro[0]:ro[0]+4],b'ro00')
+    def test_data_tail_and_true_gaps_stay_unmapped(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); source=self.synthetic_nso(root); out=root/'online/main'
+            with self.assertRaises(ValueError):   # data's own tail is bss, never extended
+                p.prepare_nso(source,out,TITLE,catalog(offset=0x124,original=b'\0'*4))
+        with tempfile.TemporaryDirectory() as folder:   # text ends at 8, rodata starts two pages later: 0x1000..0x2000 is not mapped
+            root=Path(folder); header=bytearray(0x100); header[:4]=b'NSO0'; header[0x40:0x60]=bytes.fromhex(BUILD)
+            chunks=[b'0000abcd',b'ro00',b'data']
+            for i,(memory,chunk) in enumerate(zip([0,0x2000,0x3000],chunks)):
+                struct.pack_into('<III',header,0x10+0x10*i,0x100+sum(map(len,chunks[:i])),memory,len(chunk))
+                struct.pack_into('<I',header,0x60+4*i,len(chunk))
+            source=root/'main'; source.write_bytes(header+b''.join(chunks)); out=root/'online/main'
+            with self.assertRaises(ValueError): p.prepare_nso(source,out,TITLE,catalog(offset=0x100+0x1000,original=b'\0'*4))
+            self.assertEqual(p.prepare_nso(source,out,TITLE,catalog(offset=0x100+0xff0,original=b'\0'*4)),['synthetic'])   # last bytes of text's page
     def test_signed_document_rejects_duplicate_fields(self):
         with self.assertRaises(ValueError): p.strict_json('{"revision":1,"revision":2}')
 

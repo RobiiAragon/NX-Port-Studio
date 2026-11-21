@@ -36,11 +36,13 @@ NOT_RUN = t_host_stubs t_present_rescue_focus t_atomic_return t_geometry_primiti
 RUN_TESTS = $(filter-out $(NOT_RUN),$(basename $(sort $(wildcard t_*.c t_*.m))))
 check_t_%: t_%
 	$(RUN_ENV) ./$<
-.PHONY: run check_test_dmsh_pull check_test_tbdr_budget
+.PHONY: run check_test_dmsh_pull check_test_dmsh_blend_zero check_test_tbdr_budget
 run: $(RUN_TESTS)
-	@$(MAKE) --no-print-directory -j1 $(addprefix check_,$(RUN_TESTS)) check_test_dmsh_pull check_test_tbdr_budget
+	@$(MAKE) --no-print-directory -j1 $(addprefix check_,$(RUN_TESTS)) check_test_dmsh_pull check_test_dmsh_blend_zero check_test_tbdr_budget
 check_test_dmsh_pull:
 	python3 test_dmsh_pull.py
+check_test_dmsh_blend_zero:
+	python3 -m unittest test_dmsh_blend_zero.py
 check_test_tbdr_budget:
 	DM_GAME=$(GAME) python3 test_tbdr_budget.py
 # Asset-free, local GPU control. Keep products on the chosen scratch drive; the
@@ -233,6 +235,9 @@ check_t_rast_discard: RUN_ENV = MTL_DEBUG_LAYER=1
 t_initial_uncached: t_initial_uncached.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_initial_uncached.m $(MTL_T_SRC) $(FW)
 check_t_initial_uncached: RUN_ENV = MTL_DEBUG_LAYER=1
+t_stale_float: t_stale_float.m $(MTL_T_DEP)
+	clang $(CFLAGS) -fobjc-arc -o $@ t_stale_float.m $(MTL_T_SRC) $(FW)
+check_t_stale_float: RUN_ENV = MTL_DEBUG_LAYER=1
 t_upload_slots: t_upload_slots.m $(MTL_T_DEP)
 	clang $(CFLAGS) -fobjc-arc -o $@ t_upload_slots.m $(MTL_T_SRC) $(FW)
 .PHONY: check_t_upload_slots

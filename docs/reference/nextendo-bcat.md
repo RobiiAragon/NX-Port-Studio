@@ -21,7 +21,7 @@ EUR/USA I also obtain the configuration and dummy resource from the pinned
 Prelude revision and require their exact SHA-256 values. I keep these payloads
 in private local caches and game apps; none belongs in this source repository.
 
-I added a separate Splatoon 3 **11.3.0** recipe for global identity
+I added a separate Splatoon 3 recipe, qualified for **11.3.0** and **12.0.0**, for global identity
 `0100c2500fc20000`, following Prelude's
 [Splatoon 3 installation layout](https://github.com/NextendoNetwork/Prelude-Nextendo/blob/482c182917228d69ebbbabfea44fffa4a44051be/source/nextendo_bcat.c#L457).
 It uses the same HTTPS title endpoint and `DebugUnderPilot/bcat` overlay, with
@@ -32,6 +32,9 @@ their length/block envelope and the bounded three-field summary, rather than
 claiming to decrypt or validate the internal pack schema. This recipe imports
 neither Splatoon 2's static configuration nor its BYAML calendars. Each title
 and exact recipe version remains separate, including staging and runtime startup.
+The provider's ZIP is per title (`/api/bcat/<title>`); its signed game catalog
+separately decides which versions may use it, and it accepts both Splatoon 3
+versions.
 
 I did not import Prelude implementation code. The importer and SDK adapters are
 original implementations. Resource provenance refers to the provider's data and

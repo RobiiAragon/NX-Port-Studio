@@ -127,6 +127,17 @@ def settings_rules(listed):   # DMSettings: what the launcher accepts as each se
     return rules
 
 
+def nextendo_client_id():
+    """The registered Nextendo application client ID for in-game sign-in: DM_NEXTENDO_CLIENT_ID, else the one saved in Studio's Nextendo page.
+    It identifies the OAuth application (PKCE, no secret), so the app can link an account without Studio. None when unset or malformed."""
+    value = os.environ.get('DM_NEXTENDO_CLIENT_ID')
+    if value is None:
+        try: value = subprocess.run(['defaults', 'read', 'org.nxnative.portstudio', 'nextendoClientID'], capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError): value = ''
+    value = value.strip()
+    return value if re.fullmatch(r'[A-Za-z0-9._-]{1,256}', value) and value not in ('nextendo-emulator', 'unregistered') else None
+
+
 def info_plist(a, minos, icon):
     p = {'CFBundleName': a.name, 'CFBundleDisplayName': a.name, 'CFBundleIdentifier': a.bundle_id or f'org.nxnative.{a.title_id.lower()}',
          'CFBundleVersion': a.version or '1.0', 'CFBundleShortVersionString': a.version or '1.0', 'CFBundlePackageType': 'APPL', 'CFBundleExecutable': EXE,
@@ -134,6 +145,8 @@ def info_plist(a, minos, icon):
          'LSApplicationCategoryType': a.category or 'public.app-category.games', 'DMTitleID': a.title_id.upper(), 'DMRomfsMarker': a.marker or '', 'DMLanguage': a.lang or 'en-US',
          'NSLocalNetworkUsageDescription': 'Connect to compatible games on your local network when you choose Local network (LAN).', 'DMPrimaryHost': True}
     if icon: p['CFBundleIconFile'] = 'AppIcon'
+    client = nextendo_client_id() if (Path(a.patched) / 'nextendo' / 'main.fixups.tsv').is_file() else None
+    if client: p['DMNextendoClientID'] = client   # the launcher's own Nextendo sign-in (Launcher.swift); a public PKCE client ID, never a credential
     if a.settings:
         listed = json.loads(Path(a.settings).read_text(encoding='utf-8'))['settings']
         p['DMSettings'] = settings_rules(listed)

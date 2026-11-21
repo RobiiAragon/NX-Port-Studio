@@ -73,7 +73,15 @@ def main():
         v2text = 'NXNEXTENDO_ROUTES_2\n' + ''.join('exact\t' + row + '\n' for row in text.splitlines()[1:])
         v2text = v2text.replace('api.console.invalid\t127.0.0.1\tlocalhost', 'api.console.invalid\t127.0.0.1\t@host')
         v2text += 'suffix\tscope.invalid\t127.0.0.2\t-\t-\t-\nlabel\tnat*.scope.invalid\t127.0.0.3\t-\t-\t-\nexact\tspecial.scope.invalid\t127.0.0.4\t-\t-\t-\n'
+        # A public-DNS route admits one exact name to the system resolver (localhost keeps the test offline).
+        v2text += 'exact\tlocalhost\t@dns\t-\t-\t-\n'
         add('v2.tsv', v2text, 0)
+        public = 'exact\tlocalhost\t@dns\t-\t-\t-\n'
+        for name, row in [('v2-dns-suffix.tsv', 'suffix\tdns.invalid\t@dns\t-\t-\t-\n'), ('v2-dns-label.tsv', 'label\tdns*.invalid\t@dns\t-\t-\t-\n'),
+                          ('v2-dns-peer.tsv', 'exact\tdns.invalid\t@dns\t@host\t-\t-\n'), ('v2-dns-ca.tsv', f'exact\tdns.invalid\t@dns\t-\tca.der\t{digest}\n'),
+                          ('v2-dns-numeric.tsv', 'exact\t127.0.0.5\t@dns\t-\t-\t-\n'), ('v2-dns-duplicate.tsv', public)]:
+            add(name, v2text + row, 2)
+        add('v1-dns.tsv', header + 'localhost\t@dns\t-\t-\t-\n', 2)
         add('v2-multi-star.tsv', v2text.replace('nat*.scope', 'nat**.scope'), 2)
         add('v2-bad-kind.tsv', v2text.replace('suffix\t', 'regex\t'), 2)
         add('v2-duplicate.tsv', v2text + 'suffix\tSCOPE.INVALID.\t127.0.0.2\t-\t-\t-\n', 2)

@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 enum { ROUTE_MAX = 128, CONFIG_MAX = 65536, CERT_MAX = 65536, CERT_TOTAL_MAX = 1024 * 1024 };
-typedef struct { char host[254], address[INET_ADDRSTRLEN], peer[254]; unsigned match; bool pinned, address_alias; uint8_t *ca; size_t ca_size; } route;
+typedef struct { char host[254], address[INET_ADDRSTRLEN], peer[254]; unsigned match; bool pinned, address_alias, public_dns; uint8_t *ca; size_t ca_size; } route;
 static route *routes;
 static size_t route_count;
 static pthread_mutex_t policy_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -115,6 +115,16 @@ static int load_policy(const char *path, route **output, size_t *count) {
         if (status || part) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
         route *entry = &entries[used]; struct in_addr ip, literal;
         bool dynamic_peer = version2 && !strcmp(fields[2], "@host");
+        // "@dns" (version 2, exact hosts only): a provider service with its own public name and publicly trusted
+        // certificate, which a signed game adapter names directly (Splatoon 3 12.0.0's NPLN host). Its name is
+        // admitted and resolved by the system resolver; it gets no redirection, TLS peer or certificate here.
+        if (version2 && !strcmp(fields[1], "@dns")) {
+            if (strcmp(kind, "exact") || !route_pattern(kind, fields[0], entry) || inet_pton(AF_INET, entry->host, &literal) == 1 ||
+                strcmp(fields[2], "-") || strcmp(fields[3], "-") || strcmp(fields[4], "-")) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
+            for (size_t i = 0; i < used; i++) if (entries[i].match == entry->match && !strcmp(entries[i].host, entry->host)) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
+            if (status) break;
+            entry->public_dns = true; strcpy(entry->address, "@dns"); used++; continue;
+        }
         if (!route_pattern(kind, fields[0], entry) || (inet_pton(AF_INET, entry->host, &literal) == 1) != entry->address_alias || inet_pton(AF_INET, fields[1], &ip) != 1 || (ntohl(ip.s_addr) >> 24) == 0 || (ntohl(ip.s_addr) >> 24) >= 224 ||
             (!strcmp(fields[2], "-") ? (strcmp(fields[3], "-") || strcmp(fields[4], "-")) : (!dynamic_peer && !hostname(fields[2], entry->peer)))) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
         if (dynamic_peer) strcpy(entry->peer, "@host");
@@ -154,7 +164,8 @@ static const route *find_route(const char *host) {
 }
 static int resolve_host(const char *host, char *output, size_t capacity) {
     if (!dm_net_nextendo_enabled() || !host) return 0; struct in_addr ip; if (inet_pton(AF_INET, host, &ip) == 1) return 0;
-    const route *entry = find_route(host); if (!entry || capacity <= strlen(entry->address)) return -1; strcpy(output, entry->address); return 1;
+    const route *entry = find_route(host); if (!entry) return -1; if (entry->public_dns) return 0;
+    if (capacity <= strlen(entry->address)) return -1; strcpy(output, entry->address); return 1;
 }
 static bool admit_peer(const char *host) { if (!dm_net_nextendo_enabled()) return true; const route *entry = find_route(host); return entry && entry->peer[0]; }
 static bool copy_peer_policy(const char *host, char *output, size_t capacity, const uint8_t **ca, size_t *size, bool pinned) {

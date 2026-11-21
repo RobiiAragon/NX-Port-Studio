@@ -63,7 +63,7 @@ static NSString *network_mode_name(NSString *mode) {
     if (!alert || self.accountAlert!=alert || !alert.window.sheetParent) return;
     [self.accountProgress stopAnimation:nil]; self.accountProgress.hidden=YES; self.accountButton.enabled=YES;
     self.accountStatus.stringValue=result==0 ? @"Account access verified for this port. Try Online again. If the game kept an earlier rejection, close and reopen the game." :
-        @"Access was not verified. If you denied the macOS prompt, choose Authorize access to try again. For a missing or expired account, open NX Port Studio → Nextendo to link or renew it.";
+        @"Access was not verified. If you denied the macOS prompt, choose Authorize access to try again. For a missing or expired account, quit the game and reopen it holding Option, then choose Sign in with Nextendo in its settings window.";
     NSAccessibilityPostNotificationWithUserInfo(alert.window,NSAccessibilityAnnouncementRequestedNotification,
         @{NSAccessibilityAnnouncementKey:self.accountStatus.stringValue,NSAccessibilityPriorityKey:@(NSAccessibilityPriorityMedium)});
 }
@@ -83,7 +83,7 @@ static NSString *network_mode_name(NSString *mode) {
     [alert addButtonWithTitle:@"Close"]; [alert addButtonWithTitle:@"Open NX Port Studio"];
     alert.buttons.firstObject.keyEquivalent=@"\x1b";
     self.accountAlert=alert;
-    self.accountStatus=[NSTextField wrappingLabelWithString:@"Choose Authorize access to verify this port. Use NX Port Studio → Nextendo to link or renew your account."];
+    self.accountStatus=[NSTextField wrappingLabelWithString:@"Choose Authorize access to verify this port. To link or renew your account, reopen the game holding Option and choose Sign in with Nextendo in its settings window."];
     [self.accountStatus setAccessibilityLabel:@"Nextendo account access status"];
     self.accountButton=[NSButton buttonWithTitle:@"Authorize access" target:self action:@selector(authorizeNextendoAccess:)];
     [self.accountButton setAccessibilityLabel:@"Authorize this port to read the saved Nextendo credential"];

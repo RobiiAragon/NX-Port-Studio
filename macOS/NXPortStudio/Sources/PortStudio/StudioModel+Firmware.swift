@@ -5,8 +5,13 @@ import UniformTypeIdentifiers
 extension StudioModel {
     var firmwareLibraryURL: URL { supportURL.appendingPathComponent("Firmware", isDirectory: true) }
     var selectedFirmware: ImportedFirmware? { importedFirmware.first { $0.directoryURL.path == selectedFirmwarePath } }
+    /// The firmware resources a new port takes: the one chosen on the Firmware page; with no choice ever made (or a chosen dump that was
+    /// deleted), the most recently imported one, so a player who imported firmware once never exports the Mii and shared-font stand-ins
+    /// by accident. Choosing "Use built-in fallback resources" explicitly stores "" and is respected.
     var selectedSystemDataURL: URL? {
-        selectedFirmwarePath.isEmpty ? nil : URL(fileURLWithPath: selectedFirmwarePath, isDirectory: true).appendingPathComponent("system_data", isDirectory: true)
+        if let selectedFirmware { return selectedFirmware.systemDataURL }
+        let explicitFallback = selectedFirmwarePath.isEmpty && UserDefaults.standard.object(forKey: "selectedFirmwarePath") != nil
+        return explicitFallback ? nil : importedFirmware.first?.systemDataURL
     }
 
     func reloadFirmware() { importedFirmware = FirmwareLibrary.installed(in: firmwareLibraryURL) }

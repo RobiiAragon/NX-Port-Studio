@@ -48,6 +48,46 @@ XC = ['--msl', '--msl-version', '20300', '--msl-argument-buffers', '--msl-textur
 # and its saturation gives 0, as Metal's precise:: functions (IEEE fmin / fmax) do on every GPU. The M4 Pro's fast ones happen to agree, an A20 Pro's do not: Super Mario Galaxy 2's
 # GX lighting takes max(0, NaN) from light directions left at zero, and the half of Mario its fill light faces came out white on the iPhone (GitHub issue 72; vk_shaders.py PRECISE)
 def precise(msl): return re.sub(r'\bfast::(min|max|clamp)\(', r'precise::\1(', msl)
+
+# NVIDIA's float blender with "zero times anything is zero" on (SET_BLEND_FLOAT_OPTION, method 0x670 of the 3D engine; NVN's driver sets it in its start-up command list). A blend term
+# whose weight is 0 is then 0 whatever the colour, where Apple's blender, like IEEE, gives 0 x NaN = 0 x Inf = NaN and stores it. A pixel shader may leave NaN in a colour it adds nothing to
+# and say so with alpha 0 under SRC_ALPHA blending; on the Mac the NaN reaches the target and every later pass spreads it (bloom turns each into a cloud, tone mapping into a black dot:
+# Splatoon 3's lobby, whose HDR scene target held 33,901 NaN channels with none Inf). Ported from upstream nxnative 0662f9d8 (seedds; Ocarina of Time's mist). The host gives the
+# draw's blend state as a word at fragment buffer DMSH_BLEND_BUFFER (nvn_mtl.m bz_bind); where an output's source colour weight is zero a non-finite rgb is returned as 0. Every other
+# draw's colour, any finite colour and the alpha are unchanged. Inserted into main0 before its integer-output and dual-source copies are made, so each entry point has it
+BLEND_ZERO = '''struct dm_blend_state { uint zero; };   // see dmsh_build.py blend_zero
+static inline __attribute__((always_inline)) float4 dm_bz(float4 c, uint m)
+{
+    m &= %du;
+    if (!((m == 1u && c.w == 0.0f) || (m == 2u && c.w == 1.0f))) return c;
+    return float4(select(c.xyz, float3(0.0f), (as_type<uint3>(c.xyz) & uint3(0x7f800000u)) == uint3(0x7f800000u)), c.w);   // NaN or Inf by its bits: fast math may assume there is none
+}
+static inline __attribute__((always_inline)) void dm_blend0(thread main0_out& dm_o, constant dm_blend_state& dm_s)
+{
+    uint m = dm_s.zero;
+    if (m == 0u) return;
+%s}
+
+'''
+def blend_zero(msl):
+    """→ (msl with dm_blend0(out, dm_blend); before each `return out;` of main0 and the blend word as main0's last parameter, True), or (msl unchanged, False) when main0 has no float4
+    colour output, the buffer is taken, or main0 returns other than `return out;` on a line of its own"""
+    st = re.search(r'struct main0_out\s*\{(.*?)\};', msl, re.S)
+    cols = [(nm, int(c)) for ty, nm, c in re.findall(r'^\s*(\w+)\s+(\w+)\s*\[\[color\((\d+)\)\]\];', st.group(1), re.M) if ty == 'float4'] if st else []   # not index(1)
+    if not cols or 'dm_blend0(' in msl or f'[[buffer({abi.BLEND_BUFFER})]]' in msl: return msl, False
+    m = re.search(r'^[^\n]*?\bfragment\s+main0_out\s+main0\s*\(', msl, re.M)
+    if not m or len(re.findall(r'\bfragment\s', msl)) != 1: return msl, False
+    i, depth = m.end(), 1
+    while depth and i < len(msl): depth += (msl[i] == '(') - (msl[i] == ')'); i += 1
+    if depth: return msl, False
+    params, body = msl[m.end():i - 1], msl[i:]
+    n = len(re.findall(r'\breturn\b', body))
+    body, k = re.subn(r'^([ \t]*)return out;$', lambda r: f'{r.group(1)}dm_blend0(out, dm_blend);\n{r.group(1)}return out;', body, flags=re.M)
+    if not k or k != n: return msl, False
+    bits = abi.BLEND_ZERO_BITS
+    helper = BLEND_ZERO % ((1 << bits) - 1, ''.join(f'    dm_o.{nm} = dm_bz(dm_o.{nm}, m >> {bits * c}u);\n' for nm, c in cols))
+    param = f'constant dm_blend_state& dm_blend [[buffer({abi.BLEND_BUFFER})]]'
+    return msl[:m.start()] + helper + msl[m.start():i - 1] + (', ' if params.strip() else '') + param + ')' + body, True
 # Border colours: Maxwell's sampler takes any RGBA border colour, Metal's only transparent black, opaque black or opaque white, and the host's sampler gets the nearest of them
 # (nvn_border.h). A filtered sample is linear in the border colour, r = Σ w·texel + w_border·B, so two samples through samplers that differ only in their border colour give the rest:
 # with Metal colours Bn (the sampler) and Bw (its twin), r = s_n + (s_w - s_n)·k, k = (B - Bn) / (Bw - Bn) per channel. Each sampler member a shader samples gets a twin member
@@ -1132,7 +1172,10 @@ def finish(key, w, j, c1):
     src = precise(src)   # min / max / clamp with Maxwell's NaN results (see precise)
     try: src = pool_arrays(src)   # handles traced to no slot read the pools the replay keeps (see pool_arrays)
     except ValueError as e: return 'pool rewrite failed', str(e)[:160], None
-    src = border_emu(src); open(msl, 'w').write(src)   # border colours Metal lacks (see border_emu)
+    src = border_emu(src)   # border colours Metal lacks (see border_emu)
+    bz = False
+    if j['stage'] == 'ps': src, bz = blend_zero(src)   # a zero blend weight makes 0 of a NaN colour, as NVIDIA's blender does; before the entry points copied from main0 (see blend_zero)
+    open(msl, 'w').write(src)
     pad = []
     if j['stage'] == 'vs':   # outputs start as (0,0,0,1) (see vs_init); no point size beside a layer output (see vs_layer); the base instance from Metal (see vs_base_instance)
         src = vs_base_instance(vs_layer(vs_init(src))); open(msl, 'w').write(src)
@@ -1172,7 +1215,7 @@ def finish(key, w, j, c1):
             'entry': entry.group(2) if entry else 'main0', 'msl_entry_kind': entry.group(1) if entry else None, **({'entry_z': 'main0_z', 'entry_geometry_capture': 'main0_gs'} if j['stage'] == 'vs' else {}),
             **({'entry_discard': 'main0_discard'} if discard else {}),
             **({'entry_tf': 'main0_tf', 'tf_strides': [e['stride'] if e else 0 for e in j['tf']]} if j.get('tf') else {}),
-            **({'entry_layer': 'main0_l', 'entry_layer_z': 'main0_lz', 'layer_from': lay} if lay else {}), **({'entry_u': 'main0_u'} if fu else {}), **({'entry_m': 'main0_m', 'uint_mask_m': fmask} if fu and fmask else {}), **({'entry_d': 'main0_d'} if fd else {}),
+            **({'entry_layer': 'main0_l', 'entry_layer_z': 'main0_lz', 'layer_from': lay} if lay else {}), **({'entry_u': 'main0_u'} if fu else {}), **({'entry_m': 'main0_m', 'uint_mask_m': fmask} if fu and fmask else {}), **({'entry_d': 'main0_d'} if fd else {}), **({'blend_zero': True} if bz else {}),
             'threadgroup_size': j.get('local'), 'c1': c1.hex(), 'notes': res['notes'] + (['not in the answer table, queries use defaults'] if j.get('no_facts') else []), 'drv_reads': dr, 'drv_unfillable': unfillable(dr, j['stage']),
             'bindings': binds,
             'vertex_inputs': [{'location': int(m.group(2)), 'msl_type': m.group(1)} for m in re.finditer(r'(\w+)\s+\w+\s*\[\[attribute\((\d+)\)\]\]', src)],

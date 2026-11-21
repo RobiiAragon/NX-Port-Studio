@@ -33,6 +33,7 @@ struct LauncherView: View {
             .padding([.horizontal, .top], 20)
             Form {
                 settingSections(basic: true)
+                if let client = info("DMNextendoClientID"), !client.isEmpty { NextendoAccountSection(clientID: client) }
                 CloudSavesSection()
                 LauncherSavesSection(language: m.uiLanguage, busy: $savesBusy, needsRestart: $savesNeedRestart)
                 Section {
@@ -137,6 +138,95 @@ struct CloudSavesSection: View {
     static func shown(_ path: String) -> String {
         guard path == drive || path.hasPrefix(drive + "/") else { return path }
         return (["iCloud Drive"] + path.dropFirst(drive.count).split(separator: "/").map(String.init)).joined(separator: " › ")
+    }
+}
+
+/// Nextendo account for online play, linked from the game itself: no Studio needed. The app's Info.plist carries the registered application's
+/// public client ID (DMNextendoClientID, pack_app.py); sign-in runs the same PKCE + loopback flow and Keychain item as Studio's Nextendo page, so an
+/// account linked in either place is shared. The game then chooses offline, LAN, local wireless or online play from its own menus (DM_NETWORK=auto).
+@MainActor final class NextendoAccountModel: ObservableObject {
+    static let scopes = ["identity", "friends", "game.matchmaking"]   // Studio's game scopes (StudioModel+Nextendo.swift)
+    @Published private(set) var summary: NextendoAccountSummary?
+    @Published private(set) var busy = false
+    @Published private(set) var message: String?
+    private let service = NextendoAccountService()
+    private let clientID: String
+    private var task: Task<Void, Never>?
+    init(clientID: String) { self.clientID = clientID; reload() }
+    /// Linked and playable: valid now, or renewable (the host renews it before the SDK starts, GameAccount.swift)
+    var usable: Bool { summary.map { !$0.isExpired || $0.renewalCheckAt != nil } ?? false }
+
+    func reload() {
+        Task { [service] in
+            let current = try? await service.currentAccount()
+            self.summary = current
+        }
+    }
+    func signIn() {
+        guard !busy else { return }
+        busy = true; message = "Finish signing in to Nextendo in your browser…"
+        let clientID = clientID, service = service
+        task = Task {
+            do {
+                let configuration = try NextendoOAuthConfiguration(clientID: clientID, scopes: Self.scopes)
+                let request = try await service.beginSignIn(configuration: configuration)
+                guard NSWorkspace.shared.open(request.authorizationURL) else { await service.cancelSignIn(); throw NextendoError.requestFailed }
+                summary = try await service.finishSignIn(request.id, forGames: true)
+                message = nil
+                NSApp.activate(ignoringOtherApps: true)
+            } catch is CancellationError {
+                message = nil
+            } catch {
+                message = (error as? LocalizedError)?.errorDescription ?? "Nextendo sign-in did not finish. Try again."
+            }
+            busy = false; task = nil
+        }
+    }
+    func cancel() { task?.cancel(); Task { [service] in await service.cancelSignIn() } }
+    func signOut() {
+        guard !busy else { return }
+        busy = true
+        Task { [service] in
+            do { try await service.signOut(); self.summary = nil; self.message = nil }
+            catch { self.message = (error as? LocalizedError)?.errorDescription }
+            self.busy = false
+        }
+    }
+}
+
+struct NextendoAccountSection: View {
+    @StateObject private var account: NextendoAccountModel
+    init(clientID: String) { _account = StateObject(wrappedValue: NextendoAccountModel(clientID: clientID)) }
+
+    var body: some View {
+        Section {
+            LabeledContent("Nextendo account") {
+                Text(status).foregroundStyle(.secondary).lineLimit(1)
+            }
+            HStack {
+                if account.busy && account.summary == nil {
+                    ProgressView().controlSize(.small)
+                    Button("Cancel") { account.cancel() }
+                } else if account.usable {
+                    Button("Sign out") { account.signOut() }.disabled(account.busy)
+                } else {
+                    Button(account.summary == nil ? "Sign in with Nextendo…" : "Sign in again…") { account.signIn() }
+                }
+            }
+            if let message = account.message {
+                Text(message).font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Online play")
+        } footer: {
+            Text("Sign in once and choose online play from the game's own menu. Local play (LAN and local wireless) needs no account.")
+        }
+    }
+
+    private var status: String {
+        guard let summary = account.summary else { return "Not signed in" }
+        let name = summary.identity?.username ?? summary.identity?.friendCode ?? "Signed in"
+        return account.usable ? name : "\(name) — sign in again"
     }
 }
 

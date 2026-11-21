@@ -4,10 +4,16 @@ patch_nso.py and insn_census.py import it. Usage on its own: nso_code.py <module
 
 A data block is a stretch of at least DATA_MIN bytes between FDE ranges in which more than a quarter of the words do not decode as instructions. Absolum's main
 (.NET NativeAOT on SDK 18) starts its text with 1.7 MB of data that no code references (no adrp, no relocation): 62% of its words do not decode, and 6,858 of the
-rest read as instructions that use x18, which a linear sweep would rewrite. Code without unwind information (zlib, libunwind's register restore) stays code: it decodes."""
+rest read as instructions that use x18, which a linear sweep would rewrite. Code without unwind information (zlib, libunwind's register restore) stays code: it decodes.
+
+Text placed in the text segment is a data block too, however short: at least TEXT_MIN bytes of printable ASCII between FDE ranges (the last word may end in NUL
+padding). Text decodes almost entirely as instructions, so the quarter rule misses it. Nextendo's signed Splatoon 3 12.0.0 adapter adds the ISRG Root X1 PEM
+(1,939 bytes) after the end of text, which the game's gRPC appends to its trust roots; the linear sweep rewrote 63 of its bytes, the game rejected the corrupted
+root store and failed every online connection with 2321-4992 before opening a socket."""
 import struct
 
 DATA_MIN = 0x1000
+TEXT_MIN = 0x100   # embedded text: 64 words in a row of printable ASCII never occur in real code
 
 
 def eh_frame_hdr(img):
@@ -99,9 +105,38 @@ def data_blocks(img, text_end, md):
     out = [(8, 0x80)] if nro else []
     for s, e in gaps:
         s, e = (s + 3) & ~3, e & ~3
+        out.extend(text_runs(img, s, e))
         if e - s < DATA_MIN: continue
         undecodable = sum(1 for a in range(s, e, 4) if next(md.disasm_lite(bytes(img[a:a + 4]), a), None) is None)
         if undecodable * 4 > (e - s) // 4: out.append((s, e))
+    return merge(out)
+
+
+PRINTABLE = frozenset(range(0x20, 0x7f)) | {0x09, 0x0a, 0x0d}
+
+
+def text_runs(img, s, e):
+    """[(start, end)] of the word-aligned runs of at least TEXT_MIN bytes of printable ASCII in [s, e); a run's last word may end in NUL bytes (a string's terminator and padding)"""
+    out, run = [], None
+    for a in range(s, e, 4):
+        w = bytes(img[a:a + 4]); text = all(b in PRINTABLE for b in w)
+        tail = not text and run is not None and w[0] in PRINTABLE and all(b in PRINTABLE for b in w.rstrip(b'\0'))
+        if text:
+            if run is None: run = a
+            continue
+        if run is not None:
+            end = a + 4 if tail else a
+            if end - run >= TEXT_MIN: out.append((run, end))
+            run = None
+    if run is not None and e - run >= TEXT_MIN: out.append((run, e))
+    return out
+
+
+def merge(blocks):
+    out = []
+    for s, e in sorted(blocks):
+        if out and s <= out[-1][1]: out[-1] = (out[-1][0], max(out[-1][1], e))
+        else: out.append((s, e))
     return out
 
 
