@@ -1,6 +1,6 @@
 # Splatoon 3 (`0100C2500FC20000`)
 
-I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. In my latest Mac test of source `8836235c` and shader chain `8410a1435ffe`, I reached a mostly correct lobby scene; one captured HUD reading was **60 FPS** and **4.28 ms GPU time** on an M5 Max. Small black stippled patches and white/red highlights remained on some floor reflections. **This profile remains experimental:** I have not accepted its graphics as correct or completed a match. My earlier `9f3f6be1` test reached the lobby tour, player-card creation and Nextendo matchmaking queue but had severe graphics corruption. Nextendo match completion, LAN/LDN discovery and matches, iPhone rendering, DLC gameplay and long-session stability remain unqualified.
+I registered updates **11.3.0** (`v2752512`, SDK **20.5.22**) and **12.0.0** (`v2818048`, SDK **20.5.32**) with the native NVN renderer; the shader tables are 12.0.0's. On November 21, 2026, I tested 12.0.0 on the Mac, built from source with shader chain `e00d4dfc770d`, with Nextendo online. The plaza, the lobby and its practice area rendered as they do on my Switch, after I corrected [stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use). The game connected to the provider and entered the lobby and the matchmaking queue, but the server never assigned me a match. **This profile remains experimental:** completed online matches, LAN/LDN discovery and matches, iPhone rendering, DLC gameplay and long-session stability remain unqualified.
 
 I record the detailed bring-up evidence and remaining tests in [Splatoon 3 bring-up](../../../docs/bringup/splatoon-3.md) and [local-network requirements](../../../docs/bringup/splatoon-3-local-network.md). Passing backend fixtures and recognizing a server profile do not establish working multiplayer in this game.
 
@@ -8,12 +8,14 @@ I record the detailed bring-up evidence and remaining tests in [Splatoon 3 bring
 
 | Module | NSO build ID |
 |---|---|
-| `main` | `28c4287aee36f7499da60f3e68b54c70` |
-| `sdk` | `574284b40c06cf1821a44857939083be` |
+| `main` 11.3.0 | `28c4287aee36f7499da60f3e68b54c70` |
+| `sdk` 11.3.0 | `574284b40c06cf1821a44857939083be` |
+| `main` 12.0.0 | `6cbb16698653e1af3c3a7602164819bb` |
+| `sdk` 12.0.0 | `6a0a2600867712cd6f6c4dec53ae0d9c` |
 
 I identified Nintendo's sead / agl / gsys engine, Pia **6.32.3** and NPLN **1.38.1**. I use my own base, matching update and three DLC packages. An unrelated application in the same download folder is a different title and must remain outside this game's build input. No game binaries, shader programs, translated libraries, firmware, keys or save data belong in this profile.
 
-The metadata tables describe **31,218** unique shaders: 13,020 vertex, 17,978 pixel, 100 compute and 120 geometry shaders. I retain their generated labels so that their shader-input identity stays reproducible. I do not add a `validated.tsv` or claim that every shader is exercised. The runtime's global translation-chain stamp must match freshly built libraries; generated `c1_full.tsv` and `cb_extent.tsv` remain local.
+The metadata tables, made from 12.0.0's files, describe **31,224** unique shaders: 13,020 vertex, 17,984 pixel, 100 compute and 120 geometry shaders (11.3.0 had six pixel shaders fewer). When the folder holds 12.0.0, an 11.3.0 package takes these tables; with 11.3.0 alone, the NSP script derives them from 11.3.0's files. I retain their generated labels so that their shader-input identity stays reproducible. I do not add a `validated.tsv` or claim that every shader is exercised. The runtime's global translation-chain stamp must match freshly built libraries; generated `c1_full.tsv` and `cb_extent.tsv` remain local.
 
 ## Profile requirements
 
@@ -30,17 +32,25 @@ I use no game-specific function cuts. I import supported original system resourc
 
 ## Shader preparation and startup
 
-I previously compiled the Mac libraries with chain `a7dbbce711c3` and input digest `d22a9286232c`. A new build must use its own current stamps. An earlier eager pipeline prebuild encountered compiler allocation/XPC failures; I used the explicit diagnostic options `--gpu none` and `DM_PSO_PREBUILD=0` to test the pipelines the game actually draws. These options retain Metal rendering and shader libraries, but omit eager precomputation. I have not qualified them as a permanent performance fix or a stable release configuration.
+My November 21 build compiled the Mac libraries with chain `e00d4dfc770d`; earlier builds used `a7dbbce711c3` and `8410a1435ffe`. A new build must use its own current stamps. An earlier eager pipeline prebuild encountered compiler allocation/XPC failures; I used the explicit diagnostic options `--gpu none` and `DM_PSO_PREBUILD=0` to test the pipelines the game actually draws. These options retain Metal rendering and shader libraries, but omit eager precomputation. I have not qualified them as a permanent performance fix or a stable release configuration.
 
 The first startup abort came from the embedded gRPC wakeup-descriptor availability check. I implemented real [local event-counter descriptors](../../../docs/reference/services.md#grpc-cannot-create-a-local-event-counter-wakeup-descriptor). Later, I corrected [small host-lent command-memory capacity](../../../docs/reference/nvn-objects.md#host-lent-command-memory-segments); the earlier private run then passed the formerly failing train transition. Neither result proves that the remaining picture or network behavior is correct.
 
 ## Multiplayer
 
-I verified Nextendo's signed catalog for exact version 11.3.0 and its guarded adapter for this main build. Online uses the game's embedded gRPC/HTTP2/BoringSSL NPLN client, rather than Splatoon 2's NEX transport. I compile the provider's signed adapter into a separate module variant; Offline/LAN retain the original rewrite. Credentials stay outside game bundles.
+I verified Nextendo's signed catalog for exact versions 11.3.0 and 12.0.0 and their guarded adapters for these main builds. The provider recommends 12.0.0, and its players are there: my 11.3.0 queue never found a match either. Online uses the game's embedded gRPC/HTTP2/BoringSSL NPLN client, rather than Splatoon 2's NEX transport. I compile the provider's signed adapter into a separate module variant; Offline/LAN retain the original rewrite. Credentials stay outside game bundles.
 
 I check the versioned [calendar recipe](../../../docs/reference/nextendo-bcat.md) before each online launch and retain the last validated snapshot if refresh fails. The game still has to accept its encrypted region-specific packs and complete a real session. I do not infer that result from successful delivery alone.
 
 Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Stick** there. I keep these protocols separate: native LAN uses IP sockets, while the LDN bridge requires a compatible IP peer/module. Two ordinary windows on one Mac do not establish two independent endpoints. I have not qualified discovery, joining, both host roles or a completed local match for this profile.
+
+## Mac acceptance on November 21, 2026
+
+### 12.0.0 with shader chain e00d4dfc770d
+
+I built 12.0.0 from this source with the online variant and tested it on an M5 Max. Before the graphics fix, the plaza showed black dots and colored halos, and the lobby and Salmon Run practice area came out blown out in black and white. My frame captures found NaN in the HDR scene target, about 690,000 pixels in the lobby. I traced it to the environment-probe array's initial content ([stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use)): 35 % of its texels were NaN that the Switch's blender discards and Apple's does not. With the fix, five textures start from zeros, the replay's probe array has no NaN, and the plaza, the lobby and its practice area render as they do on my Switch. The [zero-weight blend guard](../../../docs/reference/shaders.md#a-nan-colour-with-a-zero-blend-weight) ported from upstream runs on 17,950 of the pixel shaders; on its own it did not change this defect.
+
+Online, the 12.0.0 adapter first failed with `2321-4992` before opening a socket. I corrected [the provider's public host name](../../../docs/reference/services.md#a-signed-adapter-names-a-provider-host-by-its-own-public-name), [the adapter's code in the text page padding](../../../docs/reference/services.md#a-signed-adapter-adds-code-in-the-text-segments-page-padding) and [the rewriter corrupting the adapter's embedded root certificate](../../../docs/reference/rewriter.md#embedded-text-in-the-text-segment). Then the game connected to the provider for the whole session without an error, entered the lobby and the matchmaking queue ("Searching for players…"), and passed the NAT check (both UDP sockets exchanged packets). After waiting in the queue, it never received a match assignment and opened no session or Pia socket. I have not established whether that is the server's matchmaking, too few players in that mode, or something on the Mac.
 
 ## Mac acceptance on November 4, 2026
 
@@ -60,6 +70,12 @@ My bounded, metadata-only capture contained **7,384 ordinary log lines**, with n
 
 ## Found on this game
 
+- [Stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use): the lobby's environment-probe array started as stale NaN storage; with the fix, 12.0.0's plaza, lobby and practice area render correctly ([acceptance](#mac-acceptance-on-november-21-2026)).
+
+- [A NaN colour with a zero blend weight](../../../docs/reference/shaders.md#a-nan-colour-with-a-zero-blend-weight): ported from upstream and active on this game's draws; it did not cause or fix the lobby's NaN.
+
+- [Embedded text in the text segment](../../../docs/reference/rewriter.md#embedded-text-in-the-text-segment), [a signed adapter's code in the page padding](../../../docs/reference/services.md#a-signed-adapter-adds-code-in-the-text-segments-page-padding) and [the provider's public host name](../../../docs/reference/services.md#a-signed-adapter-names-a-provider-host-by-its-own-public-name): 12.0.0's online variant needed all three to connect.
+
 - [A revised signed patch rejects the whole catalog](../../../docs/reference/services.md#a-revised-signed-patch-rejects-the-whole-catalog): on November 21, 2026 the provider published revision 2 of this build's adapter, with an additional guarded record, and my export stopped at the adapter step until I accepted positive patch revisions. I have not yet tested whether the revised patch changes the [match-start failure](#mac-acceptance-on-november-4-2026).
 
 - [Mac fast math removes exceptional values before precise operations](../../../docs/reference/shaders.md#mac-fast-math-removes-exceptional-values-before-precise-operations): I reproduced a general offline compiler defect with authored GPU controls, then corrected the shared Mac shader policy. The derived-arithmetic control changes from 330/800 failures to zero with relaxed mode. My rebuilt `8836235c` port improved substantially in the lobby, but its residual reflection artifacts still need a separate cause and correction.
@@ -68,7 +84,7 @@ My bounded, metadata-only capture contained **7,384 ordinary log lines**, with n
 
 - [Friends IPC initialization needs real objects and completion events](../../../docs/reference/services.md#friends-ipc-initialization-needs-real-objects-and-completion-events): the earlier 11.3.0 initializer reached unsupported `friend:u` after Play. My installed `9f3f6be1` candidate passed the title and reached the lobby/queue, with creator command 0 succeeding. The broader IPC surface and completed multiplayer remain open.
 
-I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
+I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I update this note only after testing the exact new engine and shader stamps in the game.
 
 During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.
 
@@ -85,5 +101,3 @@ I reproduced [the local nickname hook ignoring a validated identity snapshot](..
 I corrected [retention and renewal of the provider's OAuth grant](../../../docs/reference/services.md#a-linked-nextendo-account-expires-and-forces-browser-sign-in-again) in the shared account service, with synthetic production-coordinator and two-process checks. The actual service must still accept the application's consent/refresh, and updated ports must be rebuilt; I do not treat this as a completed Splatoon 3 online session or a graphics fix.
 
 I ran the [Mac account transaction before SDK startup](../../../docs/reference/services.md#packed-mac-launch-does-not-prepare-a-renewable-game-account-before-sdk-startup) in the installed `9f3f6be1` candidate. I observed the [lobby and queue milestone above](#mac-acceptance-on-november-4-2026), with no preparation error in the captured ordinary prefix. I have not qualified a completed online match or observed a real hourly refresh/rotation.
-
-During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.

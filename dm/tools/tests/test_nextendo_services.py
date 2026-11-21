@@ -20,6 +20,11 @@ class NextendoServicesTests(unittest.TestCase):
         self.assertIn('api.epicgames.dev',n.rules(value,'0100ab401f136000'))
         self.assertNotIn('api.epicgames.dev',n.rules(value,'0100152000022000'))
         self.assertIn('label\tnncs2-*.',n.rules(value,'0100152000022000'))
+        self.assertIn('exact\tnpln.eevee.ink\t@dns\t-\t-\t-\n',n.rules(value,'0100c2500fc20000'))   # Splatoon 3 12.0.0's adapter names this host
+        self.assertNotIn('npln.eevee.ink',n.rules(value,'0100152000022000'))
+        for bad in ({'match':'suffix','host':'eevee.ink','server':'public-dns','tls':False},{'match':'exact','host':'npln.eevee.ink','server':'public-dns','tls':True}):
+            other=json.loads(json.dumps(value)); other['titles']['0100c2500fc20000']=[bad]
+            with self.assertRaises(ValueError): n.rules(other,'0100c2500fc20000')
         for title in ('0'*16,'bad','../0000000000000'):
             with self.assertRaises(ValueError): n.rules(value,title)
     def test_complete_public_profile_staging_rejects_tampering_and_symlinks(self):

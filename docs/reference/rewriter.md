@@ -308,6 +308,14 @@ To enroll a cut for any game's own module:
 - **Found on:** [FINAL FANTASY X/X-2 HD Remaster](../../dm/games/0100BC300CB48000/README.md), 1,432 registered NROs.
 - **Check:** `test_nro_header.py` runs the real rewriter on synthetic NROs whose build IDs decode as an `x18` load or `br x18`, checks the header byte-for-byte, and checks that an actual `x18` instruction immediately after it is rewritten. Code before the first unwind entry is covered too: per-function analysis must not reenter the header even when the linear scans exclude it.
 
+### Embedded text in the text segment
+
+- **Symptom:** a rewritten module's embedded text is corrupted where the linear sweep took words for instructions. On [Splatoon 3](../../dm/games/0100C2500FC20000/README.md) 12.0.0 with Nextendo's signed adapter, every online attempt failed with `2321-4992` before the game opened a socket.
+- **Cause:** the adapter writes the ISRG Root X1 PEM (1,939 bytes) after the end of `main`'s text, in the page padding ([signed adapter code in the page padding](services.md#a-signed-adapter-adds-code-in-the-text-segments-page-padding)), and the game's gRPC appends it to its trust roots. No FDE covers it. Printable ASCII decodes almost entirely as instructions, so the quarter rule of [data blocks](#data-blocks-at-the-start-of-the-text) does not see it, and the sweep rewrote 63 of its bytes. The game then rejected its own root store.
+- **Fix:** `nso_code.data_blocks` also takes any word-aligned run of at least 256 bytes (`TEXT_MIN`) of printable ASCII between FDE ranges as a data block (`text_runs`), whatever its length otherwise. The run's last word may end in NUL bytes, for a string's terminator and padding. Sixty-four printable words in a row do not occur in real code.
+- **Found on:** [Splatoon 3](../../dm/games/0100C2500FC20000/README.md) 12.0.0 `main` (`6cbb16698653e1af3c3a7602164819bb`), online variant. With the fix, the PEM is left byte-identical, and the game connects to the provider and enters its lobby and matchmaking queue.
+- **Check:** `dm/tools/tests/test_nso_code.py` covers a PEM after code (one block, including its padded last word), short strings and code that stay code, and the merging of overlapping blocks. The other modules I have extracted gain no data block.
+
 ## Stack and system registers
 
 ### Stack pointer writes through x18

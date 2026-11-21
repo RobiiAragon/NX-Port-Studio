@@ -100,6 +100,15 @@ static void v2_checks(void) {
             CHECK(address.address == htonl(ips[i]), "V2 precedence is exact before label before longest suffix"); dm_net_freeaddrinfo(out); }
     }
     CHECK(dm_net_getaddrinfo("evilscope.invalid", "443", &hint, &out) == 8 && !out, "suffix matching respects a DNS label boundary");
+    CHECK(dm_net_getaddrinfo("localhost", "443", &hint, &out) == 0 && out, "a public-DNS route admits its exact name to the system resolver");
+    if (out) { Address address; memcpy(&address, ((dm_net_addrinfo *)out)->addr, sizeof address);
+        CHECK(address.address == htonl(0x7f000001), "a public-DNS route keeps the system's own answer, without redirection"); dm_net_freeaddrinfo(out); }
+    CHECK(dm_net_getaddrinfo("sub.localhost", "443", &hint, &out) == 8 && !out, "a public-DNS route never admits other names below it");
+    char context[32] = {0}, connection[32] = {0};
+    if (dm_ssl_context_create(context, 32) == 0 && dm_ssl_connection_create(connection, context) == 0) {
+        CHECK(dm_ssl_set_hostname(connection, "localhost", 9) != 0, "a public-DNS route grants no provider TLS peer or certificate");
+        dm_ssl_connection_destroy(connection); dm_ssl_context_destroy(context);
+    }
     CHECK(dm_nextendo_routes_retry_unconfigured() == 0 && dm_nextendo_routes_status() == 0, "explicit setup retry cannot replace a published policy");
 }
 int main(int argc, char **argv) {

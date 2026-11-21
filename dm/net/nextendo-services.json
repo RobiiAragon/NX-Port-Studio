@@ -167,6 +167,14 @@
         "server": "server",
         "tls": true
       }
+    ],
+    "0100c2500fc20000": [
+      {
+        "match": "exact",
+        "host": "npln.eevee.ink",
+        "server": "public-dns",
+        "tls": false
+      }
     ]
   },
   "titleFamilies": {

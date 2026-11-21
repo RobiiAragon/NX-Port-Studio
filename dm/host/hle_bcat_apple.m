@@ -37,7 +37,7 @@ static NSString *const dummyHash = @"5feceb66ffc86f38d952786c6d696c79c2dbc239dd4
 static NSArray<NSString *> *titles(void) { return @[@"0100f8f0000a2000", @"01003bc0000a0000", @"01003c700009c800", @"0100c2500fc20000"]; }
 int dm_bcat_supported(const char *title) { if(!title)return 0;NSString *value=[NSString stringWithUTF8String:title];return value&&[titles() containsObject:value.lowercaseString]; }
 static BOOL splatoon3(NSString *title) { return [title isEqual:@"0100c2500fc20000"]; }
-static BOOL recipeVersion(NSString *title,NSString *version) { return title&&version&&[titles() containsObject:title]&&[version isEqual:(splatoon3(title)?@"11.3.0":@"5.5.2")]; }
+static BOOL recipeVersion(NSString *title,NSString *version) { return title&&version&&[titles() containsObject:title]&&(splatoon3(title)?([version isEqual:@"11.3.0"]||[version isEqual:@"12.0.0"]):[version isEqual:@"5.5.2"]); }
 static BOOL staticResources(NSString *title) { return !splatoon3(title)&&![title isEqual:@"01003c700009c800"]; }
 static NSString *digest(NSData *data) { uint8_t h[32]; CC_SHA256(data.bytes, (CC_LONG)data.length, h); NSMutableString *s = [NSMutableString new]; for (int i=0;i<32;i++) [s appendFormat:@"%02x",h[i]]; return s; }
 static BOOL fail(NSString **error, NSString *message) { if (error) *error = message; return NO; }

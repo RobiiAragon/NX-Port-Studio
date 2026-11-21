@@ -1,5 +1,5 @@
-# Experimental Splatoon 3 profile, update 11.3.0 (v2752512), SDK 20.5.22.
-# I reached character creation, the tutorial and the plaza in earlier private Mac diagnostics; serious graphics and multiplayer defects remain open.
+# Experimental Splatoon 3 profile, updates 11.3.0 (v2752512, SDK 20.5.22) and 12.0.0 (v2818048, SDK 20.5.32); the shader tables are 12.0.0's.
+# On the Mac, 12.0.0 reaches the plaza, the lobby and its practice area with the console's picture (November 21, 2026); completed online matches remain open.
 
 # ---- Identity ----
 title_id	0100C2500FC20000
@@ -12,8 +12,9 @@ app_category	public.app-category.games
 
 # ---- Versions ----
 build	v2752512	11.3.0	main=28c4287aee36f7499da60f3e68b54c70	sdk=574284b40c06cf1821a44857939083be
-package	v2752512
-shader_versions	v2752512
+build	v2818048	12.0.0	main=6cbb16698653e1af3c3a7602164819bb	sdk=6a0a2600867712cd6f6c4dec53ae0d9c
+package	v2818048
+shader_versions	v2818048
 
 # ---- Files ----
 # every module main imports from
