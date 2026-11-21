@@ -159,6 +159,18 @@ static void fill_tex(const uint8_t *d, size_t n) {
               (unsigned long long)h.t.serial, h.width, h.height, h.pixfmt, h.levels, h.slices, (unsigned long)t.width, (unsigned long)t.height, (unsigned long)t.pixelFormat, (unsigned long)t.mipmapLevelCount, slices);
     uint64_t total = 0; for (uint32_t i = 0; i < h.nsub; i++) total += subs[i].bytes;
     id<MTLBuffer> b = [g_dev newBufferWithBytes:px length:MAX(total, 16u) options:MTLResourceStorageModeShared];
+    // diagnostic DMRP_ZERO=<serial>[,…]: those textures start from zeros instead of their captured content (does a defect come from what an earlier frame left?)
+    for (const char *q = getenv("DMRP_ZERO"); q && *q; q = strchr(q, ',') ? strchr(q, ',') + 1 : "")
+        if (strtoull(q, NULL, 10) == h.t.serial) { memset(b.contents, 0, (size_t)MAX(total, 16u)); printf("DMRP_ZERO: texture ser=%llu starts from zeros\n", (unsigned long long)h.t.serial); break; }
+    if (getenv("DMRP_LIST")) printf("DMRP_LIST: ser=%llu type %u format %u %ux%ux%u levels %u slices %u\n", (unsigned long long)h.t.serial, h.type, h.pixfmt, h.width, h.height, h.depth, h.levels, h.slices);
+    // diagnostic DMRP_DUMP=<serial>:<path>: saves that texture's captured content as <path>.bin with <path>.idx (one line per level / slice: level slice w h d row img bytes offset)
+    { const char *e = getenv("DMRP_DUMP"); char *c; if (e && strtoull(e, &c, 10) == h.t.serial && *c == ':') {
+        char pb[1100], pi[1100]; snprintf(pb, sizeof pb, "%s.bin", c + 1); snprintf(pi, sizeof pi, "%s.idx", c + 1);
+        FILE *fb = fopen(pb, "wb"), *fi = fopen(pi, "w"); uint64_t o = 0;
+        if (fb && fi) { fwrite(px, 1, (size_t)total, fb); fprintf(fi, "format %u\n", h.pixfmt);
+            for (uint32_t i = 0; i < h.nsub; i++) { fprintf(fi, "%u %u %u %u %u %llu %llu %llu %llu\n", subs[i].level, subs[i].slice, subs[i].w, subs[i].h, subs[i].d, (unsigned long long)subs[i].row, (unsigned long long)subs[i].img, (unsigned long long)subs[i].bytes, (unsigned long long)o); o += subs[i].bytes; }
+            printf("DMRP_DUMP: texture ser=%llu → %s (%u subresources)\n", (unsigned long long)h.t.serial, pb, h.nsub); }
+        if (fb) fclose(fb); if (fi) fclose(fi); } }
     id<MTLCommandBuffer> cb = q_cb(); id<MTLBlitCommandEncoder> e = [cb blitCommandEncoder]; uint64_t off = 0;
     for (uint32_t i = 0; i < h.nsub; i++) { const cap_tsub *s = &subs[i];
         [e copyFromBuffer:b sourceOffset:off sourceBytesPerRow:s->row sourceBytesPerImage:s->img sourceSize:MTLSizeMake(s->w, s->h, s->d) toTexture:t destinationSlice:s->slice
@@ -287,7 +299,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     uint64_t nlive = 0, ncpu = 0;
     for (size_t i = 0; i < rp_nch; i++) if (rp_ch[i].c.tag == CAP_TKND) for (size_t o = 0; o + sizeof(cap_tknd) <= rp_ch[i].c.raw; o += sizeof(cap_tknd)) {
         cap_tknd *k = (cap_tknd *)(rp_ch[i].d + o); cap_tex_fields(&k->t, &rp_dec, NULL);
-        if (k->kind & CAP_TK_LIVE) { mtl_tex_init(&k->t); nlive++; } }
+        if (k->kind & CAP_TK_LIVE) { mtl_tex_init(&k->t); nlive++; }
+        { const char *e = getenv("DMRP_DUMP"); if (e && strtoull(e, NULL, 10) == k->t.serial) printf("DMRP_DUMP: texture ser=%llu kind %s%s, pool offset %#llx\n", (unsigned long long)k->t.serial,
+              k->kind & CAP_TK_LIVE ? "live (GPU-written) " : "", k->kind & CAP_TK_CPU ? "CPU-written (uploaded from its pool)" : "", (unsigned long long)k->t.off); } }
     for (size_t i = 0; i < rp_nch; i++) if (rp_ch[i].c.tag == CAP_TKND) for (size_t o = 0; o + sizeof(cap_tknd) <= rp_ch[i].c.raw; o += sizeof(cap_tknd)) {
         cap_tknd *k = (cap_tknd *)(rp_ch[i].d + o); if (k->kind & CAP_TK_CPU) { mtl_tex_cpu_written(&k->t); ncpu++; } }
     for (size_t i = 0; i < rp_nch; i++) if (rp_ch[i].c.tag == CAP_TREG) for (size_t o = 0; o + sizeof(cap_treg) <= rp_ch[i].c.raw; o += sizeof(cap_treg)) {
@@ -399,6 +413,19 @@ int main(int argc, char **argv) { @autoreleasepool {
         printf("replay %d: digest %s %s live %s (%ux%u format %u); submit CPU %.2f ms (+ %.2f ms applying the captured state), GPU %.2f ms; %llu passes, %llu draws, %llu segments\n", index + rep, out, same ? "==" : "!=", live, w, h, pf, exec_ns / 1e6, setup_ns / 1e6, gpu,
                (unsigned long long)(pass1 - pass0), (unsigned long long)(draw1 - draw0), (unsigned long long)g_seg + 1);
     }
+    // diagnostic DMRP_DUMP_END=<serial>:<path>: that texture's content after the replay, as DMRP_DUMP writes the captured one
+    { const char *e = getenv("DMRP_DUMP_END"); char *c; uint64_t ser = e ? strtoull(e, &c, 10) : 0;
+      if (e && *c == ':') { id o = tex_get(ser); id<MTLTexture> mt = [o conformsToProtocol:@protocol(MTLTexture)] ? o : nil; if (mt.parentTexture) mt = mt.parentTexture;
+        cap_tsub *subs = NULL; uint32_t nsub = 0; id<MTLBuffer> b = mt ? cap_tex_readback(mt, &subs, &nsub) : nil;
+        if (!b) printf("DMRP_DUMP_END: texture ser=%llu: no readback\n", (unsigned long long)ser);
+        else { char pb[1100], pi[1100]; snprintf(pb, sizeof pb, "%s.bin", c + 1); snprintf(pi, sizeof pi, "%s.idx", c + 1);
+            FILE *fb = fopen(pb, "wb"), *fi = fopen(pi, "w"); uint64_t o2 = 0;
+            if (fb && fi) { fprintf(fi, "format %lu\n", (unsigned long)mt.pixelFormat);
+                for (uint32_t i = 0; i < nsub; i++) { fprintf(fi, "%u %u %u %u %u %llu %llu %llu %llu\n", subs[i].level, subs[i].slice, subs[i].w, subs[i].h, subs[i].d, (unsigned long long)subs[i].row,
+                    (unsigned long long)subs[i].img, (unsigned long long)subs[i].bytes, (unsigned long long)o2); fwrite((const uint8_t *)b.contents + o2, 1, (size_t)subs[i].bytes, fb); o2 += subs[i].bytes; }
+                printf("DMRP_DUMP_END: texture ser=%llu → %s (%u subresources)\n", (unsigned long long)ser, pb, nsub); }
+            if (fb) fclose(fb); if (fi) fclose(fi); }
+        free(subs); } }
     if (same_all) printf("MATCH: the replayed frame equals the live frame\n");
     else if (ok_all) printf("MATCH within --max-pixels %llu: the replayed frame differs from the live frame in at most %llu pixels\n", (unsigned long long)maxpx, (unsigned long long)worst_px);
     else printf("[RED] MISMATCH: the replayed frame differs from the live frame%s\n", lpix ? "" : " (a capture without the live pixels: compared by digest only)");

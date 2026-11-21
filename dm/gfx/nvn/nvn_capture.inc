@@ -37,6 +37,16 @@ static int nvn_cap_enabled(void) {
     return 1;
 }
 
+// DM_CTL "capture <path>" (hle_hid.c ctl_main): the frame after the next present, without knowing its number at launch (a lobby reached after loading, an online
+// scene). Once per run, and not beside a DM_NVN_CAPTURE given at launch; the header's frame is 2, the replay layer's own frame number (mtl_frame) is the live one
+void dm_gfx_capture_next(const char *path) {
+    if (nvn_cap_enabled() || g_cap_done || g_cap_active) { MLOG("[RED] DM_CTL capture: a capture is already set or done in this run; one per run"); return; }
+    if (!path || !*path) { MLOG("[RED] DM_CTL capture: expected a file path"); return; }
+    strlcpy(g_cap_path, path, sizeof g_cap_path); g_cap_presents = 0;
+    atomic_thread_fence(memory_order_release); g_cap_frame = 2;   // the submit and present hooks read the path only once the frame is set
+    MLOG("DM_CTL: capturing the frame after the next present into %s", g_cap_path);
+}
+
 static uint64_t cap_hash_block(const uint8_t *p, size_t n) {   // a fast 64-bit hash of a 4 KiB block (only compared with itself between submits)
     uint64_t h = 0x9E3779B97F4A7C15ull ^ n, v; size_t i = 0;
     for (; i + 8 <= n; i += 8) { memcpy(&v, p + i, 8); h = (h ^ v) * 0xff51afd7ed558ccdull; h ^= h >> 32; }
