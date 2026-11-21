@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC8:** agregué la transferencia de partidas ZIP de JKSV en Studio y en los launchers de los ports nativos de Apple, conservando la partida anterior y aplicando las importaciones de iOS antes de cargar el juego. Mis pruebas anteriores de juegos y red conservan su alcance documentado. [Notas y límites](docs/releases/1.6.0-rc.8.md).
+> **1.6.0 RC9:** corregí los NaN de memoria vieja que quemaban el vestíbulo de Splatoon 3, registré Splatoon 3 12.0.0 e hice que su variante en línea de Nextendo conecte; un juego empaquetado para Mac ya puede vincular su cuenta de Nextendo por sí mismo. Las partidas en línea completas de Splatoon 3 siguen pendientes. [Notas y límites](docs/releases/1.6.0-rc.9.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 
