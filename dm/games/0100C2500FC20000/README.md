@@ -48,7 +48,7 @@ Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Sti
 
 ### Rare NaN texels after a return from the lobby
 
-In a 12.0.0 build from upstream nxnative's code with the same stale-storage fix, the plaza showed black and red blocks on its buildings after a failed attempt to enter the lobby. A dump of the 128×128×78 environment-probe array found 14 NaN texels (0.001 %): its storage had been under the 1 % threshold, so the texture kept it. Those elements now start from 0 and the rest of the storage stays the content ([stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use)). In the rebuilt run, eight textures had such elements, up to 58,632 (0.85 %) in one probe array, and the plaza rendered cleanly.
+In a 12.0.0 build from upstream nxnative's code with the same stale-storage fix, the plaza showed black and red blocks on its buildings after a failed attempt to enter the lobby. A dump of the 128×128×78 environment-probe array found 14 NaN texels (0.001 %): its storage had been under the 1 % threshold, so the texture kept it. Those elements now start from 0 and the rest of the storage stays the content ([stale floating-point storage at first use](../../../docs/reference/nvn-objects.md#stale-floating-point-storage-at-first-use)). In a run with the final code, the failed lobby attempt and the return gave six textures such elements, from 79 to 22,215 (0.32 %, in a 256×256×78 probe array), and one probe array started from zeros. All of them were in `CPU_NO_ACCESS` pools, and the plaza then rendered cleanly.
 
 
 ### 12.0.0 with shader chain e00d4dfc770d

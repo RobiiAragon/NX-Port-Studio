@@ -2513,7 +2513,8 @@ static int mem_any(const uint8_t *p, uint64_t n) {   // whether any byte is non-
 // infinity, so storage whose float texels are more than 1 % non-finite is taken as stale, and the texture starts from zeros instead, as a fresh one does.
 // Fewer is not harmless either: in another run of the same game the 128x128x78 probe array's storage held 14 NaN texels (0.001 %), kept as content, and after a return from the
 // lobby the plaza's reflections spread them as black and red blocks. Those texels alone start from 0 (storage_clean), and the rest of the storage is the content.
-// One element per texel for RG11B10 (its three channels share 32 bits), one per channel for the 16- and 32-bit formats.
+// One element per texel for RG11B10 (its three channels share 32 bits), one per channel for the 16- and 32-bit formats. Only a CPU_NO_ACCESS pool's storage is read this way:
+// in a pool the CPU can write, what the storage holds at first use is what the game put there (upstream's t_direct_upload fills RGBA16F with NaN and infinity on purpose).
 static int storage_float_layout(MTLPixelFormat pf) {   // the element size in bytes, 0 for a format this does not read
     switch (pf) {
         case MTLPixelFormatRG11B10Float: return 4 | 0x100;
@@ -2550,7 +2551,7 @@ static int tex_init_fill(const tex_t *t, id<MTLTexture> mt) {
     if (!no_cpu && !uncached && (!flush_fill || !nvn_flushed(t->mem, t->L.size))) return 0;
     if (!atomic_load(&g_sub_thread_set) || !on_sub_thread() || !mem_any(t->mem, t->L.size)) return 0;   // the upload batch belongs to the submit thread
     static int stale_keep = -1; if (stale_keep < 0) { const char *e = getenv("DM_NVN_STALE_FLOAT"); stale_keep = e && atoi(e) == 1; }
-    size_t all = 0, bad = stale_keep ? 0 : storage_nonfinite(t, mt.pixelFormat, &all);
+    size_t all = 0, bad = stale_keep || !no_cpu ? 0 : storage_nonfinite(t, mt.pixelFormat, &all);   // CPU-visible storage holds what the CPU wrote: content, NaN included
     if (bad * 100 > all) {
         static uint64_t ns; if (ns++ < 8 || !(ns & (ns - 1))) MLOG("initial content: ser=%llu %ux%ux%u format %#x: its storage is stale (over 1 %% of its float texels NaN or infinite); starts from zeros (%llu so far; DM_NVN_STALE_FLOAT=1 keeps it)",
             (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.format, (unsigned long long)ns);
