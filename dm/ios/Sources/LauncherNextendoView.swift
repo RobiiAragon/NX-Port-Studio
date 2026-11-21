@@ -149,6 +149,8 @@ struct MobileNextendoSetupView: View {
         case .authorizationExpired: return text("Sign-in expired. Start a new request.")
         case .callbackRejected, .invalidResponse: return text("Nextendo’s response could not be verified. Your previous credential was kept.")
         case .httpStatus(let code): return String(format: text("Nextendo returned HTTP %d. Try again later."), code)
+        case .accountHTTPStatus(let step, let code): return String(format: text(step.messageFormat), code)
+        case .credentialBusy: return text(error.localizedDescription)
         case .keychain: return text("This app could not access its Keychain. Unlock the iPhone and try again.")
         default: return text("Nextendo could not complete the request. Check your connection and try again.")
         }

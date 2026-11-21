@@ -201,3 +201,9 @@
 "No saved game exists in this folder yet." = "No saved game exists in this folder yet.";
 "An import is pending. Restart the port to apply it first." = "An import is pending. Restart the port to apply it first.";
 "Cancel" = "Cancel";
+
+"Nextendo could not exchange the sign-in code (HTTP %d)." = "Nextendo could not exchange the sign-in code (HTTP %d).";
+"Nextendo could not verify the account identity (HTTP %d)." = "Nextendo could not verify the account identity (HTTP %d).";
+"Nextendo could not issue the game credential (HTTP %d)." = "Nextendo could not issue the game credential (HTTP %d).";
+"Nextendo could not renew sign-in (HTTP %d)." = "Nextendo could not renew sign-in (HTTP %d).";
+"Another app is renewing the saved Nextendo account. Try again shortly." = "Another app is renewing the saved Nextendo account. Try again shortly.";

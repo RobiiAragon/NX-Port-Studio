@@ -2,6 +2,7 @@
 // Unbundled tools keep their original CLI and do not load AppKit/SwiftUI here.
 #include "bundle_mac.h"
 #include "game_profile.h"
+#include "net_socket.h"
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <limits.h>
@@ -9,6 +10,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static void *bootstrap_image;
+
+// Called on the existing guest worker while the primary AppKit loop is active.
+// CLI hosts and local-only modes do not load account code or read storage.
+void dm_mac_bundle_prepare_account(void) {
+    if (!bootstrap_image || !dm_net_nextendo_enabled()) return;
+    void (*prepare)(void) = dlsym(bootstrap_image, "dm_mac_prepare_game_account");
+    if (prepare) prepare();
+    else fputs("[RED] launcher: account preparation is unavailable in the bundled bootstrap\n", stderr);
+}
 
 int dm_mac_bundle_prepare(int *argc, char ***argv) {
     CFBundleRef bundle = CFBundleGetMainBundle();
@@ -30,5 +42,7 @@ int dm_mac_bundle_prepare(int *argc, char ***argv) {
     int (*prepare)(int *, char ***, const char *) = dlsym(image, "dm_mac_app_prepare");
     if (!prepare) { fputs("[RED] launcher: bundled bootstrap has no compatible entry point\n", stderr); return 1; }
     // Keep the image loaded: AppKit/SwiftUI callbacks and prepared argv live on.
-    return prepare(argc, argv, DM_GAME_ID);
+    int result = prepare(argc, argv, DM_GAME_ID);
+    if (result < 0) bootstrap_image = image;
+    return result;
 }

@@ -201,3 +201,9 @@
 "No saved game exists in this folder yet." = "このフォルダにはまだセーブデータがありません。";
 "An import is pending. Restart the port to apply it first." = "保留中の読み込みがあります。先に移植版を再起動して適用してください。";
 "Cancel" = "キャンセル";
+
+"Nextendo could not exchange the sign-in code (HTTP %d)." = "Nextendoでログインコードを交換できませんでした（HTTP %d）。";
+"Nextendo could not verify the account identity (HTTP %d)." = "Nextendoでアカウントの本人確認ができませんでした（HTTP %d）。";
+"Nextendo could not issue the game credential (HTTP %d)." = "Nextendoでゲームの認証情報を発行できませんでした（HTTP %d）。";
+"Nextendo could not renew sign-in (HTTP %d)." = "Nextendoでログインを更新できませんでした（HTTP %d）。";
+"Another app is renewing the saved Nextendo account. Try again shortly." = "別のアプリが保存済みのNextendoアカウントを更新しています。少し待ってから再試行してください。";

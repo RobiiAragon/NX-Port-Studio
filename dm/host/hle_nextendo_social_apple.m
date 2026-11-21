@@ -73,7 +73,7 @@ static NSData *decode_friends(NSData *bytes,size_t *count) {
 
 static uint32_t friends_snapshot(dm_social_friend **output,size_t *count,bool refresh) { @autoreleasepool {
     if (count) *count=0; if (output) *output=NULL; if (!output || !count) return DM_ACCOUNT_FAIL;
-    NSData *identity=dm_nextendo_api_identity(); if (!identity) return DM_ACCOUNT_FAIL;
+    NSData *identity=dm_nextendo_api_identity("friends"); if (!identity) return DM_ACCOUNT_FAIL;
     static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
     static NSData *cached_identity,*cached_records; static size_t cached_count; static NSTimeInterval fetched;
     pthread_mutex_lock(&mutex); NSData *records=nil; size_t n=0;
@@ -83,10 +83,10 @@ static uint32_t friends_snapshot(dm_social_friend **output,size_t *count,bool re
         uint8_t *buffer=malloc(1024*1024); if (!buffer) return DM_ACCOUNT_FAIL; size_t length=0;
         uint32_t result=dm_nextendo_api_request("friends",NULL,0,buffer,1024*1024,&length);
         NSData *data=result||!length?nil:[NSData dataWithBytes:buffer length:length]; free(buffer);
-        if (!data || !(records=decode_friends(data,&n)) || ![identity isEqual:dm_nextendo_api_identity()]) return DM_ACCOUNT_FAIL;
+        if (!data || !(records=decode_friends(data,&n)) || ![identity isEqual:dm_nextendo_api_identity("friends")]) return DM_ACCOUNT_FAIL;
         pthread_mutex_lock(&mutex); cached_identity=identity; cached_records=records; cached_count=n; fetched=monotonic_time(); pthread_mutex_unlock(&mutex);
     }
-    if (![identity isEqual:dm_nextendo_api_identity()]) return DM_ACCOUNT_FAIL;
+    if (![identity isEqual:dm_nextendo_api_identity("friends")]) return DM_ACCOUNT_FAIL;
     // Every caller owns its snapshot; sign-out/account changes cannot mutate it.
     if (n) { *output=malloc(records.length); if (!*output) return DM_ACCOUNT_FAIL; memcpy(*output,records.bytes,records.length); }
     *count=n; return 0;

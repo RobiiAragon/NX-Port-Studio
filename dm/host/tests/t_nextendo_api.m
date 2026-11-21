@@ -2,6 +2,9 @@
 #import "../nextendo_api_apple.h"
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+#include "../account_trace.h"
+#include "t_trace_capture.h"
 static int checks, failures, requests;
 static BOOL linked = YES;
 static unsigned response_status = 200;
@@ -14,8 +17,8 @@ static bool oversized, transport_failed;
 @property(nonatomic) dispatch_semaphore_t completed;
 @end
 #define CHECK(x) do { checks++; if (!(x)) { failures++; fprintf(stderr,"API check failed at %d\n",__LINE__); } } while (0)
-NSString *dm_nextendo_api_bearer(void) { return linked ? @"synthetic-proof" : nil; }
-NSData *dm_nextendo_api_identity(void) { return nil; }
+NSString *dm_nextendo_api_bearer(const char *resource) { (void)resource;return linked ? @"synthetic-proof" : nil; }
+NSData *dm_nextendo_api_identity(const char *resource) { (void)resource;return nil; }
 bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t generation) { return linked && generation==7 && [proof isEqual:@"synthetic-proof"]; }
 void dm_guest_host_wait_begin(void) {}
 void dm_guest_host_wait_end(void) {}
@@ -29,7 +32,28 @@ static bool transport(const char *url,const char *method,const char *authorizati
     memcpy(output,json,sizeof json-1); *size=oversized?capacity+1:sizeof json-1; *status=response_status;
     return !transport_failed;
 }
+static void httpMetadata(void) {
+    linked=YES;
+    const char *disabled[]={"0","true","01",""};uint8_t output[256];size_t size=0;
+    TraceCapture capture=trace_capture_begin();unsetenv("DM_ACCOUNT_TRACE");
+    CHECK(!dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size));
+    for(unsigned i=0;i<sizeof disabled/sizeof *disabled;i++) {
+        setenv("DM_ACCOUNT_TRACE",disabled[i],1);CHECK(!dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size));
+    }
+    char *text=trace_capture_end(capture);CHECK(!*text);free(text);
+    setenv("DM_ACCOUNT_TRACE","1",1);capture=trace_capture_begin();response_status=403;
+    CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0);
+    for(unsigned i=0;i<64;i++) {response_status=400+i%2;CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0);}
+    errno=EAGAIN;dm_account_trace_api(DM_ACCOUNT_API_ME,700);CHECK(errno==EAGAIN);
+    dm_account_trace_api((dm_account_trace_api_operation)99,200);
+    text=trace_capture_end(capture);
+    CHECK(strstr(text,"op=api.friends http_status=403")!=NULL&&strstr(text,"op=api.me http_status=0")!=NULL);
+    CHECK(!strstr(text,"synthetic-proof")&&!strstr(text,"Bearer")&&!strstr(text,"https://")&&!strstr(text,"friends\"")&&!strstr(text,"700"));
+    unsigned lines=0;for(char *p=text;*p;p++)if(*p=='\n')lines++;CHECK(lines==33);free(text);
+    unsetenv("DM_ACCOUNT_TRACE");response_status=200;
+}
 int main(void) { @autoreleasepool {
+    unsetenv("DM_ACCOUNT_TRACE");
     dm_nextendo_api_test_transport(transport); uint8_t output[256]; size_t size=99;
     CHECK(!dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size) && size==14);
     CHECK(!dm_nextendo_api_request("me",NULL,0,output,sizeof output,&size));
@@ -70,5 +94,5 @@ int main(void) { @autoreleasepool {
     [transfer URLSession:dummy task:dummy_task didCompleteWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]];
     CHECK(transfer.failed&&dispatch_semaphore_wait(transfer.completed,DISPATCH_TIME_NOW)==0);
     [dummy invalidateAndCancel];
-    printf("Nextendo API: %d checks, %d failed; synthetic transport only\n",checks,failures); return failures?1:0;
+    httpMetadata();printf("Nextendo API: %d checks, %d failed; synthetic transport only\n",checks,failures); return failures?1:0;
 } }

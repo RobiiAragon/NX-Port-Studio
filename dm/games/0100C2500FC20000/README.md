@@ -1,6 +1,6 @@
 # Splatoon 3 (`0100C2500FC20000`)
 
-I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. I reached character creation, the tutorial, the train transition and the plaza in earlier private Mac diagnostics. **This profile remains experimental:** I observed serious color/texture corruption after returning from the online lobby, and the connection failed with `2321-4992`. I have not qualified a completed Nextendo, LAN or LDN match, iPhone rendering, DLC gameplay or a long session.
+I registered update **11.3.0** (`v2752512`), SDK **20.5.22**, with the native NVN renderer. In my latest Mac test of source `8836235c` and shader chain `8410a1435ffe`, I reached a mostly correct lobby scene; one captured HUD reading was **60 FPS** and **4.28 ms GPU time** on an M5 Max. Small black stippled patches and white/red highlights remained on some floor reflections. **This profile remains experimental:** I have not accepted its graphics as correct or completed a match. My earlier `9f3f6be1` test reached the lobby tour, player-card creation and Nextendo matchmaking queue but had severe graphics corruption. Nextendo match completion, LAN/LDN discovery and matches, iPhone rendering, DLC gameplay and long-session stability remain unqualified.
 
 I record the detailed bring-up evidence and remaining tests in [Splatoon 3 bring-up](../../../docs/bringup/splatoon-3.md) and [local-network requirements](../../../docs/bringup/splatoon-3-local-network.md). Passing backend fixtures and recognizing a server profile do not establish working multiplayer in this game.
 
@@ -42,9 +42,33 @@ I check the versioned [calendar recipe](../../../docs/reference/nextendo-bcat.md
 
 Local wireless is available at the Shoal; built-in LAN uses **ZL + ZR + Left Stick** there. I keep these protocols separate: native LAN uses IP sockets, while the LDN bridge requires a compatible IP peer/module. Two ordinary windows on one Mac do not establish two independent endpoints. I have not qualified discovery, joining, both host roles or a completed local match for this profile.
 
+## Mac acceptance on November 4, 2026
+
+### Source 8836235c with shader chain 8410a1435ffe
+
+I tested the rebuilt Mac application with relaxed shader math. The lobby scene improved substantially and rendered normally across most of the picture. My private capture showed 60 FPS, 4.28 ms GPU time and a 16.67 ms frame interval on an M5 Max. This is a single captured reading, not a benchmark or a long-session stability result. Localized black stippling and white/red highlights remained in some floor reflections; I have not attributed that residual defect to an image binding, sampler LOD or shader operation.
+
+The bounded metadata sample from the tone-map consumer contained six accepted facts with no rejected metadata line or crash marker. It identified real full-resolution and five-mip lower-resolution inputs, whose serials differed from the output attachment. This does not establish feedback in an earlier producer or show its sampler clamps.
+
+I also entered the Territorial matchmaking queue. After the game announced the start of combat, it remained on a black loading screen with saving/loading indicators; I did not reach a match or its results. During a 238-second metadata-only observation, some sockets continued exchanging bytes while two others repeatedly returned `EAGAIN` without successful sends or receives. That does not identify their protocol, establish a deadlock or prove a server fault. The ordinary log later stopped growing and the process was absent at the next process-list check, without a recorded crash marker; I have not established why it exited. LAN/LDN and iPhone acceptance remain pending.
+
+### Earlier source 9f3f6be1
+
+I tested the installed Mac application built from `9f3f6be1`. I advanced beyond the title, entered the lobby, completed its tour, created my player card and started the Nextendo matchmaking queue. The picture became severely corrupted during this sequence. I have not finished an online match or established the cause of the remaining graphics defect.
+
+My bounded, metadata-only capture contained **7,384 ordinary log lines**, with no crash marker at capture time. Native account availability was one; no account-preparation or returned account-operation error was recorded. Friends creator command 0 returned success, the canonical friends API returned **HTTP 200**, and **2,893 socket operations** were recorded. No LDN event was recorded. These facts establish the observed startup/lobby progress and that API response, without qualifying matchmaking completion, a LAN/LDN session, hourly credential rotation or long-session stability. No token, account ID, payload, raw crash report or live-memory inspection was needed for this receipt.
+
 ## Found on this game
 
+- [Mac fast math removes exceptional values before precise operations](../../../docs/reference/shaders.md#mac-fast-math-removes-exceptional-values-before-precise-operations): I reproduced a general offline compiler defect with authored GPU controls, then corrected the shared Mac shader policy. The derived-arithmetic control changes from 330/800 failures to zero with relaxed mode. My rebuilt `8836235c` port improved substantially in the lobby, but its residual reflection artifacts still need a separate cause and correction.
+
+- [A game credential is reused for account APIs](../../../docs/reference/services.md#a-game-credential-is-reused-for-account-apis): I separated the host social OAuth bearer from the NEX game proof in synthetic decoder/transport tests. The installed `9f3f6be1` test recorded a real friends API HTTP 200; other permissions and completed gameplay remain unqualified.
+
+- [Friends IPC initialization needs real objects and completion events](../../../docs/reference/services.md#friends-ipc-initialization-needs-real-objects-and-completion-events): the earlier 11.3.0 initializer reached unsupported `friend:u` after Play. My installed `9f3f6be1` candidate passed the title and reached the lobby/queue, with creator command 0 succeeding. The broader IPC surface and completed multiplayer remain open.
+
 I link the shared service and graphics findings from the [bring-up note](../../../docs/bringup/splatoon-3.md). Those entries distinguish reproduced backend defects from hypotheses about this game's remaining corruption. I will update this note only after testing the exact new engine and shader stamps in the game.
+
+During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.
 
 I also corrected the [shader-progress observer](../../../docs/reference/packing.md#shader-progress-freezes-or-counts-unfinished-work-as-complete) after its displayed count lagged behind this game's base artifacts. The new synthetic schedules qualify progress reporting, not shader correctness, rendering or network play.
 
@@ -52,6 +76,12 @@ I added [failed account-operation metadata](../../../docs/reference/services.md#
 
 While investigating unavailable credentials, I reproduced and corrected [game sign-in replacing a native proof with scoped OAuth](../../../docs/reference/services.md#game-sign-in-overwrites-a-working-native-credential-with-scoped-oauth). The synthetic coordinator and native decoder tests establish that storage defect and its preservation checks. They do not identify the contents of my actual Keychain item or qualify this game's online access; the provider must still authorize the complete exchange.
 
-I also added [read-versus-decoder rejection metadata](../../../docs/reference/services.md#account-credential-acquisition-fails-without-identifying-read-or-decode-rejection), tested with fake Security and synthetic providers. I have not captured the game's resulting reason or qualified an online session with it.
+I also added [read-versus-decoder rejection metadata](../../../docs/reference/services.md#account-credential-acquisition-fails-without-identifying-read-or-decode-rejection), tested with fake Security and synthetic providers. My diagnostic run identified an expired stored credential before any recorded guest socket; I have not qualified an online session.
 
-During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition or tested its correction in the game; this result does not qualify the lobby return or establish its cause.
+I reproduced [the local nickname hook ignoring a validated identity snapshot](../../../docs/reference/services.md#local-nickname-ignores-an-already-validated-account-snapshot) with synthetic profiles and real HLE hooks. I have not tested the change in this game or claimed that its current in-game name has changed.
+
+I corrected [retention and renewal of the provider's OAuth grant](../../../docs/reference/services.md#a-linked-nextendo-account-expires-and-forces-browser-sign-in-again) in the shared account service, with synthetic production-coordinator and two-process checks. The actual service must still accept the application's consent/refresh, and updated ports must be rebuilt; I do not treat this as a completed Splatoon 3 online session or a graphics fix.
+
+I ran the [Mac account transaction before SDK startup](../../../docs/reference/services.md#packed-mac-launch-does-not-prepare-a-renewable-game-account-before-sdk-startup) in the installed `9f3f6be1` candidate. I observed the [lobby and queue milestone above](#mac-acceptance-on-november-4-2026), with no preparation error in the captured ordinary prefix. I have not qualified a completed online match or observed a real hourly refresh/rotation.
+
+During the static rendering audit I reproduced [pending attachment clears overtaking a later texture clear](../../../docs/reference/rendering.md#pending-attachment-clears-precede-an-explicit-texture-clear) with an authored GPU fixture. I have not observed that sequence in this game's failing transition. A candidate containing the correction still shows black/red artifacts after the rejected lobby return, so I have not established that clear ordering causes that visual defect.

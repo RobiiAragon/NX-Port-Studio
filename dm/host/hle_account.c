@@ -1,7 +1,7 @@
 // nn::account: the real device manages users via the acc:u0 service; the host has one fixed local user.
 // Explicit Nextendo mode can bind this local user to a real, unexpired NEX credential.
 // OAuth social access alone does not enable a network-service identity or game token.
-// Environment switch: DM_NICK=nickname (default Player).
+// DM_NICK overrides a validated cached nickname; a cold local account uses Player.
 #include "hle.h"
 #include "nextendo_account.h"
 #include "account_local.h"
@@ -54,10 +54,12 @@ HLE_FORCE("_ZN2nn7account9GetUserIdEPNS0_3UidERKNS0_10UserHandleE", "gets the Ui
     out->v[0] = h->v[0]; out->v[1] = h->v[1]; return RES_OK;
 }
 // nn::account::Nickname = struct { char name[33]; }, UTF-8
-HLE_FORCE("_ZN2nn7account11GetNicknameEPNS0_8NicknameERKNS0_3UidE", "user nickname; taken from DM_NICK", Result, h_acc_GetNick, char *nick, const Uid *uid) {
-    (void)uid;
+HLE_FORCE("_ZN2nn7account11GetNicknameEPNS0_8NicknameERKNS0_3UidE", "own local nickname; explicit override, validated memory snapshot, then local fallback", Result, h_acc_GetNick, char *nick, const Uid *uid) {
+    if(!nick)return RES_FAIL;
+    memset(nick,0,33);if(!dm_account_uid_exists(uid))return RES_FAIL;
     const char *e = getenv("DM_NICK");
-    memset(nick, 0, 33); strncpy(nick, e ? e : "Player", 32);
+    if(e) { if(!dm_account_copy_nickname(nick,e))dm_account_copy_nickname(nick,"Player"); }
+    else if(!dm_nextendo_account_cached_nickname(nick))dm_account_copy_nickname(nick,"Player");
     return RES_OK;
 }
 

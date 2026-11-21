@@ -12,6 +12,9 @@ void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provide
 // A host that signs out/replaces stored credentials in this process must invalidate
 // passive social authorization. This does not read storage or revoke a server token.
 void dm_nextendo_account_invalidate_social(void);
+// Local presentation only, from the already validated in-memory snapshot.
+// Never reads storage or a provider; valid cached names remain usable offline.
+bool dm_nextendo_account_cached_nickname(char nickname[33]);
 // Bundle metadata is read from the original game's CFBundleShortVersionString.
 // An embedding host may provide its actual version before guest startup (not an update substitute).
 void dm_nextendo_set_game_version(const char *version);

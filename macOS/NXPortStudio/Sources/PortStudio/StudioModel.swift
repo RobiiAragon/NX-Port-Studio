@@ -87,6 +87,7 @@ final class StudioModel {
     @ObservationIgnored var nextendoAuthorizationTask: Task<Void, Never>?
     @ObservationIgnored var nextendoGameCredentialTask: Task<Void, Never>?
     @ObservationIgnored var nextendoCancellationTask: Task<Void, Never>?
+    @ObservationIgnored var nextendoRenewalTask: Task<Void, Never>?
     @ObservationIgnored var nextendoAuthorizationID = UUID()
     @ObservationIgnored var nextendoGameCredentialID = UUID()
     var localRelaySnapshot = LocalDiscoveryRelaySnapshot.stopped

@@ -103,6 +103,44 @@ class Tidy(unittest.TestCase):
 
 
 class ClangTidyOutput(unittest.TestCase):
+    def test_error_level_is_kept_for_specific_compiler_check_names(self):
+        path = REPO / 'dm/host/example.c'
+        line = f'{path}:9:3: error: incompatible pointer types [clang-diagnostic-incompatible-pointer-types]'
+        self.assertEqual(lint.parse_diags(line), [('dm/host/example.c', 9, 3, 'clang-diagnostic-incompatible-pointer-types', 'incompatible pointer types')])
+        self.assertEqual(lint.compiler_errors(line), [line])
+        self.assertEqual(lint.parse_diags(line.replace('error:', 'warning:')), [])
+        self.assertEqual(lint.compiler_errors(line.replace('error:', 'warning:')), [])
+
+    def test_aborted_analysis_cannot_shrink_a_baseline(self):
+        # Old parse_diags dropped this compiler check, producing no findings;
+        # --update would then delete the old analyzer counts and report success.
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            source = REPO / 'dm/host/hle_hid.c'
+            (directory / 'compile_commands.json').write_text(json.dumps([{'file': str(source)}]))
+            baseline = directory / 'b.tsv'
+            baseline.write_text(BASELINE)
+            error = f'{source}:9:3: error: incompatible pointer types [clang-diagnostic-incompatible-pointer-types]\n'
+            def run(command, **kwargs):
+                return mock.Mock(returncode=0, stdout='LLVM version 23.1.4\n', stderr='') if '--version' in command else mock.Mock(returncode=1, stdout=error, stderr='1 error generated.\n')
+            args = mock.Mock(files=[], update=True, rebaseline=False, against=None, report=None, jobs=1)
+            with mock.patch.multiple(lint, DB_DIR=directory, BASELINE=baseline, llvm_tool=lambda name: name), mock.patch.object(lint.subprocess, 'run', side_effect=run), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(SystemExit, 'did not complete.*baseline unchanged'):
+                    lint.tidy(args)
+            self.assertEqual(baseline.read_text(), BASELINE)
+
+    def test_compiler_error_outside_lint_scope_still_aborts(self):
+        result = mock.Mock(returncode=0, stdout='/sdk/header.h:1:1: fatal error: missing type [clang-diagnostic-error]\n', stderr='')
+        with mock.patch.object(lint.subprocess, 'run', return_value=result):
+            with self.assertRaisesRegex(SystemExit, 'baseline unchanged'):
+                lint.tidy_one('clang-tidy', str(REPO / 'dm/host/example.c'))
+
+    def test_nonzero_tool_exit_without_parseable_findings_still_aborts(self):
+        result = mock.Mock(returncode=1, stdout='', stderr='invalid compiler arguments\n')
+        with mock.patch.object(lint.subprocess, 'run', return_value=result):
+            with self.assertRaisesRegex(SystemExit, 'baseline unchanged'):
+                lint.tidy_one('clang-tidy', str(REPO / 'dm/host/example.c'))
+
     def test_findings_in_linted_files_per_check(self):
         out = '\n'.join([
             f'{REPO}/dm/gfx/nvn/hle_nvn.c:1695:39: warning: Division by zero [clang-analyzer-core.DivideZero]',

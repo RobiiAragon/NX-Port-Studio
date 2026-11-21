@@ -7,6 +7,15 @@ public enum NextendoError: LocalizedError, Equatable, Sendable {
     case registrationRequired, invalidConfiguration, callbackRejected, authorizationUnavailable
     case authorizationExpired, authorizationDenied, invalidResponse, requestFailed
     case httpStatus(Int), keychain(Int32)
+    case accountHTTPStatus(NextendoAccountStep, Int)
+    case credentialBusy
+    public var permitsBackgroundRetry: Bool {
+        switch self {
+        case .requestFailed, .credentialBusy: true
+        case .accountHTTPStatus(_,let status), .httpStatus(let status): status == 408 || status == 429 || (500...599).contains(status)
+        default: false
+        }
+    }
 
     public var errorDescription: String? {
         switch self {
@@ -20,6 +29,20 @@ public enum NextendoError: LocalizedError, Equatable, Sendable {
         case .requestFailed: return "The Nextendo service could not be reached."
         case .httpStatus(let code): return "Nextendo returned HTTP \(code)."
         case .keychain(let status): return "The Nextendo credential could not be accessed in Keychain (\(status))."
+        case .accountHTTPStatus(let step, let status): return String(format: step.messageFormat, status)
+        case .credentialBusy: return "Another app is renewing the saved Nextendo account. Try again shortly."
+        }
+    }
+}
+
+public enum NextendoAccountStep: String, Sendable {
+    case codeExchange, identity, gameProof, refresh
+    public var messageFormat: String {
+        switch self {
+        case .codeExchange: "Nextendo could not exchange the sign-in code (HTTP %d)."
+        case .identity: "Nextendo could not verify the account identity (HTTP %d)."
+        case .gameProof: "Nextendo could not issue the game credential (HTTP %d)."
+        case .refresh: "Nextendo could not renew sign-in (HTTP %d)."
         }
     }
 }
@@ -110,6 +133,25 @@ extension Data {
 
 public enum NextendoTokenKind: String, Codable, Sendable { case nex, oauth }
 
+// Kept only inside the encrypted account record. Never exposed in summaries,
+// environment, game bundles or the C credential provider's NEX proof.
+struct NextendoRenewalGrant: Codable, Equatable, Sendable {
+    enum CodingKeys: String, CodingKey { case clientID = "clientId", accessToken, refreshToken, expiresAt, scopes }
+    let clientID: String
+    let accessToken: String
+    let refreshToken: String
+    let expiresAt: Date
+    let scopes: [String]
+    static func validToken(_ value: String) -> Bool {
+        !value.isEmpty && value.utf8.count <= 16_384 && value.utf8.allSatisfy { $0 > 32 && $0 < 127 }
+    }
+    func validate() throws {
+        _ = try NextendoOAuthConfiguration(clientID: clientID, scopes: scopes)
+        guard Self.validToken(accessToken), Self.validToken(refreshToken), expiresAt.timeIntervalSince1970.isFinite,
+              expiresAt.timeIntervalSince1970 > 0 else { throw NextendoError.invalidResponse }
+    }
+}
+
 public struct NextendoIdentity: Codable, Equatable, Sendable {
     public let pid: UInt64?
     public let username: String?
@@ -128,17 +170,21 @@ public struct NextendoSession: Codable, Equatable, Sendable, CustomStringConvert
     public let scopes: [String]
     public let createdAt: Date
     public let expiresAt: Date?
+    var renewal: NextendoRenewalGrant?
     public init(tokenKind: NextendoTokenKind, token: String, identity: NextendoIdentity?, scopes: [String], createdAt: Date, expiresAt: Date?) {
         schemaVersion = 1; self.tokenKind = tokenKind; self.token = token; self.identity = identity
         self.scopes = scopes; self.createdAt = createdAt; self.expiresAt = expiresAt
+        renewal = nil
     }
     public var description: String { "<NextendoSession \(tokenKind.rawValue); credential redacted>" }
     public var debugDescription: String { description }
     public func summary(at now: Date = Date()) -> NextendoAccountSummary {
         NextendoAccountSummary(tokenKind: tokenKind, identity: identity, scopes: scopes, expiresAt: expiresAt,
-                               isExpired: expiresAt.map { $0 <= now } ?? false)
+                               isExpired: expiresAt.map { $0 <= now } ?? false,
+                               renewalCheckAt: renewal.map { min($0.expiresAt.addingTimeInterval(-60), (expiresAt ?? $0.expiresAt).addingTimeInterval(-300)) })
     }
-    static func decodeTokenResponse(_ data: Data, now: Date) throws -> NextendoSession {
+    func withRenewal(_ grant: NextendoRenewalGrant?) -> Self { var next = self; next.renewal = grant; return next }
+    static func decodeTokenResponse(_ data: Data, now: Date, clientID: String? = nil, previousScopes: [String]? = nil) throws -> NextendoSession {
         guard data.count <= 65_536,
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw NextendoError.invalidResponse }
         let nex = object["nex_token"] as? String, oauth = object["access_token"] as? String
@@ -160,8 +206,15 @@ public struct NextendoSession: Codable, Equatable, Sendable, CustomStringConvert
             let serverExpiry = now.addingTimeInterval(value)
             expiry = expiry.map { min($0, serverExpiry) } ?? serverExpiry
         }
-        let scopes = (object["scope"] as? String)?.split(separator: " ").map(String.init) ?? []
-        return NextendoSession(tokenKind: kind, token: token, identity: identity, scopes: scopes, createdAt: now, expiresAt: expiry)
+        if object["scope"] != nil && !(object["scope"] is String) { throw NextendoError.invalidResponse }
+        let scopes = (object["scope"] as? String)?.split(separator: " ").map(String.init) ?? previousScopes ?? []
+        var session = NextendoSession(tokenKind: kind, token: token, identity: identity, scopes: scopes, createdAt: now, expiresAt: expiry)
+        if object["refresh_token"] != nil {
+            guard kind == .oauth, let clientID, let refresh = object["refresh_token"] as? String, let expiry else { throw NextendoError.invalidResponse }
+            let grant = NextendoRenewalGrant(clientID: clientID, accessToken: token, refreshToken: refresh, expiresAt: expiry, scopes: scopes)
+            try grant.validate(); session.renewal = grant
+        }
+        return session
     }
     /// Parses server-issued token metadata for expiry/identity consistency only. HMAC verification belongs to Nextendo.
     static func nexClaims(_ token: String) throws -> (pid: UInt64, username: String, expiry: Date) {
@@ -211,6 +264,7 @@ public struct NextendoSession: Codable, Equatable, Sendable, CustomStringConvert
             guard session.identity?.pid == claims.pid, session.identity?.username == claims.username,
                   let expiry = session.expiresAt, expiry <= claims.expiry else { throw NextendoError.invalidResponse }
         }
+        try session.renewal?.validate()
         return session
     }
 }
@@ -221,6 +275,7 @@ public struct NextendoAccountSummary: Sendable, Equatable {
     public let scopes: [String]
     public let expiresAt: Date?
     public let isExpired: Bool
+    public let renewalCheckAt: Date?
     public var hasNEXCredential: Bool { tokenKind == .nex && !isExpired }
 }
 
@@ -228,6 +283,48 @@ public protocol NextendoCredentialStore: Sendable {
     func load() throws -> NextendoSession?
     func save(_ session: NextendoSession) throws
     func remove() throws
+    func acquireExclusiveLease() async throws -> any NextendoCredentialLease
+}
+
+public protocol NextendoCredentialLease: Sendable { func release() }
+private struct NextendoNoopLease: NextendoCredentialLease { func release() {} }
+extension NextendoCredentialStore {
+    // Embedders with process-private stores retain their existing semantics.
+    // Shared stores implement a lease covering reload, rotation and commit.
+    public func acquireExclusiveLease() async throws -> any NextendoCredentialLease { NextendoNoopLease() }
+}
+
+final class NextendoFileCredentialLease: NextendoCredentialLease, @unchecked Sendable {
+    private let lock = NSLock()
+    private var descriptor: Int32
+    private init(_ descriptor: Int32) { self.descriptor = descriptor }
+    func release() { lock.withLock { if descriptor >= 0 { close(descriptor); descriptor = -1 } } }
+    deinit { release() }
+    static func acquire(at url: URL,waitTimeout: Duration = .seconds(35)) async throws -> NextendoFileCredentialLease {
+        let task = Task.detached {
+            try Task.checkCancellation()
+            let parent = url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            var directory = stat()
+            guard lstat(parent.path, &directory) == 0, (directory.st_mode & S_IFMT) == S_IFDIR,
+                  directory.st_uid == geteuid(), (directory.st_mode & 0o077) == 0 else { throw NextendoError.authorizationUnavailable }
+            let fd = open(url.path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
+            guard fd >= 0 else { throw NextendoError.authorizationUnavailable }
+            let lease = NextendoFileCredentialLease(fd)
+            var info = stat()
+            guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_uid == geteuid(),
+                  (info.st_mode & 0o777) == 0o600, info.st_nlink == 1 else { throw NextendoError.authorizationUnavailable }
+            let deadline = ContinuousClock.now.advanced(by: waitTimeout)
+            while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+                guard errno == EWOULDBLOCK || errno == EAGAIN else { throw NextendoError.authorizationUnavailable }
+                try Task.checkCancellation()
+                guard ContinuousClock.now < deadline else { throw NextendoError.credentialBusy }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            return lease
+        }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
 }
 
 /// Shared local-user contract for Studio and native ports. Keychain authorization remains controlled by macOS.
@@ -235,6 +332,12 @@ public struct NextendoKeychainStore: NextendoCredentialStore {
     public static let service = "org.nxnative.nextendo.account"
     public static let account = "active"
     public init() {}
+    public func acquireExclusiveLease() async throws -> any NextendoCredentialLease {
+        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { throw NextendoError.authorizationUnavailable }
+        // Metadata-only stable inode. Never unlink while another process may
+        // hold it; crash/exit closes the descriptor and releases flock.
+        return try await NextendoFileCredentialLease.acquire(at: root.appendingPathComponent("NX Port Studio/Nextendo/Locks/account-renewal.lock"))
+    }
     private var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: Self.service,
                                       kSecAttrAccount as String: Self.account, kSecAttrSynchronizable as String: false] }
     public func load() throws -> NextendoSession? {
@@ -276,7 +379,8 @@ public actor NextendoAccountService {
     private struct Pending: Sendable {
         let id: UUID, configuration: NextendoOAuthConfiguration, redirect: URL, verifier: String, state: String, expiresAt: Date
     }
-    private enum GameCredentialOperation: Sendable { case signIn(UUID), upgrade(UUID) }
+    private enum GameCredentialOperation: Sendable { case signIn(UUID), upgrade(UUID), renewal(UUID) }
+    private struct RenewalOutcome: Sendable { let summary: NextendoAccountSummary?; var skippedFreshness = false }
     private let store: any NextendoCredentialStore
     private let http: any NextendoHTTPClient
     private let makeReceiver: @Sendable () throws -> any NextendoCallbackReceiver
@@ -285,6 +389,9 @@ public actor NextendoAccountService {
     private var operationID: UUID?
     private var pending: Pending?
     private var gameCredentialRequestID: UUID?
+    private var renewalID: UUID?
+    private var renewalTask: Task<RenewalOutcome, Error>?
+    private var renewalForceRequested = false
     public init(store: any NextendoCredentialStore = NextendoKeychainStore(), http: any NextendoHTTPClient = NextendoURLSessionClient(),
                 makeReceiver: @escaping @Sendable () throws -> any NextendoCallbackReceiver = {
                     #if os(macOS)
@@ -298,6 +405,75 @@ public actor NextendoAccountService {
         self.store = store; self.http = http; self.makeReceiver = makeReceiver; self.now = now
     }
     public func currentAccount() throws -> NextendoAccountSummary? { try store.load()?.summary(at: now()) }
+    /// Background preparation uses only the account's already granted authority.
+    /// One worker is shared by concurrent callers; a cancelled waiter does not
+    /// cancel another waiter's refresh. Sign-out/new sign-in invalidates it.
+    public func prepareGameAccount(forceGameRefresh: Bool = false) async throws -> NextendoAccountSummary? {
+        try Task.checkCancellation()
+        if let task = renewalTask, let id = renewalID {
+            if forceGameRefresh { renewalForceRequested = true }
+            let outcome = try await task.value; try Task.checkCancellation()
+            // A fresh-only worker might have finished just before the forced
+            // caller arrived. Its completed skip cannot satisfy a fresh mint.
+            if forceGameRefresh && outcome.skippedFreshness {
+                if renewalID == id { renewalID = nil; renewalTask = nil }
+                return try await prepareGameAccount(forceGameRefresh:true)
+            }
+            return outcome.summary
+        }
+        guard operationID == nil, gameCredentialRequestID == nil else { throw NextendoError.authorizationUnavailable }
+        let id = UUID(); renewalID = id; renewalForceRequested = forceGameRefresh
+        let task = Task { try await performRenewal(id) }
+        renewalTask = task
+        defer { if renewalID == id { renewalID = nil; renewalTask = nil } }
+        let outcome = try await task.value; try Task.checkCancellation(); return outcome.summary
+    }
+    private func checkRenewal(_ id: UUID) throws {
+        try Task.checkCancellation()
+        guard renewalID == id else { throw CancellationError() }
+    }
+    private func performRenewal(_ id: UUID) async throws -> RenewalOutcome {
+        let lease = try await store.acquireExclusiveLease(); defer { lease.release() }
+        try checkRenewal(id)
+        // Reload AFTER acquiring the shared-process lease: another port may
+        // already have rotated the grant while this process was waiting.
+        guard var expected = try store.load() else { return .init(summary:nil) }
+        guard let original = expected.renewal else { return .init(summary:expected.summary(at:now())) }
+        guard expected.tokenKind == .nex, expected.identity?.pid != nil,
+              original.scopes.contains("identity"), original.scopes.contains("game.matchmaking") else { throw NextendoError.authorizationDenied }
+        if !renewalForceRequested, let check = expected.summary(at: now()).renewalCheckAt, check > now() { return .init(summary:expected.summary(at:now()),skippedFreshness:true) }
+        var oauth = NextendoSession(tokenKind: .oauth, token: original.accessToken, identity: expected.identity,
+            scopes: original.scopes, createdAt: now(), expiresAt: original.expiresAt).withRenewal(original)
+        if original.expiresAt <= now().addingTimeInterval(60) {
+            var request = URLRequest(url: URL(string: "https://nextendo.network/api/oauth/token")!)
+            request.httpMethod = "POST"; request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            var form = URLComponents(); form.queryItems = [.init(name: "grant_type",value: "refresh_token"),
+                .init(name: "refresh_token",value: original.refreshToken),.init(name: "client_id",value: original.clientID)]
+            request.httpBody = form.percentEncodedQuery?.replacingOccurrences(of: "+",with: "%2B").data(using: .utf8)
+            let response: NextendoHTTPResponse
+            do { response = try await http.send(request) } catch is CancellationError { throw CancellationError() } catch { throw NextendoError.requestFailed }
+            try checkRenewal(id)
+            guard response.statusCode == 200 else { throw NextendoError.accountHTTPStatus(.refresh,response.statusCode) }
+            oauth = try NextendoSession.decodeTokenResponse(response.data,now: now(),clientID: original.clientID,previousScopes: original.scopes)
+            guard oauth.tokenKind == .oauth, let rotated = oauth.renewal,
+                  rotated.scopes.contains("identity"), rotated.scopes.contains("game.matchmaking"),
+                  Set(rotated.scopes).isSubset(of: Set(original.scopes)), try store.load() == expected else { throw NextendoError.invalidResponse }
+            // The provider invalidates the old refresh token after its grace
+            // interval. Checkpoint only the rotated grant, retaining every old
+            // NEX proof/identity/expiry field if later identity/mint work fails.
+            // Compare the actual storage representation on the next guard;
+            // Date's reference-epoch precision can change on JSON roundtrip.
+            expected = try NextendoSession.decodeStored(expected.withRenewal(rotated).encodedForStorage())
+            try store.save(expected)
+            oauth = NextendoSession(tokenKind: .oauth,token: oauth.token,identity: expected.identity,scopes: oauth.scopes,
+                createdAt: oauth.createdAt,expiresAt: oauth.expiresAt).withRenewal(rotated)
+        }
+        let next = try await gameCredential(using: oauth,operation: .renewal(id))
+        try checkRenewal(id)
+        guard try store.load() == expected else { throw NextendoError.authorizationUnavailable }
+        try store.save(next)
+        return .init(summary:next.summary(at:now()))
+    }
     /// Uses the current user's scoped OAuth grant. Identity comes from the
     /// service's userinfo endpoint and must match its independently issued NEX proof.
     public func upgradeGameCredential() async throws -> NextendoAccountSummary {
@@ -306,6 +482,8 @@ public actor NextendoAccountService {
         let id = UUID(); gameCredentialRequestID = id
         defer { if gameCredentialRequestID == id { gameCredentialRequestID = nil } }
         let next = try await gameCredential(using: session, operation: .upgrade(id))
+        let lease = try await store.acquireExclusiveLease(); defer { lease.release() }
+        try checkGameCredentialOperation(.upgrade(id),session: session)
         guard try store.load() == session else { throw NextendoError.authorizationUnavailable }
         try store.save(next)
         return next.summary(at: now())
@@ -315,6 +493,7 @@ public actor NextendoAccountService {
         switch operation {
         case .signIn(let id): guard operationID == id else { throw CancellationError() }
         case .upgrade(let id): guard gameCredentialRequestID == id else { throw CancellationError() }
+        case .renewal(let id): guard renewalID == id else { throw CancellationError() }
         }
         guard !session.summary(at: now()).isExpired else { throw NextendoError.authorizationExpired }
     }
@@ -328,14 +507,14 @@ public actor NextendoAccountService {
         }
         let userinfo = try await get("api/oauth/userinfo")
         try checkGameCredentialOperation(operation, session: session)
-        guard userinfo.statusCode == 200 else { throw NextendoError.httpStatus(userinfo.statusCode) }
+        guard userinfo.statusCode == 200 else { throw NextendoError.accountHTTPStatus(.identity,userinfo.statusCode) }
         let identity = try NextendoSession.decodeUserInfoResponse(userinfo.data)
         if let previous = session.identity?.pid, previous != identity.pid { throw NextendoError.invalidResponse }
         let response = try await get("api/nex-token")
         try checkGameCredentialOperation(operation, session: session)
-        guard response.statusCode == 200 else { throw NextendoError.httpStatus(response.statusCode) }
+        guard response.statusCode == 200 else { throw NextendoError.accountHTTPStatus(.gameProof,response.statusCode) }
         let next = try NextendoSession.decodeNEXCredentialResponse(response.data, identity: identity, now: now())
-        return try NextendoSession.decodeStored(next.encodedForStorage())
+        return try NextendoSession.decodeStored(next.withRenewal(session.renewal).encodedForStorage())
     }
     public func beginSignIn(configuration: NextendoOAuthConfiguration) async throws -> NextendoSignInRequest {
         await cancelSignIn()
@@ -384,16 +563,21 @@ public actor NextendoAccountService {
             do { response = try await http.send(request) } catch is CancellationError { throw CancellationError() } catch { throw NextendoError.requestFailed }
             try Task.checkCancellation()
             guard operationID == id else { throw CancellationError() }
-            guard response.statusCode == 200 else { throw NextendoError.httpStatus(response.statusCode) }
-            var session = try NextendoSession.decodeTokenResponse(response.data, now: now())
+            guard response.statusCode == 200 else { throw forGames ? NextendoError.accountHTTPStatus(.codeExchange,response.statusCode) : NextendoError.httpStatus(response.statusCode) }
+            var session = try NextendoSession.decodeTokenResponse(response.data, now: now(),clientID: attempt.configuration.clientID,
+                previousScopes: attempt.configuration.scopes)
+            if session.tokenKind == .oauth && !Set(session.scopes).isSubset(of:Set(attempt.configuration.scopes)) { throw NextendoError.invalidResponse }
             if forGames {
                 if session.tokenKind == .oauth { session = try await gameCredential(using: session, operation: .signIn(id)) }
                 session = try NextendoSession.decodeStored(session.encodedForStorage())
                 try Task.checkCancellation()
                 guard operationID == id else { throw CancellationError() }
                 guard !session.summary(at: now()).isExpired else { throw NextendoError.authorizationExpired }
-                guard try store.load() == previous else { throw NextendoError.authorizationUnavailable }
             }
+            let lease = try await store.acquireExclusiveLease(); defer { lease.release() }
+            try Task.checkCancellation()
+            guard operationID == id else { throw CancellationError() }
+            if forGames { guard try store.load() == previous else { throw NextendoError.authorizationUnavailable } }
             try store.save(session)
             operationID = nil; receiver = nil; await listener.cancel()
             return session.summary(at: now())
@@ -403,10 +587,15 @@ public actor NextendoAccountService {
         }
     }
     public func cancelSignIn() async {
+        renewalID = nil; renewalTask?.cancel(); renewalTask = nil
         let old = receiver; operationID = nil; pending = nil; receiver = nil; gameCredentialRequestID = nil
         await old?.cancel()
     }
-    public func signOut() async throws { await cancelSignIn(); try store.remove() }
+    public func signOut() async throws {
+        await cancelSignIn()
+        let lease = try await store.acquireExclusiveLease(); defer { lease.release() }
+        try store.remove()
+    }
 
     static func validRedirect(_ url: URL) -> Bool {
         guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }

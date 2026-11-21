@@ -103,12 +103,22 @@ def merge_entries(es):
     return sorted(db, key=lambda e: e['file'])
 
 # ---------- clang-tidy ----------
-DIAG = re.compile(r'^(.+?):(\d+):(\d+): (warning|error): (.*?) \[([^\]]+)\]$')
+DIAG = re.compile(r'^(.+?):(\d+):(\d+): (warning|(?:fatal )?error): (.*?) \[([^\]]+)\]$')
+
+def compiler_errors(text):
+    # The diagnostic's level matters, not a particular check suffix. LLVM can
+    # report a fatal type error as clang-diagnostic-incompatible-pointer-types.
+    return [line for line in text.splitlines() if (m := DIAG.match(line)) and m.group(4).endswith('error')
+            and any(c.startswith('clang-diagnostic-') for c in m.group(6).split(','))]
 
 def tidy_one(tool, f):
     r = subprocess.run([tool, '-p', str(DB_DIR), '--quiet', f], capture_output=True, text=True, cwd=REPO)
     if r.returncode < 0 or 'PLEASE submit a bug report' in r.stderr:   # a crash would otherwise read as a file without findings
         sys.exit(f'[RED] lint_c: clang-tidy crashed on {rel(f)} (exit {r.returncode}):\n{r.stderr[-4000:]}')
+    if r.returncode or compiler_errors(r.stdout + '\n' + r.stderr):
+        # An incomplete translation unit must never look like fixed findings,
+        # especially with --update / --rebaseline: preserve the old baseline.
+        sys.exit(f'[RED] lint_c: clang-tidy did not complete {rel(f)} (exit {r.returncode}); baseline unchanged:\n{(r.stdout + r.stderr)[-4000:]}')
     return f, parse_diags(r.stdout)
 
 def parse_diags(text):
@@ -117,12 +127,12 @@ def parse_diags(text):
     for line in text.split('\n'):
         m = DIAG.match(line)
         if not m: continue
-        path, ln, col, _, msg, checks = m.groups()
+        path, ln, col, level, msg, checks = m.groups()
         r = rel(path)
         if not linted(r): continue
         for check in checks.split(','):
             # the compiler's own warnings are the build's to report; a parse error is kept (the file was not fully checked)
-            if check.startswith('clang-diagnostic-') and check != 'clang-diagnostic-error': continue
+            if check.startswith('clang-diagnostic-') and not level.endswith('error'): continue
             out.append((r, int(ln), int(col), check, msg))
     return out
 

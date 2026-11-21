@@ -2,7 +2,7 @@ import AppKit
 import PortCore
 
 extension StudioModel {
-    static let nextendoScopes = ["identity", "friends"]
+    static let nextendoScopes = ["identity", "friends", "game.matchmaking"]
 
     func loadNextendoPage() async {
         await reloadNextendoAccount()
@@ -18,15 +18,41 @@ extension StudioModel {
         do {
             let summary = try await nextendoAccountService.currentAccount()
             try Task.checkCancellation()
-            nextendoAccount = summary; nextendoAccountError = nil
-        } catch is CancellationError {} catch { nextendoAccountError = nextendoAccountMessage(error) }
+            nextendoAccount = summary // Keep the linked identity visible during expiry/renewal.
+            nextendoAccount = try await nextendoAccountService.prepareGameAccount()
+            try Task.checkCancellation()
+            nextendoAccountError = nil
+            scheduleNextendoRenewal()
+        } catch is CancellationError {} catch {
+            nextendoAccountError = nextendoAccountMessage(error)
+            if (error as? NextendoError)?.permitsBackgroundRetry == true { scheduleNextendoRenewal(retry: true) }
+        }
+    }
+
+    private func scheduleNextendoRenewal(retry: Bool = false) {
+        nextendoRenewalTask?.cancel(); nextendoRenewalTask = nil
+        guard let check = nextendoAccount?.renewalCheckAt else { return }
+        let delay = retry ? 300 : max(30,check.timeIntervalSinceNow)
+        nextendoRenewalTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self else { return }
+            await self.nextendoCancellationTask?.value
+            guard !Task.isCancelled else { return }
+            await self.reloadNextendoAccount()
+        }
+    }
+    private func resumeNextendoRenewalIfIdle() {
+        guard !isAuthorizingNextendo, !isRequestingNextendoGameCredential, !isSigningOutNextendo,
+              !isLoadingNextendoAccount else { return }
+        scheduleNextendoRenewal()
     }
 
     func beginNextendoSignIn() {
         guard !isAuthorizingNextendo, !isRequestingNextendoGameCredential, !isLoadingNextendoAccount, !isSigningOutNextendo else { return }
+        nextendoRenewalTask?.cancel(); nextendoRenewalTask = nil
         let configuration: NextendoOAuthConfiguration
         do { configuration = try NextendoOAuthConfiguration(clientID: nextendoClientID, scopes: Self.nextendoScopes) }
-        catch { nextendoAccountError = nextendoAccountMessage(error); return }
+        catch { nextendoAccountError = nextendoAccountMessage(error); resumeNextendoRenewalIfIdle(); return }
         let id = UUID(), cancellation = nextendoCancellationTask
         nextendoAuthorizationID = id; isAuthorizingNextendo = true; nextendoAccountError = nil
         nextendoAuthorizationExpiresAt = nil
@@ -37,6 +63,7 @@ extension StudioModel {
                 if self.nextendoAuthorizationID == id {
                     self.isAuthorizingNextendo = false; self.nextendoAuthorizationExpiresAt = nil
                     self.nextendoAuthorizationTask = nil
+                    self.resumeNextendoRenewalIfIdle()
                 }
             }
             do {
@@ -73,11 +100,12 @@ extension StudioModel {
         isAuthorizingNextendo = false; nextendoAuthorizationExpiresAt = nil; nextendoAccountError = nil
         // A rapid cancel/retry must not let a delayed cancellation close the
         // new listener. The next attempt waits for this complete cleanup.
-        nextendoCancellationTask = Task { [nextendoAccountService] in
+        nextendoCancellationTask = Task { [weak self, nextendoAccountService] in
             await previousCancellation?.value
             await nextendoAccountService.cancelSignIn()
             await authorization?.value
             await gameCredential?.value
+            self?.resumeNextendoRenewalIfIdle()
         }
     }
 
@@ -98,6 +126,7 @@ extension StudioModel {
             defer {
                 if self.nextendoGameCredentialID == id {
                     self.isRequestingNextendoGameCredential = false; self.nextendoGameCredentialTask = nil
+                    self.resumeNextendoRenewalIfIdle()
                 }
             }
             do {
@@ -114,6 +143,7 @@ extension StudioModel {
 
     func signOutNextendo() async {
         guard !isSigningOutNextendo, !isLoadingNextendoAccount else { return }
+        nextendoRenewalTask?.cancel(); nextendoRenewalTask = nil
         cancelNextendoSignIn(); isSigningOutNextendo = true; nextendoAccountError = nil
         defer { isSigningOutNextendo = false }
         await nextendoCancellationTask?.value
@@ -143,6 +173,7 @@ extension StudioModel {
         guard let error = error as? NextendoError else { return t("Nextendo sign-in could not be completed. Try again.") }
         switch error {
         case .httpStatus(let code): return String(format: t("Nextendo returned HTTP %d."), code)
+        case .accountHTTPStatus(let step, let code): return String(format: t(step.messageFormat), code)
         case .keychain(let code): return String(format: t("The Nextendo credential could not be accessed in Keychain (%d)."), code)
         default: return t(error.localizedDescription)
         }
