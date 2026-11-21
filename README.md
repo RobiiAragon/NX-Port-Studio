@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC9:** I corrected the stale-storage NaN that blew out Splatoon 3's lobby, registered Splatoon 3 12.0.0 and made its Nextendo online variant connect; a packed Mac game can now link its Nextendo account itself. Completed Splatoon 3 online matches remain open. [Candidate notes and test limits](docs/releases/1.6.0-rc.9.md).
+> **1.6.0 RC10:** I added a table of the games whose online, LAN and local wireless play I have tested, removed the black and red blocks a few NaN texels left in Splatoon 3's plaza, and in Nextendo mode the host now keeps a UDP socket's router mapping when Pia closes and rebinds its port, a suspected cause of failed peer connections. RC9's Splatoon 3 12.0.0 fixes are included. Completed Splatoon 3 matches and Smash Quickplay remain open. [Candidate notes and test limits](docs/releases/1.6.0-rc.10.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 
@@ -65,6 +65,24 @@ These mechanisms have different validation milestones. They do not establish tha
 | Splatoon 3 12.0.0 — Nextendo | On November 21, the plaza, the lobby and its practice area **rendered on Mac as they do on my Switch**, and the game entered the **online lobby and matchmaking queue**. [Exact build and limits](dm/games/0100C2500FC20000/README.md#mac-acceptance-on-november-21-2026). | The server never assigned me a match; completed matches, LAN/LDN and iOS remain unqualified. |
 | iPhone/iPad | I checked that a signed Mario Kart 3.0.5 build joins LAN lobbies with my physical Switch, with each device as host. | I verified lobby entry; I have not verified a completed race on iPhone. Device, signing and platform restrictions still apply. |
 | Android / Windows | I plan these after the Apple baseline is stable. | I have no builds or compatibility results yet; ARM and x86 need separate architecture work. |
+
+## Games with online and local play
+
+These are the Switch games whose network modes I have tested in NX Port Studio ports. Each game chooses Online, Local wireless or LAN from its own menus; Nextendo needs a linked account. A ✅ means I completed that step in the game; 🟡 means I reached the lobby or queue but have not finished a match; — means not tested yet.
+
+| Game | Version | Nextendo online | LAN | Local wireless (LDN) | Platform |
+| --- | --- | --- | --- | --- | --- |
+| [Mario Kart 8 Deluxe](dm/games/0100152000022000/README.md) | 4.0.1 (LAN/LDN on 3.0.5) | ✅ One complete Worldwide race | ✅ A complete race between Mac and my Switch; iPhone lobbies in both host roles | ✅ Sessions across Mac, iPhone and my Switch (the console needs a compatible LDN module) | Mac; iPhone for local lobbies |
+| [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ One arena round against a remote player | — | — | Mac |
+| [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Lobby and Turf War queue | — | — | Mac |
+| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | 🟡 Lobby and matchmaking queue, NAT check passed | — | — | Mac |
+
+Known limits:
+- **Smash:** Quickplay rejects the connection as unstable, and a later spectating session disconnected.
+- **Splatoon 2 and 3:** the provider's matchmaking needs other players searching the same mode at the same time. Splatoon 3's server keeps the full count (8 for Turf War, 4 for Salmon Run) for 45 seconds and then lowers it, never below half (4 and 2). With few people online the queue can wait indefinitely, so Salmon Run with a friend is the quickest way to reach a match.
+- **All four:** I have not qualified iPhone online play. Mario Kart's LAN/LDN results are from 3.0.5, and I have not repeated them on 4.0.1.
+
+Each game note has the exact build, dates and open issues.
 
 ## Get started
 

@@ -2254,6 +2254,7 @@ static void up_blit_add(id<MTLBuffer> src, size_t off, size_t row, size_t image,
 }
 
 static id<MTLTexture> pkg_upload_(const tex_t *t, uint64_t *stamp, id<MTLTexture> reuse, MTLTextureUsage keep);
+static __thread const uint8_t *t_up_src;   // tex_init_fill: a cleaned copy of the storage, uploaded instead of t->mem on the CPU path (storage_clean)
 static int g_direct_upload_on = -1; static uint64_t g_direct_uploads, g_direct_dispatches;
 static int direct_upload_on(void) { if (g_direct_upload_on < 0) { const char *e=getenv("DM_NVN_DIRECT_UPLOAD"); g_direct_upload_on=!e||atoi(e); } return g_direct_upload_on; }
 int nvn_host_readable(uint64_t a, uint64_t n);   // hle_nvn.c: guest memory and sparse pools
@@ -2341,8 +2342,8 @@ static id<MTLTexture> pkg_upload_(const tex_t *t, uint64_t *stamp, id<MTLTexture
     }
     g_bp_up_bytes += total;
     void *mb; uint64_t mo;
-    int use_gpu = !rb_shift && !sparse && g_nvn_deswz_gpu && mtl_addr((uint64_t)t->mem, t->L.size, &mb, &mo);   // a sparse pool's texture is gathered through its page table on the CPU
-    if (g_nvn_deswz_gpu && !use_gpu && !sparse && !rb_shift) RED_ONCE(40, "swizzled texture storage is not in a memory pool; falling back to the CPU");
+    int use_gpu = !t_up_src && !rb_shift && !sparse && g_nvn_deswz_gpu && mtl_addr((uint64_t)t->mem, t->L.size, &mb, &mo);   // a sparse pool's texture is gathered through its page table on the CPU
+    if (g_nvn_deswz_gpu && !use_gpu && !sparse && !rb_shift && !t_up_src) RED_ONCE(40, "swizzled texture storage is not in a memory pool; falling back to the CPU");
     if (use_gpu) {
         // The GPU reads the memory pool at execution time, which is closer to a real Switch than a snapshot at CPU upload time; the dirty-page stamp is still taken before encoding, and later writes still trigger a re-upload.
         up_begin();
@@ -2386,8 +2387,8 @@ static id<MTLTexture> pkg_upload_(const tex_t *t, uint64_t *stamp, id<MTLTexture
     }
 
     // A sparse pool's texture is read through a copy gathered from its page table, unmapped pages as 0 (a mip tail at a 4 KB offset has no host alias; reading the alias stopped the host with SIGBUS)
-    const uint8_t *src = t->mem; uint8_t *part = NULL;
-    if (sparse) {
+    const uint8_t *src = t_up_src ? t_up_src : t->mem; uint8_t *part = NULL;
+    if (sparse && !t_up_src) {
         if (!(part = malloc(t->L.size ? t->L.size : 1))) MDIE("sparse texture copy of %llu bytes failed", (unsigned long long)t->L.size);
         nvn_sparse_copy(t->pool, part, (uint64_t)(uintptr_t)t->mem, t->L.size); src = part;
     }
@@ -2510,18 +2511,34 @@ static int mem_any(const uint8_t *p, uint64_t n) {   // whether any byte is non-
 // blending and an alpha of 1, and Maxwell's float blender (zero times anything is zero) drops the old value even where it decodes as NaN. Metal computes NaN x 0 = NaN: 35 %
 // of the probe texels stayed NaN, every reflecting material sampled them and the lobby came out black and white. Colour data a game means to load never decodes as NaN or
 // infinity, so storage whose float texels are more than 1 % non-finite is taken as stale, and the texture starts from zeros instead, as a fresh one does.
-static int storage_nonfinite(const tex_t *t, MTLPixelFormat pf) {
-    const uint8_t *p = t->mem; size_t n = t->L.size, bad = 0, all = 0;
+// Fewer is not harmless either: in another run of the same game the 128x128x78 probe array's storage held 14 NaN texels (0.001 %), kept as content, and after a return from the
+// lobby the plaza's reflections spread them as black and red blocks. Those texels alone start from 0 (storage_clean), and the rest of the storage is the content.
+// One element per texel for RG11B10 (its three channels share 32 bits), one per channel for the 16- and 32-bit formats.
+static int storage_float_layout(MTLPixelFormat pf) {   // the element size in bytes, 0 for a format this does not read
     switch (pf) {
-        case MTLPixelFormatRG11B10Float: for (size_t i = 0; i + 4 <= n; i += 4) { uint32_t v; memcpy(&v, p + i, 4); all++;
-            bad += ((v >> 6) & 31) == 31 || ((v >> 17) & 31) == 31 || ((v >> 27) & 31) == 31; } break;
-        case MTLPixelFormatRGBA16Float: case MTLPixelFormatRG16Float: case MTLPixelFormatR16Float:
-            for (size_t i = 0; i + 2 <= n; i += 2) { uint16_t v; memcpy(&v, p + i, 2); all++; bad += (v & 0x7c00) == 0x7c00; } break;
-        case MTLPixelFormatRGBA32Float: case MTLPixelFormatRG32Float: case MTLPixelFormatR32Float:
-            for (size_t i = 0; i + 4 <= n; i += 4) { uint32_t v; memcpy(&v, p + i, 4); all++; bad += (v & 0x7f800000) == 0x7f800000; } break;
+        case MTLPixelFormatRG11B10Float: return 4 | 0x100;
+        case MTLPixelFormatRGBA16Float: case MTLPixelFormatRG16Float: case MTLPixelFormatR16Float: return 2;
+        case MTLPixelFormatRGBA32Float: case MTLPixelFormatRG32Float: case MTLPixelFormatR32Float: return 4;
         default: return 0;
     }
-    return all && bad * 100 > all;
+}
+static int float_bad(int layout, const uint8_t *p) {
+    if (layout & 0x100) { uint32_t v; memcpy(&v, p, 4); return ((v >> 6) & 31) == 31 || ((v >> 17) & 31) == 31 || ((v >> 27) & 31) == 31; }
+    if (layout == 2) { uint16_t v; memcpy(&v, p, 2); return (v & 0x7c00) == 0x7c00; }
+    uint32_t v; memcpy(&v, p, 4); return (v & 0x7f800000) == 0x7f800000;
+}
+static size_t storage_nonfinite(const tex_t *t, MTLPixelFormat pf, size_t *all) {   // the non-finite elements, and in *all how many were read
+    int layout = storage_float_layout(pf), size = layout & 0xff; size_t bad = 0, n = 0;
+    const uint8_t *p = t->mem;
+    for (size_t i = 0; size && i + size <= t->L.size; i += size, n++) bad += float_bad(layout, p + i);
+    *all = n; return bad;
+}
+static uint8_t *storage_clean(const tex_t *t, MTLPixelFormat pf) {   // a copy of the storage with each non-finite element 0; NULL without memory
+    int layout = storage_float_layout(pf), size = layout & 0xff; uint8_t *c = malloc(t->L.size ? t->L.size : 1);
+    if (!c) return NULL;
+    memcpy(c, t->mem, t->L.size);
+    for (size_t i = 0; size && i + size <= t->L.size; i += size) if (float_bad(layout, c + i)) memset(c + i, 0, (size_t)size);
+    return c;
 }
 static int tex_init_fill(const tex_t *t, id<MTLTexture> mt) {
     if (!t->mem || !t->pool || (t->pool->flags & NVN_MEMORY_POOL_FLAGS_VIRTUAL) || t->has_layout) return 0;
@@ -2533,11 +2550,17 @@ static int tex_init_fill(const tex_t *t, id<MTLTexture> mt) {
     if (!no_cpu && !uncached && (!flush_fill || !nvn_flushed(t->mem, t->L.size))) return 0;
     if (!atomic_load(&g_sub_thread_set) || !on_sub_thread() || !mem_any(t->mem, t->L.size)) return 0;   // the upload batch belongs to the submit thread
     static int stale_keep = -1; if (stale_keep < 0) { const char *e = getenv("DM_NVN_STALE_FLOAT"); stale_keep = e && atoi(e) == 1; }
-    if (!stale_keep && storage_nonfinite(t, mt.pixelFormat)) {
+    size_t all = 0, bad = stale_keep ? 0 : storage_nonfinite(t, mt.pixelFormat, &all);
+    if (bad * 100 > all) {
         static uint64_t ns; if (ns++ < 8 || !(ns & (ns - 1))) MLOG("initial content: ser=%llu %ux%ux%u format %#x: its storage is stale (over 1 %% of its float texels NaN or infinite); starts from zeros (%llu so far; DM_NVN_STALE_FLOAT=1 keeps it)",
             (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.format, (unsigned long long)ns);
         return 0; }
-    if (pkg_upload(t, NULL, mt, 0) != mt) return 0;
+    uint8_t *clean = bad ? storage_clean(t, mt.pixelFormat) : NULL;
+    if (bad && !clean) return 0;
+    if (bad) { static uint64_t nc; if (nc++ < 8 || !(nc & (nc - 1))) MLOG("initial content: ser=%llu %ux%ux%u format %#x: %zu of its %zu float elements NaN or infinite start from 0, the rest is its storage (%llu so far; DM_NVN_STALE_FLOAT=1 keeps them)",
+            (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.format, bad, all, (unsigned long long)nc); }
+    t_up_src = clean; id<MTLTexture> up = pkg_upload(t, NULL, mt, 0); t_up_src = NULL; free(clean);
+    if (up != mt) return 0;
     int why = no_cpu ? 0 : uncached ? 1 : 2;
     static uint64_t n[3]; if (n[why]++ < 4) MLOG("initial content: ser=%llu %ux%ux%u format %#x filled from its storage, %s (%llu so far)", (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.format,
                                                  (const char *[]){"a CPU_NO_ACCESS pool's", "a CPU_UNCACHED pool's", "flushed by the CPU before its first use"}[why], (unsigned long long)n[why]);

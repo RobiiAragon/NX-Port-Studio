@@ -511,11 +511,58 @@ static void poll_diagnostics(void) {
     CHECK(!strstr(text, "fd=") && !strstr(text, "0x1234"), "no descriptors or sentinel payload appear");
     unsetenv("DM_POLL_TRACE"); CLOSE(guest);
 }
+// Nextendo: a closed UDP socket is held and handed back at the next bind of its address (hle_net_backend.c net_keep_*): the same Mac socket, so the same router mapping
+static int native_ttl(int guest) { int fd = dm_net_dup_native(guest), ttl = -1; socklen_t n = sizeof ttl; if (fd >= 0) { getsockopt(fd, IPPROTO_IP, IP_TTL, &ttl, &n); close(fd); } return ttl; }
+static void mark_ttl(int guest, int ttl) { int fd = dm_net_dup_native(guest); if (fd >= 0) { setsockopt(fd, IPPROTO_IP, IP_TTL, &ttl, sizeof ttl); close(fd); } }
+static int bound_udp(address *a) { int guest = SOCKET(2, 2, 17); unsigned n = sizeof *a; if (guest < 0 || BIND(guest, a, sizeof *a) || NAME(guest, a, &n)) return -1; return guest; }
+static void udp_keep(void) {
+    setenv("DM_NETWORK", "nextendo", 1); unsetenv("DM_NET_UDP_KEEP");
+    address a = addr(htonl(0x7f000001), 0); int first = bound_udp(&a);
+    CHECK(first >= 0 && a.port, "Nextendo UDP socket bound to a real port"); mark_ttl(first, 37);
+    address peer = addr(htonl(0x7f000001), 0); int native = native_udp(&peer);
+    struct sockaddr_in to = {.sin_len = sizeof to, .sin_family = AF_INET, .sin_port = a.port, .sin_addr.s_addr = a.ip};
+    CHECK(CLOSE(first) == 0, "closing the NAT-check socket succeeds for the guest");
+    CHECK(sendto(native, "late", 4, 0, (struct sockaddr *)&to, sizeof to) == 4, "a datagram reaches the held socket after the guest closed it");
+    dm_guest_sleep_ns(20000000);
+    int second = SOCKET(2, 2, 17); int one = 1; CHECK(second >= 0 && SETOPT(second, 0xffff, 0x20, &one, 4) == 0, "new socket with broadcast set before bind");
+    address again = a; CHECK(BIND(second, &again, sizeof again) == 0, "rebinding the same address succeeds");
+    unsigned n = sizeof again; CHECK(NAME(second, &again, &n) == 0 && again.port == a.port, "the rebound socket has the same port");
+    CHECK(native_ttl(second) == 37, "the rebound socket is the held Mac socket (its mapping)");
+    int value = 0; n = 4; CHECK(GETOPT(second, 0xffff, 0x20, &value, &n) == 0 && value, "options set before the bind carry over");
+    char bytes[8]; CHECK(RECV(second, bytes, sizeof bytes, 0x80, NULL, NULL) < 0 && dm_net_errno() == 11, "what arrived while held is discarded, as a closed socket's would be");
+    struct sockaddr_in back; socklen_t size = sizeof back; getsockname(native, (struct sockaddr *)&back, &size);
+    address dest = {16, 2, back.sin_port, back.sin_addr.s_addr, {0}};
+    CHECK(SEND(second, "live", 4, 0, &dest, 16) == 4 && recv(native, bytes, sizeof bytes, 0) == 4 && !memcmp(bytes, "live", 4), "the handed-back socket sends");
+    address other = addr(htonl(0x7f000001), 0); int bound = bound_udp(&other); mark_ttl(bound, 39);
+    CHECK(bound >= 0 && CLOSE(second) == 0, "close the handed-back socket while another is bound");
+    address back_again = a; CHECK(BIND(bound, &back_again, sizeof back_again) < 0 && native_ttl(bound) == 39, "a socket bound already still fails a second bind, keeping its own Mac socket");
+    CLOSE(bound);
+    // Another address on the held port releases it; the bind then takes a fresh socket
+    address any = addr(0, ntohs(a.port)); int third = SOCKET(2, 2, 17);
+    CHECK(third >= 0 && BIND(third, &any, sizeof any) == 0 && native_ttl(third) != 37, "a bind of another address on that port gets a fresh socket");
+    CLOSE(third);
+    // A connected UDP socket is not held
+    address c = addr(htonl(0x7f000001), 0); int connected = bound_udp(&c); mark_ttl(connected, 41);
+    CHECK(connected >= 0 && GET(fn_bind, "_ZN2nn6socket7ConnectEiPK8sockaddrj")(connected, &dest, 16) == 0 && CLOSE(connected) == 0, "connected UDP socket closes");
+    int fourth = SOCKET(2, 2, 17); address c2 = c;
+    CHECK(fourth >= 0 && BIND(fourth, &c2, sizeof c2) == 0 && native_ttl(fourth) != 41, "a connected socket's close is a real teardown");
+    CLOSE(fourth);
+    // Switched off, and outside Nextendo
+    const char *modes[][2] = {{"nextendo", "0"}, {"lan", NULL}};
+    for (int i = 0; i < 2; i++) {
+        setenv("DM_NETWORK", modes[i][0], 1); if (modes[i][1]) setenv("DM_NET_UDP_KEEP", modes[i][1], 1); else unsetenv("DM_NET_UDP_KEEP");
+        address b = addr(htonl(0x7f000001), 0); int s1 = bound_udp(&b); mark_ttl(s1, 43); CLOSE(s1);
+        int s2 = SOCKET(2, 2, 17); address b2 = b;
+        CHECK(s2 >= 0 && BIND(s2, &b2, sizeof b2) == 0 && native_ttl(s2) != 43, i ? "LAN closes UDP sockets at once" : "DM_NET_UDP_KEEP=0 closes UDP sockets at once");
+        CLOSE(s2);
+    }
+    close(native); unsetenv("DM_NET_UDP_KEEP"); setenv("DM_NETWORK", "auto", 1);
+}
 int main(int argc, char **argv) {
     unsetenv("DM_ACCOUNT_TRACE");
     unsetenv("DM_NET_TRACE");
     struct sigaction sa = {.sa_handler = sigpipe}; sigemptyset(&sa.sa_mask); sigaction(SIGPIPE, &sa, NULL);
-    c_errno(); offline(); nifm(); nifm_trace(); udp(); concurrency(); tcp(); errors_and_resolver(); resolver_diagnostics(); discovery_peer(); poll_diagnostics();
+    c_errno(); offline(); nifm(); nifm_trace(); udp(); concurrency(); udp_keep(); tcp(); errors_and_resolver(); resolver_diagnostics(); discovery_peer(); poll_diagnostics();
     if (argc == 2 && !strcmp(argv[1], "--no-broadcast")) puts("broadcast test skipped explicitly (requires local-network permission for this test executable)"); else broadcast();
     GET(fn_vvoid, "_ZN2nn6socket8FinalizeEv")();
     CHECK(atomic_load(&waits) > 0 && atomic_load(&wait_balance) == 0, "all host waits yield and restore guest execution");

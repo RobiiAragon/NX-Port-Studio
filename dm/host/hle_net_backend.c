@@ -214,6 +214,61 @@ static int net_register(int fd, int type, int nonblock) {
     return i;
 }
 #include "net_eventfd.inc"
+// Nextendo: a UDP socket the guest closes is held for a few seconds instead of closed, and handed back when the guest binds the same address again (DM_NET_UDP_KEEP=0 turns it off).
+// Pia's NAT check runs on one socket, closes it, and binds a new one on the same local port within about 100 ms for the match itself. On the Switch the socket lives in the
+// firmware's BSD service; here each one is a Mac socket, and a router that ties its mapping to that socket gives the new one a different public port, so a peer that probes the
+// endpoint the NAT-check server saw reaches nothing (Ryujinx-Nextendo found the same churn behind Splatoon 2's and Smash's 2618-0006). Only a bound, unconnected UDP socket
+// with a real port is held, at most NET_KEEP_MAX of them for NET_KEEP_MS; what it received while held is discarded at the handback, as a closed socket's would have been.
+enum { NET_KEEP_MAX = 8, NET_KEEP_MS = 5000 };
+typedef struct { int used, fd; struct sockaddr_in local; uint64_t expires; } net_kept;
+static net_kept g_kept[NET_KEEP_MAX];   // under g_net_lock
+static int net_keep_enabled(void) { const char *s = getenv("DM_NET_UDP_KEEP"); return !(s && !strcmp(s, "0")) && dm_net_nextendo_enabled(); }
+static void net_keep_expire_locked(uint64_t now, int *closing, int *count) {   // the descriptors to close once the lock is released
+    for (int i = 0; i < NET_KEEP_MAX; i++) if (g_kept[i].used && g_kept[i].expires <= now) { closing[(*count)++] = g_kept[i].fd; g_kept[i].used = 0; }
+}
+static int net_keep_park(int fd) {   // 1: the table holds fd now; 0: the caller closes it
+    struct sockaddr_in local, peer; socklen_t n = sizeof local, m = sizeof peer;
+    if (getsockname(fd, (struct sockaddr *)&local, &n) < 0 || local.sin_family != AF_INET || !local.sin_port) return 0;
+    if (!getpeername(fd, (struct sockaddr *)&peer, &m)) return 0;   // a connected socket talks to one peer: its close is a real teardown
+    int closing[NET_KEEP_MAX + 1], count = 0, slot = -1; uint64_t now = net_ms();
+    pthread_mutex_lock(&g_net_lock);
+    net_keep_expire_locked(now, closing, &count);
+    for (int i = 0; i < NET_KEEP_MAX; i++) if (g_kept[i].used && g_kept[i].local.sin_port == local.sin_port) { closing[count++] = g_kept[i].fd; g_kept[i].used = 0; slot = i; }
+    for (int i = 0; slot < 0 && i < NET_KEEP_MAX; i++) if (!g_kept[i].used) slot = i;
+    if (slot >= 0) g_kept[slot] = (net_kept){1, fd, local, now + NET_KEEP_MS};
+    pthread_mutex_unlock(&g_net_lock);
+    for (int i = 0; i < count; i++) close(closing[i]);
+    const char *trace = getenv("DM_NET_TRACE"); if (slot >= 0 && trace && atoi(trace)) fprintf(stderr, "net: udp keep port=%u\n", ntohs(local.sin_port));
+    return slot >= 0;
+}
+// The held socket for this bind, or -1. Another address on the same port releases the held one, so the bind that follows finds the port free.
+static int net_keep_take(const struct sockaddr_in *a) {
+    int closing[NET_KEEP_MAX + 1], count = 0, fd = -1;
+    pthread_mutex_lock(&g_net_lock);
+    net_keep_expire_locked(net_ms(), closing, &count);
+    for (int i = 0; a->sin_port && i < NET_KEEP_MAX; i++) {
+        if (!g_kept[i].used || g_kept[i].local.sin_port != a->sin_port) continue;
+        if (g_kept[i].local.sin_addr.s_addr == a->sin_addr.s_addr) fd = g_kept[i].fd; else closing[count++] = g_kept[i].fd;
+        g_kept[i].used = 0;
+    }
+    pthread_mutex_unlock(&g_net_lock);
+    for (int i = 0; i < count; i++) close(closing[i]);
+    return fd;
+}
+// The guest's options on the socket it made for this bind carry over to the held one, whose queue is emptied
+static int net_unbound(int fd) { struct sockaddr_in local; socklen_t n = sizeof local; return !getsockname(fd, (struct sockaddr *)&local, &n) && !local.sin_port; }
+static void net_keep_adopt(int fresh, int kept) {
+    static const int options[] = {SO_BROADCAST, SO_REUSEADDR, SO_REUSEPORT, SO_RCVBUF, SO_SNDBUF};
+    for (size_t i = 0; i < sizeof options / sizeof *options; i++) { int v = 0; socklen_t n = sizeof v; if (!getsockopt(fresh, SOL_SOCKET, options[i], &v, &n)) setsockopt(kept, SOL_SOCKET, options[i], &v, sizeof v); }
+    char discard[2048]; for (int i = 0; i < 1024 && recv(kept, discard, sizeof discard, MSG_DONTWAIT) >= 0; i++) {}
+}
+static void net_keep_finalize(void) {
+    pthread_mutex_lock(&g_net_lock);
+    int closing[NET_KEEP_MAX], count = 0;
+    for (int i = 0; i < NET_KEEP_MAX; i++) if (g_kept[i].used) { closing[count++] = g_kept[i].fd; g_kept[i].used = 0; }
+    pthread_mutex_unlock(&g_net_lock);
+    for (int i = 0; i < count; i++) close(closing[i]);
+}
 static int net_addr_in(const void *p, unsigned n, struct sockaddr_in *out) {
     if (!p) return net_error(14);
     if (n < sizeof(nx_addr)) return net_error(22);
@@ -265,9 +320,10 @@ static int net_close_owned(int guest, int check_generation, uint64_t generation)
         net_event_changed(event); net_event_release_locked(event);
         pthread_mutex_unlock(&g_net_lock); return 0;
     }
-    int fd = g_sockets[guest].native; uint64_t old_generation = g_sockets[guest].generation; g_sockets[guest].used = 0;
+    int fd = g_sockets[guest].native, type = g_sockets[guest].type; uint64_t old_generation = g_sockets[guest].generation; g_sockets[guest].used = 0;
     pthread_mutex_unlock(&g_net_lock);
     net_discovery_cancel(guest, old_generation);
+    if (type == 2 && net_keep_enabled() && net_keep_park(fd)) return 0;   // a waiter on its duplicate sees the slot gone at its next slice
     shutdown(fd, SHUT_RDWR); int result = close(fd), err = errno;
     return net_host_result(result, err);
 }
@@ -280,11 +336,21 @@ int dm_net_close(int guest) {
     return event ? net_close_owned(guest, 1, generation) : net_gate() ? net_close_owned(guest, 0, 0) : -1;
 }
 int dm_net_close_generation(int guest, uint64_t generation) { return net_close_owned(guest, 1, generation); }
-void dm_net_finalize(void) { net_resolver_finalize(); for (int i = 0; i < NET_MAX; i++) { pthread_mutex_lock(&g_net_lock); int used = g_sockets[i].used; pthread_mutex_unlock(&g_net_lock); if (used) net_close_owned(i, 0, 0); } }
+void dm_net_finalize(void) { net_resolver_finalize(); for (int i = 0; i < NET_MAX; i++) { pthread_mutex_lock(&g_net_lock); int used = g_sockets[i].used; pthread_mutex_unlock(&g_net_lock); if (used) net_close_owned(i, 0, 0); } net_keep_finalize(); }
 int dm_net_bind(int guest, const void *addr, unsigned len) {
     if (!net_gate()) return -1;
     struct sockaddr_in a; if (net_addr_in(addr, len, &a)) return -1;
     net_ref r; if (net_borrow(guest, &r)) return -1;
+    int kept = r.type == 2 && net_keep_enabled() && net_unbound(r.fd) ? net_keep_take(&a) : -1;   // a socket bound already fails its second bind as before
+    if (kept >= 0) {
+        net_keep_adopt(r.fd, kept); close(r.fd);
+        pthread_mutex_lock(&g_net_lock);
+        int live = g_sockets[guest].used && g_sockets[guest].generation == r.generation, fresh = live ? g_sockets[guest].native : -1;
+        if (live) g_sockets[guest].native = kept;
+        pthread_mutex_unlock(&g_net_lock);
+        if (!live) { close(kept); return net_error(9); }
+        close(fresh); net_trace("bind (udp keep)", guest, 0); return 0;
+    }
     int result = bind(r.fd, (struct sockaddr *)&a, sizeof a), err = errno; close(r.fd);
     result = net_host_result(result, err); net_trace("bind", guest, result); return result;
 }
