@@ -6,7 +6,7 @@
 
 Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour ce projet indépendant. Je préserve les crédits des auteurs du moteur et leurs avis de copyright : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **1.6.0 RC9 :** j’ai corrigé les NaN de mémoire périmée qui brûlaient le hall de Splatoon 3, enregistré Splatoon 3 12.0.0 et fait se connecter sa variante en ligne Nextendo ; un jeu empaqueté pour Mac peut désormais lier lui-même son compte Nextendo. Les matchs en ligne complets de Splatoon 3 restent à valider. [Notes et limites](docs/releases/1.6.0-rc.9.md).
+> **1.6.0 RC10 :** j’ai ajouté un tableau des jeux dont j’ai essayé le jeu en ligne, en LAN et en communication locale, et en mode Nextendo l’hôte conserve désormais la correspondance du routeur d’un socket UDP quand Pia ferme puis rouvre son port, une cause soupçonnée d’échecs de connexion entre joueurs. Les corrections de Splatoon 3 12.0.0 de la RC9 sont incluses. Les matchs complets de Splatoon 3 et le Match rapide de Smash restent à valider. [Notes et limites](docs/releases/1.6.0-rc.10.md).
 
 J’intègre **l’importation et l’exportation des ZIP JKSV** dans Studio et les nouveaux portages Mac/iPhone, avec conservation des sauvegardes précédentes, accès aux dossiers et partage via Fichiers sur iOS. Voir [le transfert et ses limites de validation](docs/save-data.md).
 
@@ -51,6 +51,19 @@ Les ports activent les services de connexion automatiquement. Choisissez En lign
 Pour le LAN, utilisez la même version du jeu et le même réseau local. Ce réseau peut fonctionner sans accès Internet. Le pont LDN sur IP exige un module compatible sur la console ; le mode LAN d'un jeu suit son propre protocole.
 
 Mes essais TLS du 31 octobre ont relevé des négociations réussies et des erreurs de nom NEX ou de chaîne d’authentification encore ouvertes. Je conserve ces résultats et les contrôles de confiance non résolus échouent toujours. Mon port Mac actuel de Mario Kart **4.0.1** a terminé [la course mondiale décrite ci-dessus](dm/games/0100152000022000/README.md#nextendo-race-validation-2026-11-02) ; je distingue ce trajet vérifié des contrôles de confiance non résolus et des modes non testés. Les parties rapides et la stabilité des sessions Smash restent ouvertes. Dans Splatoon 2, deux connexions TLS vérifiées ont permis d’atteindre le salon et la file, sans valider un match ni le jeu entre pairs. Le [suivi de couverture](docs/nextendo-coverage.md) distingue mes résultats sur ces trois titres des 58 entrées, 62 profils régionaux et 22 plans de correctifs du catalogue.
+
+## Jeux avec jeu en ligne et local
+
+Voici les jeux Switch dont j’ai essayé les modes réseau dans des portages NX Port Studio. Chaque jeu choisit En ligne, Communication locale ou LAN dans ses propres menus ; Nextendo demande un compte lié. ✅ : j’ai terminé cette étape dans le jeu ; 🟡 : j’ai atteint le hall ou la file sans terminer de match ; — : pas encore essayé.
+
+| Jeu | Version | Nextendo en ligne | LAN | Communication locale (LDN) | Plateforme |
+| --- | --- | --- | --- | --- | --- |
+| [Mario Kart 8 Deluxe](dm/games/0100152000022000/README.md) | 4.0.1 (LAN/LDN en 3.0.5) | ✅ Une course Mondiale complète | ✅ Une course complète entre le Mac et ma Switch ; salons iPhone dans les deux rôles d’hôte | ✅ Sessions entre Mac, iPhone et ma Switch (la console doit avoir un module LDN compatible) | Mac ; iPhone pour les salons locaux |
+| [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Une manche d’arène contre un joueur distant | — | — | Mac |
+| [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Hall et file de Guerre de territoire | — | — | Mac |
+| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | 🟡 Hall et file de matchmaking, test NAT réussi | — | — | Mac |
+
+Limites connues : Smash rejette le Match rapide pour connexion instable. Le matchmaking de Splatoon 2 et 3 demande d’autres joueurs dans le même mode au même moment ; le serveur de Splatoon 3 descend au plus à la moitié de l’effectif (4 en Guerre de territoire, 2 en Salmon Run). Je n’ai pas validé le jeu en ligne sur iPhone. La note de chaque jeu donne la version exacte et les points ouverts.
 
 ## Démarrage
 

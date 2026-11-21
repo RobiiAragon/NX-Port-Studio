@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC9:** corregí los NaN de memoria vieja que quemaban el vestíbulo de Splatoon 3, registré Splatoon 3 12.0.0 e hice que su variante en línea de Nextendo conecte; un juego empaquetado para Mac ya puede vincular su cuenta de Nextendo por sí mismo. Las partidas en línea completas de Splatoon 3 siguen pendientes. [Notas y límites](docs/releases/1.6.0-rc.9.md).
+> **1.6.0 RC10:** agregué una tabla de los juegos cuyo juego en línea, LAN e inalámbrico local probé, y en modo Nextendo el host ahora conserva el mapeo del router de un socket UDP cuando Pia cierra y vuelve a abrir su puerto, una causa sospechada de conexiones fallidas entre jugadores. Incluye las correcciones de Splatoon 3 12.0.0 de la RC9. Las partidas completas de Splatoon 3 y el modo rápido de Smash siguen pendientes. [Notas y límites](docs/releases/1.6.0-rc.10.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 
@@ -64,6 +64,24 @@ Cada mecanismo tiene pruebas y alcances distintos. Esto no demuestra que todos l
 | Splatoon 2 EUR 5.5.2 — Nextendo | El 2 de noviembre entré al **lobby online y a la cola Territorial en Mac**, después de completar el tutorial y llegar a la plaza. | Decidí dejar la prueba de partida para después porque había pocos jugadores disponibles. No he validado una partida completada, juego entre pares, LAN/LDN ni iOS para este título. |
 | iPhone/iPad | Comprobé que el build firmado de Mario Kart 3.0.5 entra a salas LAN con mi Switch física, con cada dispositivo como anfitrión. | Verifiqué la entrada a la sala; aún no he validado una carrera completa en iPhone. Siguen aplicando restricciones de dispositivo, firma y plataforma. |
 | Android/Windows | Los tengo planeados para después de estabilizar la base Apple. | Aún no tengo builds ni resultados de compatibilidad; ARM y x86 requieren trabajo propio. |
+
+## Juegos con juego en línea y local
+
+Estos son los juegos de Switch cuyos modos de red probé en ports de NX Port Studio. Cada juego elige En línea, Inalámbrico local o LAN desde sus propios menús; Nextendo necesita una cuenta vinculada. ✅ significa que completé ese paso en el juego; 🟡, que llegué al vestíbulo o a la cola pero no terminé una partida; —, que aún no lo probé.
+
+| Juego | Versión | Nextendo en línea | LAN | Inalámbrico local (LDN) | Plataforma |
+| --- | --- | --- | --- | --- | --- |
+| [Mario Kart 8 Deluxe](dm/games/0100152000022000/README.md) | 4.0.1 (LAN/LDN en 3.0.5) | ✅ Una carrera Mundial completa | ✅ Una carrera completa entre la Mac y mi Switch; salas en iPhone con ambos como anfitrión | ✅ Sesiones entre Mac, iPhone y mi Switch (la consola necesita un módulo LDN compatible) | Mac; iPhone para salas locales |
+| [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Una ronda de arena contra un jugador remoto | — | — | Mac |
+| [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europa) | 5.5.2 | 🟡 Vestíbulo y cola de Territorial | — | — | Mac |
+| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | 🟡 Vestíbulo y cola de emparejamiento, chequeo de NAT superado | — | — | Mac |
+
+Límites conocidos:
+- **Smash:** el modo rápido rechaza la conexión por inestable, y una sesión posterior como espectador se desconectó.
+- **Splatoon 2 y 3:** el emparejamiento del proveedor necesita otros jugadores buscando el mismo modo al mismo tiempo. El servidor de Splatoon 3 exige el cupo completo (8 en Territorial, 4 en Salmon Run) durante 45 segundos y luego lo baja, nunca a menos de la mitad (4 y 2). Con poca gente conectada la cola puede no avanzar, así que Salmon Run con un amigo es la forma más rápida de llegar a una partida.
+- **Los cuatro:** no he validado el juego en línea en iPhone. Los resultados de LAN/LDN de Mario Kart son de la 3.0.5 y no los he repetido en la 4.0.1.
+
+La nota de cada juego tiene el build exacto, las fechas y los pendientes.
 
 ## Primeros pasos
 
