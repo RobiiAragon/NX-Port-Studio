@@ -1081,6 +1081,14 @@ This suspension path remains applicable to iOS and explicit host suspension. Mac
 - **Checks and remaining work:** 16 synthetic private-PKI cases pass normally and under ASan/UBSan; local TLS tests verify the complete Apple/OpenSSL path. Five live native handshakes passed without application data. All 22 signed plans passed synthetic preimage checks, and the iPhone assembler accepted separate original/online sections. A native online match, friends/presence, legacy game adaptations and unsupported provider certificate chains remain open; see [coverage](../nextendo-coverage.md).
 - **Found on:** [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md) transport qualification and the provider-published exact-build catalog; this is not a claim that its 3.0.5 port meets the required 4.0.1 policy.
 
+### A revised signed patch rejects the whole catalog
+
+- **Symptom:** every online export stops at the Nextendo game adapter step with `[RED] Nextendo game adapter could not be verified; no game code was changed: Unsupported signed patch policy`, for every title, although the catalog signature verifies.
+- **Cause:** `validate_catalog` required `patch_version == 1`. The field is the provider's content revision of one patch, not a format version: revision 18 of the catalog republished Splatoon 3 11.3.0's adapter as revision 2 (a fourth guarded record) and added a 12.0.0 adapter as revision 3. The format is fixed by `offset_basis` and `required_capabilities`, which did not change. One revised entry made the strict validator refuse the entire document.
+- **Fix:** `nextendo_patches.py` accepts any positive integer revision, as the reference emulator client does, and still rejects zero, negative, boolean, string and missing values. Identity, digest, bounds, overlap and preimage-guard checks are unchanged.
+- **Checks:** `dm/tools/tests/test_nextendo_patches.py` covers accepted and rejected revisions. I rebuilt my Splatoon 3 11.3.0 Mac export against the live revision-18 catalog: the adapter step compiled the exact-build signed patch into its separate Nextendo code pages. That does not qualify the revised patch's gameplay effect.
+- **Found on:** [Splatoon 3](../../dm/games/0100C2500FC20000/README.md) 11.3.0.
+
 ### Nextendo friends and SDK application presence
 
 - **Symptom:** a native title receives a failed or empty friend query regardless of the linked account, or its SDK application-presence field never reaches the service.

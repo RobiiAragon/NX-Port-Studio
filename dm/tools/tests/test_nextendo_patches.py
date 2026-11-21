@@ -42,6 +42,15 @@ class NextendoPatchTests(unittest.TestCase):
                 with self.assertRaises(ValueError): p.validate_catalog(doc)
         doc=catalog(); doc['patches'][0]['guards'][0]['patched_hex']='00'*4
         with self.assertRaises(ValueError): p.validate_catalog(doc)
+    def test_patch_content_revision_is_a_positive_integer(self):
+        for revision in (1, 2, 3, 40):
+            with self.subTest(revision=revision):
+                doc=catalog(); doc['patches'][0]['patch_version']=revision
+                self.assertIs(p.validate_catalog(doc), doc)
+        for revision in (0, -1, True, '2', 2.0, None):
+            with self.subTest(revision=revision):
+                doc=catalog(); doc['patches'][0]['patch_version']=revision
+                with self.assertRaises(ValueError): p.validate_catalog(doc)
     def test_overlapping_guard_and_conflicting_patches_rejected(self):
         doc=catalog(); doc['patches'][0]['guards']*=2
         with self.assertRaises(ValueError): p.validate_catalog(doc)

@@ -105,7 +105,13 @@ def validate_catalog(document):
         identity = (title.lower(), build.lower(), patch.get('id'))
         if identity in identities: raise ValueError('Duplicate signed patch identity')
         identities.add(identity)
-        if patch.get('module') != 'main' or patch.get('patch_version') != 1 or patch.get('offset_basis') != 'nso_header_included' or patch.get('required_capabilities') != ['npln.ips32.v1'] or type(patch.get('enabled')) is not bool:
+        # patch_version is the provider's content revision of one patch (11.3.0's Splatoon 3 adapter is
+        # revision 2), not a format version: the format is fixed by offset_basis and the capability below.
+        # The reference client accepts any positive revision; bool is rejected because it is an int subclass.
+        revision = patch.get('patch_version')
+        if type(revision) is not int or revision < 1:
+            raise ValueError('Unsupported signed patch policy')
+        if patch.get('module') != 'main' or patch.get('offset_basis') != 'nso_header_included' or patch.get('required_capabilities') != ['npln.ips32.v1'] or type(patch.get('enabled')) is not bool:
             raise ValueError('Unsupported signed patch policy')
         records(patch)
     return document
