@@ -7,6 +7,7 @@
 // safe mode, values, details and the import of cheat files (see the code below).
 // Key map (Nintendo layout): WASD left stick, arrow keys D-pad, J=A K=B U=X I=Y, Q=L E=R, Z=ZL C=ZR, F=press left stick G=press right stick, Return=+ Tab=−, Space=shake the controller.
 // Controllers: Nintendo profiles use their verified printed A/B/X/Y labels; other profiles map by position (right A, bottom B, top X, left Y). Controls… edits bindings, sticks and motion.
+// Wired Switch pads GameController does not list (PowerA, HORI, PDP) are read from raw HID instead (pad_hid_mac.inc) and are players like the others.
 // Each controller is a player of its own (local co-op): the first one connected is player 1, together with the keyboard, the next player 2, and so on up to 8 (pad_slots.h);
 // DM_PAD_MERGE=1 merges every controller into player 1 instead, DM_KBD_PLAYER=own makes the keyboard player 1 on its own, with the controllers from player 2 on.
 #import <Cocoa/Cocoa.h>
@@ -140,21 +141,27 @@ static void pad_motion_start(GCController *c) {
     if (!g_input_on || !g_controls.motion) { dm_motion_detach(c, p); return; }
     dm_motion_attach(c, p);
 }
+static void hid_pads_merge(uint64_t *m, int32_t axes[4]);   // pad_hid_mac.inc: the wired pads GameController does not list
+static void pad_merged(uint64_t *m, int32_t axes[4]) {   // DM_PAD_MERGE: player 1 from every controller
+    // A pair exposed as two Joy-Cons must contribute simultaneously: moving one half never releases the other half's held buttons.
+    for (GCController *source in GCController.controllers) if (pad_supported(source)) {
+        uint64_t b; int32_t a[4]; pad_raw(source,&b,a); *m |= b;
+        for (int k=0;k<4;k++) if (abs(a[k]) > abs(axes[k])) axes[k]=a[k];
+    }
+    hid_pads_merge(m,axes);
+}
+static void pad_publish(int p, uint64_t m, int32_t axes[4]) {   // raw buttons (Controls source space) and sticks → player p, through the Controls mapping
+    dm_controls_sticks(&g_controls,axes);
+    m |= joycon_extra_for_player(p);
+    dm_pad_set_player(p,dm_controls_buttons(&g_controls,m) | (m & (0xfull<<24)),axes[0],axes[1],axes[2],axes[3]);
+}
 static void pad_read(GCController *c) {
     if (!g_input_on) return;
     int p=g_merge ? 0 : pad_slot_of(&g_slots, (__bridge const void *)c); if (p < 0) return;
     dm_haptics_apple_controller(p,c);
     uint64_t m=0; int32_t axes[4]={0};
-    if (g_merge) {
-        // A pair exposed as two Joy-Cons must contribute simultaneously: moving one half never releases the other half's held buttons.
-        for (GCController *source in GCController.controllers) if (pad_supported(source)) {
-            uint64_t b; int32_t a[4]; pad_raw(source,&b,a); m |= b;
-            for (int k=0;k<4;k++) if (abs(a[k]) > abs(axes[k])) axes[k]=a[k];
-        }
-    } else pad_raw(c,&m,axes);
-    dm_controls_sticks(&g_controls,axes);
-    m |= joycon_extra_for_player(p);
-    dm_pad_set_player(p,dm_controls_buttons(&g_controls,m) | (m & (0xfull<<24)),axes[0],axes[1],axes[2],axes[3]);
+    if (g_merge) pad_merged(&m,axes); else pad_raw(c,&m,axes);
+    pad_publish(p,m,axes);
 }
 static GCController *joycon_controller_for_side(int side) {
     GCController *match=nil;
@@ -192,6 +199,7 @@ static void pad_handlers_clear(GCController *c) {
 static void pad_keep_system_buttons(GCController *c) { for (NSString *b in @[GCInputButtonHome, GCInputButtonShare]) c.physicalInputProfile.buttons[b].preferredSystemGestureState = GCSystemGestureStateDisabled; }
 static const char *pad_name(GCController *c) { return c.vendorName.UTF8String ?: "?"; }
 static void npad_name(int p, char *out, size_t cap) { uint32_t id = dm_player_npad(p); if (id == 0x20) snprintf(out, cap, "handheld"); else snprintf(out, cap, "%u", id); }
+#include "pad_hid_mac.inc"
 static void pro_players_changed(GCController *gone) {
     int count = 0, player = -1;
     for (GCController *c in GCController.controllers) if (c != gone && c.extendedGamepad && [c.productCategory isEqualToString:@"Switch Pro Controller"]) {
@@ -202,6 +210,7 @@ static void pro_players_changed(GCController *gone) {
 static void pro_devices_changed(void) { pro_players_changed(nil); }
 // Called at start and on every connect / disconnect (gone: the controller that was just removed, nil on a connect)
 static void pads_changed(GCController *gone) {
+    hid_pads_yield(gone);   // a wired pad GameController lists now is GameController's
     if (g_merge) {
         int any = 0;
         for (GCController *c in GCController.controllers) if (pad_supported(c) && c != gone) {
@@ -209,7 +218,8 @@ static void pads_changed(GCController *gone) {
         }
         if (gone) { pad_handlers_clear(gone); dm_motion_set_player(0,NULL); }
         if (gone) dm_motion_detach(gone, 0);
-        if (!any) { dm_pad_set(0, 0, 0, 0, 0); dm_haptics_apple_controller(0, nil); }
+        if (!any) { if (!hid_pads_any()) dm_pad_set(0, 0, 0, 0, 0); dm_haptics_apple_controller(0, nil); }
+        hid_pads_claim();
         pro_players_changed(gone);
         return;
     }
@@ -231,6 +241,7 @@ static void pads_changed(GCController *gone) {
         npad_name(p, nb, sizeof nb); LOG("controller '%s' connected: player %d (npad %s)", pad_name(c), p + 1, nb);
         pad_read(c);
     }
+    hid_pads_claim();   // after GameController's: a reconnecting GameController controller gets its player back first
     dm_pad_players(pad_slot_mask(&g_slots));
     pro_players_changed(gone);
 }
@@ -249,6 +260,7 @@ static void input_release(void) {
     if (g_mouse_down) { g_mouse_down = 0; dm_touch_set(NULL, 0); }
     if (g_merge) { for (GCController *c in GCController.controllers) if (pad_supported(c)) { dm_pad_set(0, 0, 0, 0, 0); break; } }
     else for (int p = 0; p < DM_PLAYERS; p++) if (g_held[p]) dm_pad_set_player(p, 0, 0, 0, 0, 0);
+    hid_pads_release();
 }
 static void input_resume(void) {
     g_input_on = 1;
@@ -256,6 +268,7 @@ static void input_resume(void) {
     for (GCController *c in GCController.controllers) if (pad_supported(c)) pad_motion_start(c);
     if (g_merge) { for (GCController *c in GCController.controllers) if (pad_supported(c)) pad_read(c); }
     else for (int p = 0; p < DM_PLAYERS; p++) if (g_held[p]) pad_read(g_held[p]);
+    hid_pads_resume();
     dm_motion_pro_active(1);
 }
 static void pads_start(void) {
@@ -1293,7 +1306,7 @@ void front_run(void (*guest)(void)) {
                 if (!pad_supported(c) || g_merge) LOG("controller %s: %s%s", conn ? "connected" : "disconnected", pad_name(c), pad_supported(c) ? "" : " (no gamepad inputs: not used)");
                 pads_changed(conn ? nil : c); }];
         dm_haptics_apple_init();
-        pads_start(); joycon_start();
+        pads_start(); joycon_start(); hid_pads_start();
         [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskKeyUp handler:^NSEvent *(NSEvent *e) {
             if (e.window != win) return e;   // Only swallow keys for the game window; other windows such as the software keyboard input box receive typing as usual
             if (e.type == NSEventTypeKeyDown && (e.modifierFlags & NSEventModifierFlagCommand)) return e;   // ⌘ shortcuts go to the menu; a key released while ⌘ is held still reaches the game, or it would stay pressed
