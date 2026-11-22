@@ -2,6 +2,7 @@
 #include "controls_map.h"
 static dm_controls g_controls;
 static NSString *(^g_controls_motion_status)(GCController *);
+static NSArray<NSString *> *(^g_controls_extra_pads)(void);   // pad_hid_mac.inc: status lines of the wired pads GameController does not list
 static void controls_apply_changed(void);   // front_mac releases old input and re-reads controllers
 static NSString *controls_preference_key(void) { return @"Controls.v1." DM_GAME_ID; }
 static NSUserDefaults *controls_preferences(void) { return [[NSUserDefaults alloc] initWithSuiteName:@"org.nxnative.controls"]; }
@@ -90,6 +91,7 @@ static NSArray<NSString *> *controls_source_names(void) {
         if (g_controls_motion_status) motion=g_controls_motion_status(c) ?: motion;
         [lines addObject:[NSString stringWithFormat:@"%@ — %@", c.vendorName ?: @"Controller", motion]];
     }
+    if (g_controls_extra_pads) [lines addObjectsFromArray:g_controls_extra_pads()];
     _status.stringValue = lines.count ? [lines componentsJoinedByString:@"\n"] : @"No controller connected. Pair your Joy-Con in System Settings → Bluetooth.";
 }
 - (void)reset:(id)sender { (void)sender; [self stopCapture]; dm_controls_defaults(&_draft); [self reload]; }

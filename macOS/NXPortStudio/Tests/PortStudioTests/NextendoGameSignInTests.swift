@@ -250,12 +250,12 @@ final class NextendoGameSignInTests: XCTestCase {
         XCTAssertEqual(paths.count,6)
     }
     func testRequestedScopesMatchReviewedProviderContract() {
-        XCTAssertEqual(StudioModel.nextendoScopes,["identity","friends","game.matchmaking"])
+        XCTAssertEqual(StudioModel.nextendoScopes,["identity","friends","game.matchmaking","presence"])
     }
     func testDocumentedSignInRetainsTheRotatingRefreshGrant() async throws {
         let now = Date(), store = GameSignInStore(previous(now: now))
         var responses = try replies(now: now)
-        responses[0] = .init(data: Data(#"{"access_token":"synthetic-oauth-grant","refresh_token":"synthetic-refresh-grant","token_type":"Bearer","scope":"identity friends game.matchmaking","expires_in":3600}"#.utf8),statusCode: 200)
+        responses[0] = .init(data: Data(#"{"access_token":"synthetic-oauth-grant","refresh_token":"synthetic-refresh-grant","token_type":"Bearer","scope":"identity friends game.matchmaking presence","expires_in":3600}"#.utf8),statusCode: 200)
         let http = GameSignInHTTP(responses), model = model(store: store,http: http,now: now)
         model.beginNextendoSignIn(); await model.nextendoAuthorizationTask?.value
         let saved = try XCTUnwrap(store.load())
@@ -269,7 +269,7 @@ final class NextendoGameSignInTests: XCTestCase {
         for escalated in [false,true] {
             let now = Date(), old = previous(now:now), store = GameSignInStore(old)
             var token: [String:Any] = ["access_token":"synthetic-access","refresh_token":"synthetic-refresh","token_type":"Bearer","expires_in":3600]
-            if escalated { token["scope"] = "identity friends game.matchmaking presence" }
+            if escalated { token["scope"] = "identity friends game.matchmaking presence profil" }
             var responses = try replies(now:now)
             responses[0] = .init(data:try JSONSerialization.data(withJSONObject:token),statusCode:200)
             let http = GameSignInHTTP(responses), model = model(store:store,http:http,now:now)
@@ -281,7 +281,7 @@ final class NextendoGameSignInTests: XCTestCase {
                 XCTAssertEqual(paths.count,1)
                 XCTAssertNotNil(model.nextendoAccountError)
             } else {
-                XCTAssertEqual(saved.renewal?.scopes,["identity","friends","game.matchmaking"])
+                XCTAssertEqual(saved.renewal?.scopes,["identity","friends","game.matchmaking","presence"])
                 XCTAssertEqual(saved.tokenKind,.nex)
                 XCTAssertNil(model.nextendoAccountError)
             }

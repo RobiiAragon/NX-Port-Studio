@@ -108,6 +108,8 @@ run: $(B)/t_heap_size $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_
 	$(B)/t_motion
 	$(B)/t_motion_apple
 	$(B)/t_pad_apple
+	$(B)/t_pad_hid
+	$(B)/t_pad_hid_mac
 	$(B)/t_motion_pro
 	$(B)/t_motion_pro_mac
 	TMPDIR="$(abspath $(B))" $(B)/t_hid
@@ -379,6 +381,18 @@ $(B)/t_motion_apple: t_motion_apple.m ../motion_apple.h ../dm_input.h | $(B)
 run: $(B)/t_pad_apple
 $(B)/t_pad_apple: t_pad_apple.m ../pad_apple.h ../dm_input.h | $(B)
 	$(CLANG) -O1 -g -fobjc-arc -Wall -Werror -I.. -o $@ t_pad_apple.m -framework Foundation -framework GameController
+run: $(B)/t_pad_hid
+$(B)/t_pad_hid: t_pad_hid.c ../pad_hid.h ../controls_map.h ../dm_input.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -o $@ t_pad_hid.c
+run: $(B)/t_pad_hid_mac
+$(B)/t_pad_hid_mac: t_pad_hid_mac.m ../pad_hid_mac.inc ../pad_hid.h ../pad_slots.h ../controls_map.h ../dm_input.h | $(B)
+	$(CLANG) -O1 -g -fobjc-arc -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -o $@ t_pad_hid_mac.m -framework Foundation -framework GameController -framework IOKit
+.PHONY: pad-hid pad-hid-live
+pad-hid: $(B)/t_pad_hid $(B)/t_pad_hid_mac
+	$(B)/t_pad_hid
+	$(B)/t_pad_hid_mac
+pad-hid-live: $(B)/t_pad_hid_mac   # a connected wired pad's players and buttons for 10 s, no game needed
+	$(B)/t_pad_hid_mac --live 10
 run: $(B)/t_motion_pro $(B)/t_motion_pro_mac
 $(B)/t_motion_pro: t_motion_pro.c ../motion_pro.h | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -fsanitize=address,undefined -o $@ t_motion_pro.c

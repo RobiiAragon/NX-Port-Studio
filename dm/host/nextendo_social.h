@@ -21,3 +21,5 @@ uint32_t dm_nextendo_friends_available(uint8_t *available,const void *uid);
 uint32_t dm_nextendo_presence_initialize(void *object,const void *uid);
 uint32_t dm_nextendo_presence_commit(const void *object);
 uint32_t dm_nextendo_social_publish(unsigned status,const uint8_t *app_field,size_t size);
+// Online play: publish and keep fresh this game's presence (once per process; Nextendo mode only).
+void dm_nextendo_social_presence_start(void);

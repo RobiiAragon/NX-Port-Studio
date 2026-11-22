@@ -103,7 +103,7 @@ private final class FixtureLegacy: MobileNextendoLegacyReading, @unchecked Senda
         try await eventually { !model.isAuthorizing }
         precondition(model.account?.tokenKind == .nex && model.hasGameCredential && !model.canRequestGameCredential,
                      "One sign-in must finish with the provider's game proof")
-        precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends", "game.matchmaking"]))
+        precondition(Set(browser.scope.split(separator: " ").map(String.init)) == Set(["identity", "friends", "game.matchmaking", "presence"]))
         let storedNEX = try store.load()
         precondition(model.hasGameCredential && storedNEX?.tokenKind == .nex)
         precondition(model.renewalTask != nil, "Successful game sign-in must schedule retained-grant preparation")

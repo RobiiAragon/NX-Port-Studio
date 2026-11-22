@@ -2,7 +2,7 @@ import AppKit
 import PortCore
 
 extension StudioModel {
-    static let nextendoScopes = ["identity", "friends", "game.matchmaking"]
+    static let nextendoScopes = ["identity", "friends", "game.matchmaking", "presence"]
 
     func loadNextendoPage() async {
         await reloadNextendoAccount()
