@@ -6,7 +6,7 @@
 
 我的独立项目基于 [seedds/nxnative](https://github.com/seedds/nxnative)，我保留了原引擎作者署名、MIT 许可和版权声明。请参阅[致谢](CREDITS.md)与[许可证](LICENSE)。
 
-> **1.6.0 RC11：**我的有线PowerA手柄现在可以在我的Mac移植版中使用：主机直接通过HID读取macOS无法识别的有线Switch手柄。在Nextendo模式下，主机还会发布我正在玩的游戏，让好友看到我在线；之前关联的账号需要重新登录以授予该权限。包含RC10的更改。[候选版说明与测试范围](docs/releases/1.6.0-rc.11.md)。
+> **1.6.0：**汇集我十一个候选版的稳定版。包含当前的nxnative引擎；从各游戏自身菜单进行的在线、LAN与本地通信游玩；Splatoon 2与Splatoon 3 12.0.0（我在线完成了一局鲑鱼跑）；JKSV存档传输；Mac上的有线PowerA手柄；以及让好友看到我在线的Nextendo状态。[发布说明与测试范围](docs/releases/1.6.0.md)。
 
 我在Studio与新构建的Mac/iPhone移植版中加入了**JKSV ZIP存档导入和导出**，保留旧存档，提供文件夹浏览与iOS文件共享。请参阅[存档传输与验证范围](docs/save-data.md)。
 

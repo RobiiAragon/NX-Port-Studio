@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC11:** my wired PowerA controller now works in my Mac ports: the host reads the wired Switch pads macOS does not list straight from HID. In Nextendo mode the host also publishes the game I am playing, so friends can see me online; an account linked earlier must sign in again to allow it. RC10's changes are included. [Candidate notes and test limits](docs/releases/1.6.0-rc.11.md).
+> **1.6.0:** the stable release that gathers my eleven candidates. It brings the current nxnative engine; online, LAN and local wireless play from each game's own menus; Splatoon 2 and Splatoon 3 12.0.0, where I completed an online Salmon Run shift; JKSV save transfer; wired PowerA controllers on the Mac; and Nextendo presence so friends can see me. [Release notes and test limits](docs/releases/1.6.0.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 

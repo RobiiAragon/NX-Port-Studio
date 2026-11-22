@@ -6,7 +6,7 @@
 
 Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour ce projet indépendant. Je préserve les crédits des auteurs du moteur et leurs avis de copyright : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **1.6.0 RC11 :** ma manette PowerA filaire fonctionne désormais dans mes portages Mac : l’hôte lit directement en HID les manettes Switch filaires que macOS ne reconnaît pas. En mode Nextendo, l’hôte publie aussi le jeu auquel je joue, pour que mes amis me voient en ligne ; un compte lié auparavant doit se reconnecter pour l’autoriser. Les changements de la RC10 sont inclus. [Notes et limites](docs/releases/1.6.0-rc.11.md).
+> **1.6.0 :** la version stable qui réunit mes onze candidates. Elle apporte le moteur actuel de nxnative ; le jeu en ligne, en LAN et en communication locale depuis les menus de chaque jeu ; Splatoon 2 et Splatoon 3 12.0.0, où j’ai terminé une partie de Salmon Run en ligne ; le transfert de sauvegardes JKSV ; les manettes PowerA filaires sur Mac ; et la présence Nextendo pour que mes amis me voient. [Notes et limites](docs/releases/1.6.0.md).
 
 J’intègre **l’importation et l’exportation des ZIP JKSV** dans Studio et les nouveaux portages Mac/iPhone, avec conservation des sauvegardes précédentes, accès aux dossiers et partage via Fichiers sur iOS. Voir [le transfert et ses limites de validation](docs/save-data.md).
 
