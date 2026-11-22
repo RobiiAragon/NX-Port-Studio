@@ -6,7 +6,7 @@
 
 Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour ce projet indépendant. Je préserve les crédits des auteurs du moteur et leurs avis de copyright : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **1.6.0 RC10 :** j’ai ajouté un tableau des jeux dont j’ai essayé le jeu en ligne, en LAN et en communication locale, supprimé les blocs noirs et rouges que quelques texels NaN laissaient sur la place de Splatoon 3, et en mode Nextendo l’hôte conserve désormais la correspondance du routeur d’un socket UDP quand Pia ferme puis rouvre son port, une cause soupçonnée d’échecs de connexion entre joueurs. Les corrections de Splatoon 3 12.0.0 de la RC9 sont incluses. Les matchs complets de Splatoon 3 et le Match rapide de Smash restent à valider. [Notes et limites](docs/releases/1.6.0-rc.10.md).
+> **1.6.0 RC10 :** j’ai ajouté un tableau des jeux dont j’ai essayé le jeu en ligne, en LAN et en communication locale, supprimé les blocs noirs et rouges que quelques texels NaN laissaient sur la place de Splatoon 3, et en mode Nextendo l’hôte conserve désormais la correspondance du routeur d’un socket UDP quand Pia ferme puis rouvre son port, une cause soupçonnée d’échecs de connexion entre joueurs. Les corrections de Splatoon 3 12.0.0 de la RC9 sont incluses. Avec le code de la RC9, j’ai ensuite terminé une partie de Salmon Run en ligne dans Splatoon 3 ; le Match rapide de Smash reste à valider. [Notes et limites](docs/releases/1.6.0-rc.10.md).
 
 J’intègre **l’importation et l’exportation des ZIP JKSV** dans Studio et les nouveaux portages Mac/iPhone, avec conservation des sauvegardes précédentes, accès aux dossiers et partage via Fichiers sur iOS. Voir [le transfert et ses limites de validation](docs/save-data.md).
 
@@ -61,7 +61,7 @@ Voici les jeux Switch dont j’ai essayé les modes réseau dans des portages NX
 | [Mario Kart 8 Deluxe](dm/games/0100152000022000/README.md) | 4.0.1 (LAN/LDN en 3.0.5) | ✅ Une course Mondiale complète | ✅ Une course complète entre le Mac et ma Switch ; salons iPhone dans les deux rôles d’hôte | ✅ Sessions entre Mac, iPhone et ma Switch (la console doit avoir un module LDN compatible) | Mac ; iPhone pour les salons locaux |
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Une manche d’arène contre un joueur distant | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Hall et file de Guerre de territoire | — | — | Mac |
-| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | 🟡 Hall et file de matchmaking, test NAT réussi | — | — | Mac |
+| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ Une partie de Salmon Run avec d’autres joueurs | — | — | Mac |
 
 Limites connues : Smash rejette le Match rapide pour connexion instable. Le matchmaking de Splatoon 2 et 3 demande d’autres joueurs dans le même mode au même moment ; le serveur de Splatoon 3 descend au plus à la moitié de l’effectif (4 en Guerre de territoire, 2 en Salmon Run). Je n’ai pas validé le jeu en ligne sur iPhone. La note de chaque jeu donne la version exacte et les points ouverts.
 
