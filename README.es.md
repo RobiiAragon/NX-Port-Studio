@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC10:** agregué una tabla de los juegos cuyo juego en línea, LAN e inalámbrico local probé, quité los bloques negros y rojos que unos pocos texels NaN dejaban en la plaza de Splatoon 3, y en modo Nextendo el host ahora conserva el mapeo del router de un socket UDP cuando Pia cierra y vuelve a abrir su puerto, una causa sospechada de conexiones fallidas entre jugadores. Incluye las correcciones de Splatoon 3 12.0.0 de la RC9. Las partidas completas de Splatoon 3 y el modo rápido de Smash siguen pendientes. [Notas y límites](docs/releases/1.6.0-rc.10.md).
+> **1.6.0 RC10:** agregué una tabla de los juegos cuyo juego en línea, LAN e inalámbrico local probé, quité los bloques negros y rojos que unos pocos texels NaN dejaban en la plaza de Splatoon 3, y en modo Nextendo el host ahora conserva el mapeo del router de un socket UDP cuando Pia cierra y vuelve a abrir su puerto, una causa sospechada de conexiones fallidas entre jugadores. Incluye las correcciones de Splatoon 3 12.0.0 de la RC9. Con el código de la RC9 completé después un turno de Salmon Run online en Splatoon 3; el modo rápido de Smash sigue pendiente. [Notas y límites](docs/releases/1.6.0-rc.10.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 
@@ -74,7 +74,7 @@ Estos son los juegos de Switch cuyos modos de red probé en ports de NX Port Stu
 | [Mario Kart 8 Deluxe](dm/games/0100152000022000/README.md) | 4.0.1 (LAN/LDN en 3.0.5) | ✅ Una carrera Mundial completa | ✅ Una carrera completa entre la Mac y mi Switch; salas en iPhone con ambos como anfitrión | ✅ Sesiones entre Mac, iPhone y mi Switch (la consola necesita un módulo LDN compatible) | Mac; iPhone para salas locales |
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Una ronda de arena contra un jugador remoto | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europa) | 5.5.2 | 🟡 Vestíbulo y cola de Territorial | — | — | Mac |
-| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | 🟡 Vestíbulo y cola de emparejamiento, chequeo de NAT superado | — | — | Mac |
+| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ Un turno de Salmon Run con otros jugadores | — | — | Mac |
 
 Límites conocidos:
 - **Smash:** el modo rápido rechaza la conexión por inestable, y una sesión posterior como espectador se desconectó.

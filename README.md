@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0 RC10:** I added a table of the games whose online, LAN and local wireless play I have tested, removed the black and red blocks a few NaN texels left in Splatoon 3's plaza, and in Nextendo mode the host now keeps a UDP socket's router mapping when Pia closes and rebinds its port, a suspected cause of failed peer connections. RC9's Splatoon 3 12.0.0 fixes are included. Completed Splatoon 3 matches and Smash Quickplay remain open. [Candidate notes and test limits](docs/releases/1.6.0-rc.10.md).
+> **1.6.0 RC10:** I added a table of the games whose online, LAN and local wireless play I have tested, removed the black and red blocks a few NaN texels left in Splatoon 3's plaza, and in Nextendo mode the host now keeps a UDP socket's router mapping when Pia closes and rebinds its port, a suspected cause of failed peer connections. RC9's Splatoon 3 12.0.0 fixes are included. With RC9's code I then completed an online Salmon Run shift in Splatoon 3; Smash Quickplay remains open. [Candidate notes and test limits](docs/releases/1.6.0-rc.10.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 
@@ -62,7 +62,7 @@ These mechanisms have different validation milestones. They do not establish tha
 | Mario Kart 8 Deluxe 4.0.1 | I completed **one Worldwide Nextendo race on Mac**, through the Excitebike Arena results, with my current RC7 host. [Exact build and limits](dm/games/0100152000022000/README.md#nextendo-race-validation-2026-11-02). | Other modes and iOS online remain unqualified. I have not repeated physical LAN/LDN with 4.0.1; the 3.0.5 results remain historical. |
 | Smash 13.0.5 — Nextendo | I verified account integration and **one real arena round on Mac**. | I explicitly approved the service's exact certificate. Quickplay's unstable-network rejection and a later spectator disconnect remain open; iOS online is unqualified. |
 | Splatoon 2 EUR 5.5.2 — Nextendo | On November 2, I entered the **online lobby and Territorial matchmaking queue on Mac**, after completing the tutorial and reaching the plaza. | I postponed the match test because too few players were available. I have not qualified a completed match, peer-to-peer gameplay, LAN/LDN or iOS for this title. |
-| Splatoon 3 12.0.0 — Nextendo | On November 21, the plaza, the lobby and its practice area **rendered on Mac as they do on my Switch**, and the game entered the **online lobby and matchmaking queue**. [Exact build and limits](dm/games/0100C2500FC20000/README.md#mac-acceptance-on-november-21-2026). | The server never assigned me a match; completed matches, LAN/LDN and iOS remain unqualified. |
+| Splatoon 3 12.0.0 — Nextendo | On November 21, the plaza, the lobby and its practice area **rendered on Mac as they do on my Switch**, and I **completed an online Salmon Run shift with other players on Mac**. [Exact build and limits](dm/games/0100C2500FC20000/README.md#mac-acceptance-on-november-21-2026). | One Salmon Run shift with RC9's code. Turf War and Anarchy matches, LAN/LDN and iOS remain unqualified. |
 | iPhone/iPad | I checked that a signed Mario Kart 3.0.5 build joins LAN lobbies with my physical Switch, with each device as host. | I verified lobby entry; I have not verified a completed race on iPhone. Device, signing and platform restrictions still apply. |
 | Android / Windows | I plan these after the Apple baseline is stable. | I have no builds or compatibility results yet; ARM and x86 need separate architecture work. |
 
@@ -75,7 +75,7 @@ These are the Switch games whose network modes I have tested in NX Port Studio p
 | [Mario Kart 8 Deluxe](dm/games/0100152000022000/README.md) | 4.0.1 (LAN/LDN on 3.0.5) | ✅ One complete Worldwide race | ✅ A complete race between Mac and my Switch; iPhone lobbies in both host roles | ✅ Sessions across Mac, iPhone and my Switch (the console needs a compatible LDN module) | Mac; iPhone for local lobbies |
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ One arena round against a remote player | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Lobby and Turf War queue | — | — | Mac |
-| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | 🟡 Lobby and matchmaking queue, NAT check passed | — | — | Mac |
+| [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ One Salmon Run shift with other players | — | — | Mac |
 
 Known limits:
 - **Smash:** Quickplay rejects the connection as unstable, and a later spectating session disconnected.
