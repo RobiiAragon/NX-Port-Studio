@@ -7,6 +7,19 @@
 #include <math.h>
 #include <time.h>
 #include "game_profile.h"
+#include <errno.h>
+#include <stdarg.h>
+#include <stdatomic.h>
+#include <unistd.h>
+
+// Counts and results only (DM_ACCOUNT_TRACE=1, at most 64 lines): never an ID, a name, a token or a body.
+static void social_trace(const char *format,...) {
+    static _Atomic unsigned lines; const char *flag=getenv("DM_ACCOUNT_TRACE");
+    if(!flag||strcmp(flag,"1")||atomic_fetch_add(&lines,1)>=64)return;
+    int saved=errno; va_list arguments; va_start(arguments,format);
+    fputs("[account-trace] ",stderr); vfprintf(stderr,format,arguments); fputc('\n',stderr);
+    va_end(arguments); errno=saved;
+}
 
 static bool number(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value)!=CFBooleanGetTypeID(); }
 static NSTimeInterval monotonic_time(void) { struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now); return now.tv_sec+now.tv_nsec/1e9; }
@@ -83,7 +96,13 @@ static uint32_t friends_snapshot(dm_social_friend **output,size_t *count,bool re
         uint8_t *buffer=malloc(1024*1024); if (!buffer) return DM_ACCOUNT_FAIL; size_t length=0;
         uint32_t result=dm_nextendo_api_request("friends",NULL,0,buffer,1024*1024,&length);
         NSData *data=result||!length?nil:[NSData dataWithBytes:buffer length:length]; free(buffer);
-        if (!data || !(records=decode_friends(data,&n)) || ![identity isEqual:dm_nextendo_api_identity("friends")]) return DM_ACCOUNT_FAIL;
+        if (data && !(records=decode_friends(data,&n))) social_trace("op=api.friends.records result=invalid");
+        if (records) {
+            const dm_social_friend *item=records.bytes; size_t nsa=0,online=0,same=0; uint64_t title=strtoull(DM_GAME_ID,NULL,16);
+            for (size_t i=0;i<n;i++) { nsa+=item[i].nsa!=0; online+=item[i].presence!=0; same+=item[i].presence&&item[i].application==title; }
+            social_trace("op=api.friends.records count=%zu nsa=%zu online=%zu same_app=%zu",n,nsa,online,same);
+        }
+        if (!data || !records || ![identity isEqual:dm_nextendo_api_identity("friends")]) return DM_ACCOUNT_FAIL;
         pthread_mutex_lock(&mutex); cached_identity=identity; cached_records=records; cached_count=n; fetched=monotonic_time(); pthread_mutex_unlock(&mutex);
     }
     if (![identity isEqual:dm_nextendo_api_identity("friends")]) return DM_ACCOUNT_FAIL;
@@ -94,8 +113,12 @@ static uint32_t friends_snapshot(dm_social_friend **output,size_t *count,bool re
 uint32_t dm_nextendo_social_friends(dm_social_friend **output,size_t *count) { return friends_snapshot(output,count,false); }
 uint32_t dm_nextendo_social_friends_refresh(dm_social_friend **output,size_t *count) { return friends_snapshot(output,count,true); }
 
-uint32_t dm_nextendo_social_publish(unsigned status,const uint8_t *app_field,size_t size) { @autoreleasepool {
-    if(status>2||size>DM_SOCIAL_APP_FIELD||(size&&!app_field))return DM_ACCOUNT_FAIL;
+// This process's presence: playing this game (2) until the game itself declares another state
+// (UserPresence::Commit, an online-play session). The refresh re-sends that latest declared state.
+static pthread_mutex_t presence_mutex=PTHREAD_MUTEX_INITIALIZER;
+static unsigned presence_status=2; static uint8_t presence_field[DM_SOCIAL_APP_FIELD]; static size_t presence_size;
+
+static uint32_t publish_now(unsigned status,const uint8_t *app_field,size_t size) { @autoreleasepool {
     uint64_t generation=0; NSString *proof=dm_nextendo_api_passive_bearer(&generation);
     if(!proof)return DM_ACCOUNT_FAIL;
     NSString *title=[@DM_GAME_ID lowercaseString];
@@ -110,3 +133,34 @@ uint32_t dm_nextendo_social_publish(unsigned status,const uint8_t *app_field,siz
     uint32_t result=dm_nextendo_api_request_passive("presence",body.bytes,body.length,response,sizeof response,&count,proof,generation);
     return !result&&dm_nextendo_api_passive_valid(proof,generation)?0:DM_ACCOUNT_FAIL;
 } }
+uint32_t dm_nextendo_social_publish(unsigned status,const uint8_t *app_field,size_t size) {
+    if(status>2||size>DM_SOCIAL_APP_FIELD||(size&&!app_field))return DM_ACCOUNT_FAIL;
+    pthread_mutex_lock(&presence_mutex);
+    presence_status=status; memset(presence_field,0,sizeof presence_field); if(size)memcpy(presence_field,app_field,size); presence_size=size;
+    pthread_mutex_unlock(&presence_mutex);
+    return publish_now(status,app_field,size);
+}
+
+// A console publishes "playing <game>" for every game, and keeps it fresh; the provider drops a
+// presence older than 90 s. Games that never touch nn::friends::UserPresence (Splatoon 3) were
+// therefore offline to every friend. Until the game signs in, the passive authorization is absent
+// and publish_now fails without a Keychain or provider read; it retries every 10 s, then refreshes
+// every 45 s.
+static void *presence_refresh(void *unused) {
+    (void)unused; unsigned failures=0; bool published=false;
+    for (;;) {
+        sleep(published?45:10);
+        unsigned status; size_t size; uint8_t field[DM_SOCIAL_APP_FIELD];
+        pthread_mutex_lock(&presence_mutex); status=presence_status; size=presence_size; memcpy(field,presence_field,sizeof field); pthread_mutex_unlock(&presence_mutex);
+        uint32_t result=publish_now(status,size?field:NULL,size);
+        if (!result != published || (result && !(failures & (failures + 1)))) social_trace("op=api.presence.refresh status=%u result=0x%x",status,result);
+        published=!result; failures=result?failures+1:0;
+    }
+    return NULL;
+}
+static void presence_refresh_start(void) {
+    pthread_t thread; pthread_attr_t attributes; pthread_attr_init(&attributes); pthread_attr_setdetachstate(&attributes,PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&thread,&attributes,presence_refresh,NULL)) social_trace("op=api.presence.refresh result=no-thread");
+    pthread_attr_destroy(&attributes);
+}
+void dm_nextendo_social_presence_start(void) { static pthread_once_t once=PTHREAD_ONCE_INIT; pthread_once(&once,presence_refresh_start); }

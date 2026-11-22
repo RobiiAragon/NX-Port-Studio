@@ -325,6 +325,7 @@ static void *guest_tramp(void *p) {
 __attribute__((constructor)) static void hud_env(void) { front_hud_env(); }
 // Endpoint policy is initialized after per-game preferences select the mode.
 #include "nextendo_routes.h"
+#include "nextendo_social.h"
 #include "net_socket.h"
 #include "display_mac.inc"
 static void prepare_network_once(void) { @autoreleasepool { network_load(network_preferences()); } }
@@ -1185,6 +1186,7 @@ void front_run(void (*guest)(void)) {
     if (dm_net_nextendo_enabled()) {
         int routes = dm_nextendo_routes_initialize();
         if (routes) LOG("[RED] Nextendo endpoint policy unavailable (status %d); service DNS and TLS remain blocked", routes);
+        else dm_nextendo_social_presence_start();
     }
     // A game: tell macOS its work is latency-critical, so the system does not trade its frame time for power while the frame rate is capped
     static id activity; activity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiated | NSActivityLatencyCritical reason:@"game"];

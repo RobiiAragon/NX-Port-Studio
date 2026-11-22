@@ -12,6 +12,9 @@
 #include "haptics_apple.h"
 #include "display_mode.h"
 #include "save_sync.h"
+#include "net_socket.h"
+#include "nextendo_routes.h"
+#include "nextendo_social.h"
 #import "CloudSaves.h"
 
 UIView *dm_gamepad_view(CGRect frame);
@@ -249,7 +252,11 @@ void front_progress(const char *title, long done, long total) {
 }
 void *front_metal_layer(void) { return (__bridge void *)g_layer; }
 void front_prepare_network(void) {} // Launcher applies the final mode before dm_main.
-void front_run(void (*guest)(void)) { guest(); }   // Already on main.m's big-stack thread
+void front_run(void (*guest)(void)) {   // Already on main.m's big-stack thread
+    // Online play keeps this game's Nextendo presence fresh, as the Mac front does (hle_nextendo_social_apple.m)
+    if (dm_net_nextendo_enabled() && !dm_nextendo_routes_initialize()) dm_nextendo_social_presence_start();
+    guest();
+}
 
 // Software keyboard: show a UIAlertController on the main thread, the calling thread waits for the result
 int front_text_input(const char *title, const char *sub, const char *guide, const char *initial, int max_chars, char *out, int out_cap) {

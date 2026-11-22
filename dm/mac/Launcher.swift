@@ -145,7 +145,7 @@ struct CloudSavesSection: View {
 /// public client ID (DMNextendoClientID, pack_app.py); sign-in runs the same PKCE + loopback flow and Keychain item as Studio's Nextendo page, so an
 /// account linked in either place is shared. The game then chooses offline, LAN, local wireless or online play from its own menus (DM_NETWORK=auto).
 @MainActor final class NextendoAccountModel: ObservableObject {
-    static let scopes = ["identity", "friends", "game.matchmaking"]   // Studio's game scopes (StudioModel+Nextendo.swift)
+    static let scopes = ["identity", "friends", "game.matchmaking", "presence"]   // Studio's game scopes (StudioModel+Nextendo.swift); presence: the host publishes the running game every 45 s
     @Published private(set) var summary: NextendoAccountSummary?
     @Published private(set) var busy = false
     @Published private(set) var message: String?

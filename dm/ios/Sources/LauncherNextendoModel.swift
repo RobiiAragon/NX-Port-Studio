@@ -231,6 +231,6 @@ import Combine
     private func configuration() throws -> NextendoOAuthConfiguration {
         // Match the publisher's registered grant used by the verified desktop flow.
         // Consent remains on Nextendo's own website; this app never adds a secret.
-        try NextendoOAuthConfiguration(clientID: clientID, scopes: ["identity", "friends", "game.matchmaking"])
+        try NextendoOAuthConfiguration(clientID: clientID, scopes: ["identity", "friends", "game.matchmaking", "presence"])
     }
 }
