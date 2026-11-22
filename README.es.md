@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.6.0 RC11:** mi control PowerA con cable ya funciona en mis ports de Mac: el host lee directo por HID los controles de Switch con cable que macOS no reconoce. En modo Nextendo el host además publica el juego al que estoy jugando, para que mis amigos me vean en línea; una cuenta vinculada antes debe iniciar sesión otra vez para permitirlo. Incluye los cambios de la RC10. [Notas y límites](docs/releases/1.6.0-rc.11.md).
+> **1.6.0:** la versión estable que reúne mis once candidatas. Trae el motor actual de nxnative; juego en línea, LAN e inalámbrico local desde los menús de cada juego; Splatoon 2 y Splatoon 3 12.0.0, donde completé un turno de Salmon Run online; transferencia de partidas guardadas JKSV; controles PowerA con cable en Mac; y presencia en Nextendo para que mis amigos me vean. [Notas y límites](docs/releases/1.6.0.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 
