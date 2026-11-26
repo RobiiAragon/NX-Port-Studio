@@ -9,9 +9,16 @@ public enum NextendoAgent {
     /// Studio only: the exact app bundle that contains the agent.
     public static let adminService = "org.nxnative.portstudio.agent.admin"
     public static let launchAgentPlist = "org.nxnative.portstudio.agent.plist"
-    public static let protocolVersion = 1
+    /// 2 adds `social`. A port built for 1 gets `versionMismatch` and keeps its own
+    /// path, which still holds the OAuth grant a version-1 record lacked.
+    public static let protocolVersion = 2
     /// The host's credential provider buffer (dm/host/hle_nextendo_apple.m).
     public static let credentialLimit = 65_536
+    /// The host's account API buffer and presence body bounds (dm/host/hle_nextendo_api_apple.m).
+    public static let responseLimit = 1 << 20
+    public static let presenceLimit = 4096
+    /// The account API resources a port may ask for, and the OAuth scope each needs.
+    public static let socialScopes = ["me": "identity", "friends": "friends", "presence": "presence"]
     /// Peer allowlist bound; the oldest registrations are dropped first.
     public static let peerLimit = 512
 }
@@ -33,6 +40,10 @@ public enum NextendoAgentStatus: Int, Sendable {
     /// Reply: status, schema-1 record without its renewal grant, account generation.
     /// `renew` runs the same coalesced game-account preparation a port runs today at boot.
     func gameCredential(renew: Bool, reply: @escaping @Sendable (Int, Data?, UInt64) -> Void)
+    /// One account API request made with the agent's own OAuth grant, so the port holds
+    /// no bearer. `resource` is me, friends or presence; only presence has a JSON body.
+    /// Reply: status, HTTP status (0 when nothing was sent), response body on 2xx.
+    func social(_ resource: String, body: Data?, reply: @escaping @Sendable (Int, Int, Data?) -> Void)
 }
 
 @objc public protocol NextendoAgentAdminService {

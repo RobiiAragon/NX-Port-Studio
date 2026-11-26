@@ -104,6 +104,16 @@ static uint32_t api_request(const char *resource, const uint8_t *body, size_t bo
     if (!presence && strcmp(resource,"friends") && strcmp(resource,"me")) return DM_ACCOUNT_FAIL;
     dm_account_trace_api_operation operation=presence?DM_ACCOUNT_API_PRESENCE:!strcmp(resource,"friends")?DM_ACCOUNT_API_FRIENDS:DM_ACCOUNT_API_ME;
     if ((!presence && (body_size||passive)) || (presence && !body_size)) return DM_ACCOUNT_FAIL;
+    dm_nextendo_api_provider provider = dm_nextendo_api_transport_provider();
+    if (provider) {
+        // The embedder's agent holds the grant and sends the request: no bearer here.
+        if (passive ? !dm_nextendo_api_passive_valid(proof, generation) : !dm_nextendo_api_identity(resource)) return DM_ACCOUNT_FAIL;
+        size_t size = 0; unsigned status = 0;
+        dm_guest_host_wait_begin(); bool sent = provider(resource, body, body_size, output, capacity, &size, &status); dm_guest_host_wait_end();
+        dm_account_trace_api(operation, sent && status >= 100 && status <= 599 ? status : 0);
+        if (!sent || status < 200 || status >= 300 || size > capacity || (passive && !dm_nextendo_api_passive_valid(proof, generation))) return DM_ACCOUNT_FAIL;
+        *output_size = size; return 0;
+    }
     if (!passive) proof = dm_nextendo_api_bearer(resource);
     if (!proof.length || (passive && !dm_nextendo_api_passive_valid(proof, generation))) return DM_ACCOUNT_FAIL;
     NSString *authorization = [@"Bearer " stringByAppendingString:proof];

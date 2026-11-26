@@ -9,6 +9,9 @@ static int checks, failures, requests;
 static BOOL linked = YES;
 static unsigned response_status = 200;
 static bool oversized, transport_failed;
+static dm_nextendo_api_provider installed_provider;
+static int provider_requests, waits;
+dm_nextendo_api_provider dm_nextendo_api_transport_provider(void) { return installed_provider; }
 // Exercise the production streaming delegate directly; no URL connection starts.
 @interface DmNextendoApiTransfer : NSObject <NSURLSessionDataDelegate,NSURLSessionTaskDelegate>
 @property(nonatomic) NSMutableData *data;
@@ -18,10 +21,10 @@ static bool oversized, transport_failed;
 @end
 #define CHECK(x) do { checks++; if (!(x)) { failures++; fprintf(stderr,"API check failed at %d\n",__LINE__); } } while (0)
 NSString *dm_nextendo_api_bearer(const char *resource) { (void)resource;return linked ? @"synthetic-proof" : nil; }
-NSData *dm_nextendo_api_identity(const char *resource) { (void)resource;return nil; }
+NSData *dm_nextendo_api_identity(const char *resource) { (void)resource;return linked ? [NSData dataWithBytes:"id" length:2] : nil; }
 bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t generation) { return linked && generation==7 && [proof isEqual:@"synthetic-proof"]; }
-void dm_guest_host_wait_begin(void) {}
-void dm_guest_host_wait_end(void) {}
+void dm_guest_host_wait_begin(void) { waits++; }
+void dm_guest_host_wait_end(void) { waits--; }
 static bool transport(const char *url,const char *method,const char *authorization,const uint8_t *body,size_t body_size,
                       uint8_t *output,size_t capacity,size_t *size,unsigned *status) {
     requests++; CHECK(!strcmp(authorization,"Bearer synthetic-proof"));
@@ -31,6 +34,33 @@ static bool transport(const char *url,const char *method,const char *authorizati
     const char json[]="{\"friends\":[]}"; CHECK(capacity >= sizeof json);
     memcpy(output,json,sizeof json-1); *size=oversized?capacity+1:sizeof json-1; *status=response_status;
     return !transport_failed;
+}
+// docs/nextendo-agent.md: the embedder's agent sends the request with its own grant.
+static bool agent(const char *resource,const uint8_t *body,size_t body_size,uint8_t *output,size_t capacity,size_t *size,unsigned *status) {
+    provider_requests++; CHECK(waits==1); // the guest thread is marked waiting
+    CHECK(!strcmp(resource,"friends")||!strcmp(resource,"me")||!strcmp(resource,"presence"));
+    CHECK(!strcmp(resource,"presence") ? body&&body_size : !body_size);
+    const char json[]="{\"friends\":[1]}"; if (capacity<sizeof json-1) return false;
+    memcpy(output,json,sizeof json-1); *size=oversized?capacity+1:sizeof json-1; *status=response_status;
+    return !transport_failed;
+}
+static void agentTransport(void) {
+    installed_provider=agent; linked=YES; uint8_t output[256]; size_t size=99; int http=requests;
+    CHECK(!dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size) && size==15 && !memcmp(output,"{\"friends\":[1]}",15));
+    CHECK(!dm_nextendo_api_request("me",NULL,0,output,sizeof output,&size));
+    CHECK(!dm_nextendo_api_request("presence",(const uint8_t*)"{}",2,output,sizeof output,&size));
+    CHECK(!dm_nextendo_api_request_passive("presence",(const uint8_t*)"{}",2,output,sizeof output,&size,@"synthetic-proof",7));
+    CHECK(provider_requests==4 && requests==http && !waits); // no bearer and no HTTP from this process
+    int asked=provider_requests;
+    CHECK(dm_nextendo_api_request_passive("presence",(const uint8_t*)"{}",2,output,sizeof output,&size,@"synthetic-proof",8)!=0 && !size);
+    CHECK(dm_nextendo_api_request("../friends",NULL,0,output,sizeof output,&size)!=0 && dm_nextendo_api_request("friends",(const uint8_t*)"{}",2,output,sizeof output,&size)!=0);
+    CHECK(provider_requests==asked);
+    linked=NO; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && provider_requests==asked); linked=YES;
+    response_status=404; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && !size); response_status=200;
+    oversized=true; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && !size); oversized=false;
+    transport_failed=true; CHECK(dm_nextendo_api_request("friends",NULL,0,output,sizeof output,&size)!=0 && !size); transport_failed=false;
+    CHECK(provider_requests==asked+3 && requests==http && !waits);
+    installed_provider=NULL;
 }
 static void httpMetadata(void) {
     linked=YES;
@@ -94,5 +124,5 @@ int main(void) { @autoreleasepool {
     [transfer URLSession:dummy task:dummy_task didCompleteWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]];
     CHECK(transfer.failed&&dispatch_semaphore_wait(transfer.completed,DISPATCH_TIME_NOW)==0);
     [dummy invalidateAndCancel];
-    httpMetadata();printf("Nextendo API: %d checks, %d failed; synthetic transport only\n",checks,failures); return failures?1:0;
+    httpMetadata();agentTransport();printf("Nextendo API: %d checks, %d failed; synthetic transport only\n",checks,failures); return failures?1:0;
 } }

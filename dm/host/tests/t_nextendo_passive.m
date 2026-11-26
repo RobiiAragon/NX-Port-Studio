@@ -204,10 +204,48 @@ static void staleCompletion(void) {
     pthread_mutex_lock(&fixtureLock);holdProvider=false;pthread_mutex_unlock(&fixtureLock);
     CHECK(!dm_nextendo_account_authorize_local());CHECK(!dm_nextendo_social_publish(1,NULL,0));
 }
+// docs/nextendo-agent.md: the Mac agent's record has no OAuth grant; the agent sends
+// me/friends/presence itself. Passive presence reads the memory provider at boot.
+static unsigned agentRequests; static bool agentDown;
+static bool agentApi(const char *resource,const uint8_t *body,size_t bodySize,uint8_t *output,size_t capacity,size_t *size,unsigned *status) {
+    agentRequests++; if(agentDown)return false;
+    bool presence=!strcmp(resource,"presence");
+    if(presence){NSDictionary *object=[NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:body length:bodySize] options:0 error:nil];
+        CHECK([object[@"app_id"] isKindOfClass:NSString.class]&&[object[@"status"] isEqual:@2]);}
+    const char *response=presence?"{}":"{\"friends\":[{\"pid\":502,\"name\":\"AgentFriend\"}]}";
+    size_t length=strlen(response);if(capacity<length)return false;
+    memcpy(output,response,length);*size=length;*status=200;return true;
+}
+static void agentTransport(void) {
+    NSData *agentRecord=withGrant(record(@"synthetic_agent"),nil);
+    // Before: a record without the grant authorizes no account API in this process.
+    setRecord(agentRecord);dm_nextendo_set_credential_provider(provider);
+    CHECK(!dm_nextendo_api_bearer("friends")&&!dm_nextendo_api_identity("friends"));
+    dm_nextendo_set_api_provider(agentApi);
+    unsigned http=httpRequests,kc=keychainReads,reads=providerReads;uint64_t generation=0;
+    CHECK(!dm_nextendo_api_bearer("friends")&&!dm_nextendo_api_bearer("presence"));
+    NSString *proof=passive(&generation);CHECK(proof&&generation&&dm_nextendo_api_passive_valid(proof,generation));
+    CHECK(providerReads==reads+1); // cold boot: a memory read, no explicit account read first
+    CHECK(!dm_nextendo_social_publish(2,NULL,0)&&agentRequests==1);
+    NSData *identity=dm_nextendo_api_identity("friends");CHECK(identity.length==32);
+    dm_social_friend *friends=NULL;size_t number=0;
+    CHECK(!dm_nextendo_social_friends_refresh(&friends,&number)&&number==1&&friends&&friends[0].pid==502&&agentRequests==2);free(friends);
+    // The identity binds the agent's NEX record: a new record is a new cache key.
+    setRecord(withGrant(record(@"synthetic_agent_renewed"),nil));CHECK(![identity isEqual:dm_nextendo_api_identity("friends")]);
+    // accountChanged: the agent client invalidates, and passive presence re-reads.
+    dm_nextendo_account_invalidate_social();CHECK(!dm_nextendo_api_passive_valid(proof,generation));
+    proof=passive(&generation);CHECK(proof!=nil);
+    agentDown=true;CHECK(dm_nextendo_social_publish(2,NULL,0)!=0);agentDown=false;
+    setRecord(nil);dm_nextendo_account_invalidate_social();unsigned asked=agentRequests;
+    CHECK(!passive(&generation)&&dm_nextendo_social_publish(2,NULL,0)!=0&&dm_nextendo_social_friends_refresh(&friends,&number)!=0&&agentRequests==asked);
+    mode=DM_NET_OFFLINE;setRecord(agentRecord);CHECK(!passive(&generation));mode=DM_NET_AUTO;
+    CHECK(httpRequests==http&&keychainReads==kc);
+    dm_nextendo_set_api_provider(NULL);CHECK(!dm_nextendo_api_identity("friends"));
+}
 int main(void){@autoreleasepool{
     setenv("DM_NEXTENDO_ROUTES","synthetic-passive-social-profile",1);
     setRecord(record(@"synthetic_initial"));dm_nextendo_set_credential_provider(provider);dm_nextendo_api_test_transport(transport);
-    coldAndRetry();expiryAndFailures();staleCompletion();grantGuards();resourcePermissions();
+    coldAndRetry();expiryAndFailures();staleCompletion();grantGuards();resourcePermissions();agentTransport();
     CHECK(!keychainReads&&atomic_load(&waitsBegun)==atomic_load(&waitsEnded));
     printf("Nextendo passive social: %u checks, %u failures; synthetic credentials/HTTP only, zero real Keychain calls\n",checks,failures);
     return failures?1:0;

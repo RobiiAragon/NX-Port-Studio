@@ -21,6 +21,11 @@ static bool (*agent_credential)(uint8_t *, size_t, size_t *);
 static bool agent_provider(uint8_t *buffer, size_t capacity, size_t *size) {
     return agent_credential && agent_credential(buffer, capacity, size);
 }
+static bool (*agent_api)(const char *, const uint8_t *, size_t, uint8_t *, size_t, size_t *, unsigned *);
+static bool agent_api_provider(const char *resource, const uint8_t *body, size_t body_size,
+                               uint8_t *output, size_t capacity, size_t *size, unsigned *status) {
+    return agent_api && agent_api(resource, body, body_size, output, capacity, size, status);
+}
 
 // Called on the existing guest worker while the primary AppKit loop is active.
 // CLI hosts and local-only modes do not load account code or read storage.
@@ -28,9 +33,12 @@ void dm_mac_bundle_prepare_account(void) {
     if (!bootstrap_image || !dm_net_nextendo_enabled()) return;
     bool (*agent)(void (*)(void)) = dlsym(bootstrap_image, "dm_mac_agent_prepare");
     agent_credential = dlsym(bootstrap_image, "dm_mac_agent_credential");
+    agent_api = dlsym(bootstrap_image, "dm_mac_agent_api");
     const char *use_agent = getenv("DM_NEXTENDO_AGENT");   // 0: skip the agent, sign in from this port
-    if ((!use_agent || strcmp(use_agent, "0")) && agent && agent_credential && agent(dm_nextendo_account_invalidate_social)) {
+    if ((!use_agent || strcmp(use_agent, "0")) && agent && agent_credential && agent_api && agent(dm_nextendo_account_invalidate_social)) {
+        // The agent's record carries no OAuth grant: friends, me and presence go through it too.
         dm_nextendo_set_credential_provider(agent_provider);
+        dm_nextendo_set_api_provider(agent_api_provider);
         return;
     }
     void (*prepare)(void) = dlsym(bootstrap_image, "dm_mac_prepare_game_account");

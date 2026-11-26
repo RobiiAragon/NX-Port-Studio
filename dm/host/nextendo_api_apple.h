@@ -4,7 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "nextendo_account.h"
 
+// The embedder's account API transport, or NULL: requests then carry this process's
+// own OAuth bearer. With a transport, the bearer is nil and the identity binds the
+// validated NEX record instead.
+dm_nextendo_api_provider dm_nextendo_api_transport_provider(void);
 // OAuth only, for the closed me/identity, friends/friends, presence/presence
 // resource/scope mapping. A NEX proof is never an account API fallback.
 NSString *dm_nextendo_api_bearer(const char *resource);

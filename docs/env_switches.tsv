@@ -100,7 +100,7 @@ DM_NET_DISABLE_MULTICAST	diagnostic	1 disables direct multicast discovery, leavi
 DM_NET_DISCOVERY_PEER	player	Optional discovery relay IPv4 endpoint; automatic local discovery requires no entered address
 DM_NET_TRACE	diagnostic	Log native socket and local-network translation details
 DM_NET_UDP_KEEP	diagnostic	0 closes a Nextendo UDP socket at once instead of holding it 5 seconds for a rebind of the same port (Pia's NAT check then match socket)
-DM_NEXTENDO_AGENT	diagnostic	0 skips NX Port Studio's Nextendo agent: a Mac port reads the saved account and renews it by itself, as before the agent (docs/nextendo-agent.md)
+DM_NEXTENDO_AGENT	diagnostic	0 skips NX Port Studio's Nextendo agent: a Mac port reads the saved account, renews it and sends its friends and presence requests by itself, as before the agent (docs/nextendo-agent.md)
 DM_NEXTENDO_BCAT_DIR	path	Private title/version calendar recipe and validated seed snapshot; runtime checks for public HTTPS updates when online services are enabled
 DM_NEXTENDO_CLIENT_ID	switch	Public OAuth application identifier embedded in mobile account setup; never a client secret
 DM_NEXTENDO_PEER_COLLECTION	path	Optional iOS build-time directory of already-approved title/host peer certificates; defaults to Studio's local collection

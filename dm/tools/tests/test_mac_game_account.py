@@ -52,6 +52,11 @@ private var answer: Int32 = 0, prepares: Int32 = 0
     let record = Array("AGENT".utf8); guard let buffer, let size, capacity >= record.count else { return false }
     buffer.update(from: record, count: record.count); size.pointee = record.count; return true
 }
+@_cdecl("dm_mac_agent_api") public func dmMacAgentAPI(_ resource: UnsafePointer<CChar>?, _ body: UnsafePointer<UInt8>?, _ bodySize: Int,
+        _ output: UnsafeMutablePointer<UInt8>?, _ capacity: Int, _ size: UnsafeMutablePointer<Int>?, _ status: UnsafeMutablePointer<UInt32>?) -> Bool {
+    let reply = Array("{}".utf8); guard let resource, String(cString: resource) == "friends", let output, let size, let status, capacity >= 2 else { return false }
+    output.update(from: reply, count: 2); size.pointee = 2; status.pointee = 200; return true
+}
 '''
 DRIVER = r'''
 #include <CoreFoundation/CoreFoundation.h>
@@ -64,6 +69,8 @@ static dm_nextendo_credential_provider installed;
 static unsigned invalidations;
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) { installed = provider; }
 void dm_nextendo_account_invalidate_social(void) { invalidations++; }
+static dm_nextendo_api_provider api;
+void dm_nextendo_set_api_provider(dm_nextendo_api_provider provider) { api = provider; }
 static _Atomic unsigned started, finished;
 static void *worker(void *unused) {
     (void)unused; started=1; dm_mac_bundle_prepare_account(); finished=1; return NULL;
@@ -105,7 +112,7 @@ int main(int argc,char **argv) {
     // Accidental calls on main must not block its run loop or access storage.
     void (*prepare)(void)=dlsym(bootstrap_image,"dm_mac_prepare_game_account"); CHECK(prepare!=NULL);
     if(prepare){expected=calls();prepare();CHECK(calls()==expected);}
-    CHECK(installed==NULL); // A bootstrap without the agent client keeps the port's own path.
+    CHECK(installed==NULL && api==NULL); // A bootstrap without the agent client keeps the port's own path.
     if(argc==3) { // docs/nextendo-agent.md: an answering agent owns the account for this port.
         bootstrap_image=dlopen(argv[2],RTLD_NOW|RTLD_LOCAL); CHECK(bootstrap_image!=NULL); if(!bootstrap_image)return 2;
         calls=dlsym(bootstrap_image,"fixture_calls"); heartbeats=dlsym(bootstrap_image,"fixture_heartbeats"); release=dlsym(bootstrap_image,"fixture_release");
@@ -116,12 +123,15 @@ int main(int argc,char **argv) {
         CHECK((unsigned)calls()==before && prepares()==1 && invalidations==1 && installed!=NULL); // No renewal here, no storage read.
         uint8_t record[16]; size_t size=0; CHECK(installed && installed(record,sizeof record,&size) && size==5 && !memcmp(record,"AGENT",5));
         CHECK(installed && !installed(record,4,&size)); // A short buffer fails, never truncates.
+        unsigned status=0; // The account API goes through the agent too: its record has no OAuth grant.
+        CHECK(api && api("friends",NULL,0,record,sizeof record,&size,&status) && size==2 && status==200 && !api("me",NULL,0,record,sizeof record,&size,&status));
+        api=NULL;
         mode=DM_NET_OFFLINE; installed=NULL; run_skipped(); CHECK(prepares()==1 && installed==NULL); // Local modes never ask the agent.
         for(unsigned i=0;i<2;i++) { // 0: the agent does not answer; 1: DM_NEXTENDO_AGENT=0 skips it.
             mode=DM_NET_NEXTENDO; answer(i==0 ? 0 : 1); if(i==1) setenv("DM_NEXTENDO_AGENT","0",1);
             int asked=prepares(); installed=NULL; started=finished=0; expected=calls()+1;
             CHECK(!pthread_create(&thread,NULL,worker,NULL)); CHECK(until(called)); release(0); CHECK(until(done)); CHECK(!pthread_join(thread,NULL));
-            CHECK(installed==NULL && prepares()==asked+(i==0)); unsetenv("DM_NEXTENDO_AGENT");
+            CHECK(installed==NULL && api==NULL && prepares()==asked+(i==0)); unsetenv("DM_NEXTENDO_AGENT");
         }
     }
     printf("Mac account bridge: %u checks, %u failures; synthetic async service only\n",checks,failures);

@@ -115,25 +115,45 @@ final class NextendoAgentPeers: @unchecked Sendable {
 
 // MARK: Account
 
-/// Owns renewal for every port that connects. Studio still signs in and out
-/// itself and reports each change, which bumps the generation pushed to ports.
+/// Delivers generation changes to the server, which pushes them to every port.
+final class NextendoAgentNotifier: @unchecked Sendable {
+    private let lock = NSLock(); private var handler: (@Sendable (UInt64) -> Void)?
+    func set(_ handler: @escaping @Sendable (UInt64) -> Void) { lock.withLock { self.handler = handler } }
+    func send(_ generation: UInt64) { lock.withLock { handler }?(generation) }
+}
+
+/// Owns renewal and the account API for every port that connects. Studio still
+/// signs in and out itself and reports each change. Every change of the stored
+/// record (Studio's, or a renewal here) bumps the generation pushed to ports.
 public actor NextendoAgentAccount {
+    public typealias Reply = (status: NextendoAgentStatus, http: Int, body: Data?)
     private let service: NextendoAccountService
     private let store: any NextendoCredentialStore
+    private let http: any NextendoHTTPClient
     private let now: @Sendable () -> Date
+    nonisolated let notifier = NextendoAgentNotifier()
     public private(set) var generation: UInt64 = 1
+    /// One friends snapshot for every port, at most this old.
+    static let friendsAge: TimeInterval = 15
+    private var friends: (body: Data, at: Date, generation: UInt64)?
+    private var friendsFetch: Task<Reply, Never>?
+    private var me: (body: Data, generation: UInt64)?
+    /// The provider keeps one presence per account. Each port's latest body, and when
+    /// it last changed: the most recent change is what Nextendo shows.
+    private var presence: [UInt64: (body: Data, declared: UInt64)] = [:]
+    private var declarations: UInt64 = 0
+
     public init(store: any NextendoCredentialStore = NextendoKeychainStore(), http: any NextendoHTTPClient = NextendoURLSessionClient(),
                 now: @escaping @Sendable () -> Date = { Date() }) {
-        self.store = store; self.now = now
+        self.store = store; self.http = http; self.now = now
         service = NextendoAccountService(store: store, http: http, now: now)
     }
+
     public func credential(renew: Bool) async -> (status: NextendoAgentStatus, record: Data?, generation: UInt64) {
         if renew {
             // Same policy as a port's own boot (dm/mac/GameAccount.swift): a failed
             // renewal keeps the stored record, which the host validates again.
-            do { _ = try await service.prepareGameAccount(forceGameRefresh: true) }
-            catch is CancellationError { return (.failed, nil, generation) }
-            catch { agentLog.error("game account preparation failed; the stored account is used") }
+            guard await prepare(force: true) else { return (.failed, nil, generation) }
         }
         let session: NextendoSession?
         do { session = try store.load() } catch { return (.unavailable, nil, generation) }
@@ -142,7 +162,100 @@ public actor NextendoAgentAccount {
               let record = try? session.encodedForPort(), record.count <= NextendoAgent.credentialLimit else { return (.unavailable, nil, generation) }
         return (.ok, record, generation)
     }
-    public func accountDidChange() -> UInt64 { generation &+= 1; return generation }
+
+    /// Studio changed the stored account: the old account's caches and presence go.
+    public func accountDidChange() -> UInt64 { changed(account: true); return generation }
+
+    private func changed(account: Bool) {
+        generation &+= 1; friends = nil; me = nil
+        if account { presence = [:] }
+        notifier.send(generation)
+    }
+
+    /// Runs the shared preparation; false only when cancelled. A record it replaced
+    /// reaches the ports, so a long session never outlives its NEX proof.
+    private func prepare(force: Bool) async -> Bool {
+        let before = try? store.load()?.token
+        do { _ = try await service.prepareGameAccount(forceGameRefresh: force) }
+        catch is CancellationError { return false }
+        catch { agentLog.error("game account preparation failed; the stored account is used") }
+        if (try? store.load()?.token) != before { changed(account: false) }
+        return true
+    }
+
+    // MARK: Account API
+
+    public func social(_ resource: String, body: Data?, port: UInt64) async -> Reply {
+        let body = body?.isEmpty == true ? nil : body
+        switch resource {
+        case "friends" where body == nil: return await friendsSnapshot()
+        case "me" where body == nil:
+            if let me, me.generation == generation { return (.ok, 200, me.body) }
+            let started = generation, reply = await send("me", body: nil)
+            if reply.status == .ok, let data = reply.body, started == generation { me = (data, started) }
+            return reply
+        case "presence":
+            guard let body, body.count <= NextendoAgent.presenceLimit,
+                  (try? JSONSerialization.jsonObject(with: body)) is [String: Any] else { return (.refused, 0, nil) }
+            if presence[port]?.body != body { declarations &+= 1; presence[port] = (body, declarations) }
+            // A port's unchanged refresh keeps the newest declaration alive instead of replacing it.
+            return await send("presence", body: current() ?? body)
+        default: return (.refused, 0, nil)
+        }
+    }
+
+    /// A port quit: if it held the shown presence, the next newest port's takes over.
+    public func portDisconnected(_ port: UInt64) async {
+        guard let gone = presence.removeValue(forKey: port), let next = presence.values.max(by: { $0.declared < $1.declared }),
+              next.declared < gone.declared else { return }
+        _ = await send("presence", body: next.body)
+    }
+
+    private func current() -> Data? { presence.values.max(by: { $0.declared < $1.declared })?.body }
+
+    private func friendsSnapshot() async -> Reply {
+        if let friends, friends.generation == generation, now().timeIntervalSince(friends.at) < Self.friendsAge { return (.ok, 200, friends.body) }
+        if let friendsFetch { return await friendsFetch.value }
+        let started = generation
+        let task = Task { await self.send("friends", body: nil) }
+        friendsFetch = task
+        let reply = await task.value
+        friendsFetch = nil
+        if reply.status == .ok, let data = reply.body, started == generation { friends = (data, now(), started) }
+        return reply
+    }
+
+    /// The OAuth access for a scope, renewed first when it is about to expire.
+    private func access(_ scope: String) async -> (status: NextendoAgentStatus, token: String?) {
+        for attempt in 0..<2 {
+            let session: NextendoSession?
+            do { session = try store.load() } catch { return (.unavailable, nil) }
+            guard let session else { return (.signedOut, nil) }
+            guard session.tokenKind == .nex, !session.summary(at: now()).isExpired,
+                  let grant = session.renewal, grant.scopes.contains(scope) else { return (.unavailable, nil) }
+            if grant.expiresAt > now().addingTimeInterval(60) { return (.ok, grant.accessToken) }
+            if attempt == 0 { guard await prepare(force: false) else { return (.failed, nil) } }
+        }
+        return (.unavailable, nil)
+    }
+
+    private func send(_ resource: String, body: Data?) async -> Reply {
+        guard let scope = NextendoAgent.socialScopes[resource] else { return (.refused, 0, nil) }
+        let authorization = await access(scope)
+        guard let token = authorization.token else { return (authorization.status, 0, nil) }
+        // Each friend otherwise carries its base64 profile image; no port reads one.
+        let path = resource == "friends" ? "friends?images=0" : resource
+        var request = URLRequest(url: URL(string: "https://nextendo.network/api/" + path)!)
+        request.httpMethod = body == nil ? "GET" : "POST"; request.timeoutInterval = 12
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("NX-Port-Studio", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body { request.httpBody = body; request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        let response: NextendoHTTPResponse
+        do { response = try await http.send(request) } catch { return (.failed, 0, nil) }
+        guard response.data.count <= NextendoAgent.responseLimit else { return (.failed, response.statusCode, nil) }
+        return (.ok, response.statusCode, (200..<300).contains(response.statusCode) ? response.data : nil)
+    }
 }
 
 // MARK: XPC
@@ -153,7 +266,8 @@ public final class NextendoAgentServer: NSObject, NSXPCListenerDelegate, @unchec
     let peers: NextendoAgentPeers
     private let adminRequirement: String?
     private let lock = NSLock()
-    private var ports: [ObjectIdentifier: NSXPCConnection] = [:]
+    private var ports: [UInt64: NSXPCConnection] = [:]
+    private var nextPort: UInt64 = 0
 
     /// `adminRequirement` nil refuses every administrator; a port is accepted only
     /// when its code matches a registered cdhash.
@@ -163,6 +277,7 @@ public final class NextendoAgentServer: NSObject, NSXPCListenerDelegate, @unchec
         peers = NextendoAgentPeers(store: peerStore); self.adminRequirement = adminRequirement
         super.init()
         portListener.delegate = self; adminListener.delegate = self
+        account.notifier.set { [weak self] in self?.push($0) }
     }
 
     /// The launchd agent inside NX Port Studio.app: its administrator is exactly that app.
@@ -190,11 +305,15 @@ public final class NextendoAgentServer: NSObject, NSXPCListenerDelegate, @unchec
         guard listener === portListener else { return false }
         guard let requirement = peers.requirement else { agentLog.notice("port refused: no registered ports"); return false }
         connection.setCodeSigningRequirement(requirement)
+        let key: UInt64 = lock.withLock { nextPort &+= 1; return nextPort }
         connection.exportedInterface = NextendoAgentInterfaces.port()
-        connection.exportedObject = NextendoAgentPortSession(server: self)
+        connection.exportedObject = NextendoAgentPortSession(server: self, port: key)
         connection.remoteObjectInterface = NextendoAgentInterfaces.listener()
-        let key = ObjectIdentifier(connection)
-        connection.invalidationHandler = { [weak self] in self?.lock.withLock { _ = self?.ports.removeValue(forKey: key) } }
+        let account = self.account
+        connection.invalidationHandler = { [weak self] in
+            self?.lock.withLock { _ = self?.ports.removeValue(forKey: key) }
+            Task { await account.portDisconnected(key) }
+        }
         lock.withLock { ports[key] = connection }
         connection.resume(); return true
     }
@@ -209,7 +328,8 @@ public final class NextendoAgentServer: NSObject, NSXPCListenerDelegate, @unchec
 
 final class NextendoAgentPortSession: NSObject, NextendoAgentPortService, @unchecked Sendable {
     private weak var server: NextendoAgentServer?
-    init(server: NextendoAgentServer) { self.server = server }
+    private let port: UInt64
+    init(server: NextendoAgentServer, port: UInt64) { self.server = server; self.port = port }
     func hello(_ version: Int, titleID: String, gameVersion: String, reply: @escaping @Sendable (Int, Int) -> Void) {
         let status: NextendoAgentStatus = version == NextendoAgent.protocolVersion ? .ok : .versionMismatch
         reply(status.rawValue, NextendoAgent.protocolVersion)
@@ -217,6 +337,11 @@ final class NextendoAgentPortSession: NSObject, NextendoAgentPortService, @unche
     func gameCredential(renew: Bool, reply: @escaping @Sendable (Int, Data?, UInt64) -> Void) {
         guard let account = server?.account else { reply(NextendoAgentStatus.unavailable.rawValue, nil, 0); return }
         Task { let result = await account.credential(renew: renew); reply(result.status.rawValue, result.record, result.generation) }
+    }
+    func social(_ resource: String, body: Data?, reply: @escaping @Sendable (Int, Int, Data?) -> Void) {
+        guard let account = server?.account else { reply(NextendoAgentStatus.unavailable.rawValue, 0, nil); return }
+        let port = self.port
+        Task { let result = await account.social(resource, body: body, port: port); reply(result.status.rawValue, result.http, result.body) }
     }
 }
 
@@ -230,7 +355,7 @@ final class NextendoAgentAdminSession: NSObject, NextendoAgentAdminService, @unc
     }
     func accountDidChange(reply: @escaping @Sendable (UInt64) -> Void) {
         guard let server else { reply(0); return }
-        Task { let generation = await server.account.accountDidChange(); server.push(generation); reply(generation) }
+        Task { reply(await server.account.accountDidChange()) }   // the notifier pushes it
     }
     func status(reply: @escaping @Sendable (Int, Int, Int) -> Void) {
         guard let server else { reply(NextendoAgent.protocolVersion, 0, 0); return }

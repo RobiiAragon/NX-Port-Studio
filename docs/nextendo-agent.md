@@ -1,6 +1,6 @@
 # Nextendo agent for Mac
 
-**Status: phase 1 (credential broker) is implemented and unit-tested; I have not run it with a game yet.** I gave every Mac port one shared Nextendo session through a small XPC agent shipped inside NX Port Studio. iOS is out of scope: each iPhone app keeps its own integration ([mobile setup](reference/services.md#mobile-nextendo-setup-without-a-desktop-handoff)), because iOS has no resident helper process and no channel between separately signed apps. The mechanism and its checks are recorded in [the services reference](reference/services.md#every-mac-port-asks-for-keychain-access-and-renews-the-account-by-itself).
+**Status: phases 1 (credential broker) and 2 (shared social for ports) are implemented and unit-tested; I have not run them with a game yet.** I gave every Mac port one shared Nextendo session through a small XPC agent shipped inside NX Port Studio. iOS is out of scope: each iPhone app keeps its own integration ([mobile setup](reference/services.md#mobile-nextendo-setup-without-a-desktop-handoff)), because iOS has no resident helper process and no channel between separately signed apps. The mechanism and its checks are recorded in [the services reference](reference/services.md#every-mac-port-asks-for-keychain-access-and-renews-the-account-by-itself).
 
 ## Why
 
@@ -19,7 +19,7 @@ Goals:
 1. One owner of renewal for every Mac port: the agent. *(phase 1, done)*
 2. Ports receive only what the host needs to sign in (the NEX record), never the refresh token. *(phase 1, done)*
 3. Sign-out and account changes reach running ports at once. *(phase 1, done)*
-4. One friends/presence snapshot shared by Studio and every port. *(phase 2)*
+4. One friends snapshot and one presence shared by every port; ports hold no OAuth bearer. *(phase 2, done; Studio reads it in phase 3)*
 5. Studio can show friends online and post notifications when no game is running. *(phase 3)*
 
 Non-goals:
@@ -60,15 +60,16 @@ The agent hands out a game credential, so every connection is checked by code si
 
 ## Protocol
 
-`PortCore/NextendoAgent.swift`, compiled into Studio, the agent and every Mac port. No reply carries a refresh token or an HTTP body.
+`PortCore/NextendoAgent.swift`, compiled into Studio, the agent and every Mac port. No reply carries a refresh token or an access token. `protocolVersion` is 2, and the agent accepts only its own version. A port built for version 1 therefore keeps its own path, where its record still has the OAuth grant.
 
 | Call | Side | What it does |
 |---|---|---|
-| `hello(version, titleID, gameVersion)` | port | Protocol check (`protocolVersion` 1). |
+| `hello(version, titleID, gameVersion)` | port | Protocol check (`protocolVersion` 2). |
 | `gameCredential(renew:)` | port | With `renew`, runs the same coalesced `prepareGameAccount(forceGameRefresh: true)` a port ran at boot; a failed renewal keeps the stored record. Replies with status, the schema-1 record **without** its `renewal` object (`encodedForPort`, at most 64 KiB) and the account generation. |
+| `social(resource, body)` | port | One `me`, `friends` or `presence` request, which the agent sends with its own OAuth grant (scopes `identity`, `friends`, `presence`). Replies with status, HTTP status and the body on 2xx (at most 1 MiB). See [Shared social](#shared-social). |
 | `accountChanged(generation)` | port, exported | The agent pushes this after Studio reports a change. The port fetches the record again without renewing. |
 | `registerPeer(cdhash)` | Studio | Adds a port's code to the allowlist. |
-| `accountDidChange()` | Studio | Bumps the generation and pushes it to the connected ports. Studio sends it after sign-in, a new game credential and sign-out. |
+| `accountDidChange()` | Studio | Bumps the generation, drops the old account's snapshots and presence, and pushes the generation to the connected ports. Studio sends it after sign-in, a new game credential and sign-out. The agent bumps the generation too, keeping the presence, when its own renewal replaces the stored record. |
 | `status()` | Studio | Protocol version, registered ports, connected ports. |
 
 Statuses: `ok`, `signedOut`, `unavailable`, `versionMismatch`, `refused`, `failed`.
@@ -80,7 +81,24 @@ Statuses: `ok`, `signedOut`, `unavailable`, `versionMismatch`, `refused`, `faile
 - **Signed out.** `signedOut` means Studio signed out, so the port does not fall back to the Keychain: it stays signed out like the rest.
 - **No answer.** If the agent does not answer, refuses the port or reports a version mismatch, the port prints one `[RED] launcher:` line and runs its own path unchanged.
 - **`DM_NEXTENDO_AGENT=0`** skips the agent.
+- **Account API.** With the record, the host also installs `dm_nextendo_set_api_provider` (`dm_mac_agent_api`). The record has no OAuth grant, so in that mode `api_request` sends no bearer. It checks the same resource and body rules, then hands `me`, `friends` and `presence` to the agent. The guest thread is marked as waiting while the agent answers (at most 15 s).
+  - `dm_nextendo_api_identity` binds the API caches to the NEX record instead of the grant.
+  - Passive presence may read the memory provider when it has no snapshot yet, so a port can publish "playing" at boot.
+  - Without the agent, all of this is unchanged.
 - The provider copies the cached record; it never reads storage. On `accountChanged`, the client replaces the record and calls `dm_nextendo_account_invalidate_social()`, so passive presence stops using the old account. The host's `decode_credential` validates the record exactly as it validates the Keychain copy (`renewal` was already optional).
+
+## Shared social
+
+The agent is one Nextendo client for the account, so it arbitrates what the ports would otherwise do separately (`NextendoAgentAccount.social`):
+
+- **Friends.** One snapshot for every port, at most 15 s old. Concurrent requests share one fetch, and a failed answer is not cached. Each port keeps its own 30 s cache in the host on top of that (`hle_nextendo_social_apple.m`).
+- **Me.** Its answer is kept for the account's generation.
+- **Presence.** Nextendo keeps one presence per account, so two open games used to overwrite each other every 45 s. The agent remembers each port's latest body and when it last changed.
+  - What it sends is the most recently changed one.
+  - A port's unchanged 45 s refresh keeps that presence alive instead of replacing it.
+  - When the port whose presence is shown quits, the next newest is sent at once.
+  - Without a port, nothing is sent and the provider expires the presence after 90 s, as it did when a game quit.
+- **Renewal.** Before a request, if the access token expires within 60 s, the agent runs the shared, non-forced preparation. If that replaces the stored record, the agent pushes the new generation, so a long session never outlives its NEX proof.
 
 ## What the mirror told me
 
@@ -92,8 +110,15 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
 
 ## Phases
 
-1. **Credential broker.** *Done in code.* Remaining acceptance: a packaged Studio with the switch on, a registered port that gets its credential with no Keychain dialog, a sign-out in Studio that reaches the open port, and a port without the agent behaving as before.
-2. **Shared social.** `friends` and presence through the agent, with one snapshot and one refresher for every port; `hle_nextendo_api_apple.m` gets an agent transport so ports no longer need an OAuth bearer.
+1. **Credential broker.** *Done in code.* Remaining acceptance:
+   - a packaged Studio with the switch on;
+   - a registered port that gets its credential with no Keychain dialog;
+   - a sign-out in Studio that reaches the open port;
+   - a port without the agent behaving as before.
+2. **Shared social.** *Done in code.* `me`, `friends` and presence go through the agent (`social`), with one friends snapshot and one presence for every port. `hle_nextendo_api_apple.m` has the agent transport, so ports hold no OAuth bearer. Phase 1 alone would have left an agent-served port without friends or presence, because its record has no grant. Remaining acceptance:
+   - a friend list in a game served by the agent;
+   - my presence seen by a friend;
+   - two games open at once showing the newer one.
 3. **Hub.** Friends online in Studio (and an optional `MenuBarExtra`), notifications by polling at a rate Nextendo accepts, and revocation through `/api/session-status`.
 
 ## Checks
@@ -105,12 +130,18 @@ These need no game:
   - the requirement builder and the bounded allowlist;
   - account status from the store, including a failed renewal that keeps the stored record;
   - real XPC over anonymous listeners with the real code-signing check against the test process's own cdhash: a registered port gets its record and the pushed generation, while an unregistered port, a foreign administrator and an empty allowlist are refused;
-  - an admin call that times out.
+  - an admin call that times out;
+  - social: one shared friends snapshot with the agent's bearer and `images=0`, refused resources and bodies, account states and HTTP failures, presence selection across ports, caches cleared on an account change, and an expiring grant renewed once before the request, with the new record pushed.
 - `python3 -m unittest dm/tools/tests/test_mac_game_account.py` runs the actual `bundle_mac.c` with fixture bootstraps:
   - an answering agent installs the provider, skips renewal and wires invalidation;
   - a short buffer fails;
   - local modes never ask the agent;
   - a silent agent and `DM_NEXTENDO_AGENT=0` both fall back to the port's own renewal.
+- `make -C dm/host/tests nextendo-api nextendo-social` (and their `-sanitize` variants):
+  - the transport mode sends no bearer and makes no HTTP request from the port;
+  - a NEX-only record authorizes no API without the transport, and does with it;
+  - passive presence starts from the memory provider;
+  - invalidation, sign-out and offline mode stop it.
 - `dm/tools/tests/test_nsp_mac_app.py` packs the new sources into the bootstrap.
 
 These still need a game, and I have no test dumps right now: a real NEX sign-in with the agent's record, a friend seeing my presence, and an online match.

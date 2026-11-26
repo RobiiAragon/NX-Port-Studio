@@ -41,6 +41,7 @@ dm_net_mode_t dm_net_mode(void) { return DM_NET_OFFLINE; }
 #include "nextendo_account.h"   // bundle_mac.c installs the agent's provider (docs/nextendo-agent.md)
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) { (void)provider; }
 void dm_nextendo_account_invalidate_social(void) {}
+void dm_nextendo_set_api_provider(dm_nextendo_api_provider provider) { (void)provider; }
 static void term(int s) { (void)s; _exit(3); }
 int main(int argc, char **argv) {
     int bootstrap = dm_mac_bundle_prepare(&argc, &argv); if (bootstrap >= 0) return bootstrap;

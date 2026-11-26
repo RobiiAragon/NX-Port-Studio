@@ -19,6 +19,7 @@ NSString *dm_nextendo_api_bearer(const char *resource){(void)resource;credential
 NSData *dm_nextendo_api_identity(const char *resource){(void)resource;credential_reads++;return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
 NSString *dm_nextendo_api_passive_bearer(uint64_t *value){if(value)*value=linked?generation:0;return linked?@"synthetic-social-proof":nil;}
 bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t value){return linked&&value==generation&&[proof isEqual:@"synthetic-social-proof"];}
+dm_nextendo_api_provider dm_nextendo_api_transport_provider(void){return NULL;}
 void dm_guest_host_wait_begin(void){} void dm_guest_host_wait_end(void){}
 dm_net_mode_t dm_net_mode(void){return mode;}
 int dm_account_uid_exists(const void *value){return local_present&&value&&!memcmp(value,uid,16);}

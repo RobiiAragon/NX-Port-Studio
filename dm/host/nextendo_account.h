@@ -9,6 +9,14 @@ enum { DM_ACCOUNT_OK = 0, DM_ACCOUNT_FAIL = 0x2a2 };
 // into the bounded caller buffer. No token is accepted through the environment.
 typedef bool (*dm_nextendo_credential_provider)(uint8_t *buffer, size_t capacity, size_t *size);
 void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider);
+// Embedding host's account API transport (the Mac Nextendo agent, docs/nextendo-agent.md):
+// one canonical me/friends/presence request made with the embedder's own authorization,
+// so this process holds no OAuth grant. *status is the HTTP status; false means nothing
+// reached the provider. Install it with a memory-only credential provider (never a
+// storage read): passive presence then reads that provider, as an explicit read would.
+typedef bool (*dm_nextendo_api_provider)(const char *resource, const uint8_t *body, size_t body_size,
+    uint8_t *output, size_t capacity, size_t *size, unsigned *status);
+void dm_nextendo_set_api_provider(dm_nextendo_api_provider provider);
 // A host that signs out/replaces stored credentials in this process must invalidate
 // passive social authorization. This does not read storage or revoke a server token.
 void dm_nextendo_account_invalidate_social(void);
