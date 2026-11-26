@@ -100,6 +100,7 @@ General host changes first needed here; each applies to every game:
 - **The indexed archive reader** (`smash_arc.py`, `smash_arc_jobs`): [01, Compressed RomFS content](../../../docs/agents/01-extract.md#compressed-romfs-content).
 - **Function-matched patches of several functions, and the pack-time report of what an unregistered build kept** (`nso_match.py` `match_patch`, `<module>.match.tsv`, `report_fix_coverage`): [Function-matched cuts for unregistered builds](../../../docs/reference/rewriter.md#function-matched-cuts-for-unregistered-builds).
 - **The address region table and the NSP script's region check** (`patch_nso.py` "Address regions", `hle_svc.c`, `DM_REGIONS`): its engine region, 4 GB through `nn::os::AllocateAddressRegion`, returning to `main+0x37c9a64` (its constructor's call), opened up to 14 MB below its end: [Measuring address regions and commits](../../../docs/reference/memory.md#measuring-address-regions-and-commits).
+- **Resolved: empty Nextendo friend list (2026-11-22):** [Older SDK constructors load the object size with ORR](../../../docs/reference/services.md#older-sdk-constructors-load-the-object-size-with-orr): I found that the 13.0.5 SDK loads the `Friend` constructor size with `ORR`, which the host's layout check rejected, so every full friend-list query failed; its `UserPresence` constructor already passed. The check now accepts both encodings. I have not yet checked the in-game friend list.
 
 ## Open
 

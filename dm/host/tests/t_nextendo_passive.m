@@ -53,7 +53,7 @@ static bool transport(const char *url,const char *method,const char *authorizati
     uint8_t *output,size_t capacity,size_t *size,unsigned *status) {
     httpRequests++;
     bool presence=!strcmp(url,"https://nextendo.network/api/presence");
-    CHECK(presence||!strcmp(url,"https://nextendo.network/api/friends")||!strcmp(url,"https://nextendo.network/api/me"));
+    CHECK(presence||!strcmp(url,"https://nextendo.network/api/friends?images=0")||!strcmp(url,"https://nextendo.network/api/me"));
     CHECK(authorization&&!strcmp(authorization,"Bearer synthetic-own-oauth-access"));
     CHECK(presence?(!strcmp(method,"POST")&&body&&bodySize):(!strcmp(method,"GET")&&!bodySize));
     if(invalidateDuringRequest)dm_nextendo_account_invalidate_social();

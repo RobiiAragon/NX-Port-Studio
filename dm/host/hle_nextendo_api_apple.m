@@ -109,6 +109,10 @@ static uint32_t api_request(const char *resource, const uint8_t *body, size_t bo
     NSString *authorization = [@"Bearer " stringByAppendingString:proof];
     NSString *resourceName = [NSString stringWithUTF8String:resource]; if (!resourceName) return DM_ACCOUNT_FAIL;
     NSString *url = [@"https://nextendo.network/api/" stringByAppendingString:resourceName];
+    // Each friend record otherwise carries its base64 profile image (a profile is
+    // up to 1 MiB), so a few pictures exceed API_MAX and fail the whole list.
+    // The host reads no image; images=0 is the provider's documented omission.
+    if (operation == DM_ACCOUNT_API_FRIENDS) url = [url stringByAppendingString:@"?images=0"];
     NSString *method = presence ? @"POST" : @"GET";
 #ifdef DM_NEXTENDO_API_TEST
     if (test_transport) {

@@ -25,7 +25,7 @@ void dm_guest_host_wait_end(void) {}
 static bool transport(const char *url,const char *method,const char *authorization,const uint8_t *body,size_t body_size,
                       uint8_t *output,size_t capacity,size_t *size,unsigned *status) {
     requests++; CHECK(!strcmp(authorization,"Bearer synthetic-proof"));
-    CHECK(!strcmp(url,"https://nextendo.network/api/friends") || !strcmp(url,"https://nextendo.network/api/me") || !strcmp(url,"https://nextendo.network/api/presence"));
+    CHECK(!strcmp(url,"https://nextendo.network/api/friends?images=0") || !strcmp(url,"https://nextendo.network/api/me") || !strcmp(url,"https://nextendo.network/api/presence"));
     if (strstr(url,"presence")) { CHECK(!strcmp(method,"POST") && body && body_size); }
     else { CHECK(!strcmp(method,"GET") && !body_size); }
     const char json[]="{\"friends\":[]}"; CHECK(capacity >= sizeof json);

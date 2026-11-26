@@ -80,6 +80,7 @@ General host and tool changes first needed here; each applies to every game:
 - **H.264 movies through VideoToolbox** (the `avcc` record, a presentation-order queue): described under [Movies](#movies); `hle_movie.c`.
 - **Small host segments for small grants** (`hostseg_size`): [Host-lent command memory segments](../../../docs/reference/nvn-objects.md#host-lent-command-memory-segments).
 - **Same-pass feedback snapshots without a per-game list** (a draw that writes the attachment it samples; one snapshot until the game's next barrier): [Same-pass feedback read through a snapshot](../../../docs/reference/rendering.md#same-pass-feedback-read-through-a-snapshot).
+- **Resolved: empty Nextendo friend list (2026-11-22):** [Older SDK constructors load the object size with ORR](../../../docs/reference/services.md#older-sdk-constructors-load-the-object-size-with-orr): I found that the 1.4.1 SDK loads the `Friend` constructor size with `ORR`, which the host's layout check rejected, so every full friend-list query failed. The check now accepts both encodings. I have not checked an in-game friend feature.
 
 ## Open
 

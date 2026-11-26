@@ -13,10 +13,33 @@ static bool getter(const char *name,uint32_t instruction) {
     const uint32_t *code=guest_sym(name); uint32_t words[2]; if (!code) return false;
     memcpy(words,code,sizeof words); return words[0]==instruction && words[1]==0xd65f03c0u;
 }
+// A 32-bit AArch64 bitmask immediate (N:immr:imms), as DecodeBitMasks defines it.
+static bool bitmask32(uint32_t n,uint32_t immr,uint32_t imms,uint32_t *value) {
+    uint32_t inverted=~imms&0x3fu; if (n || !inverted) return false;
+    unsigned length=31u-(unsigned)__builtin_clz(inverted); if (!length) return false;
+    unsigned size=1u<<length,levels=size-1,ones=(imms&levels)+1,rotate=immr&levels;
+    if (ones==size) return false;
+    uint32_t mask=size==32?0xffffffffu:(1u<<size)-1,element=(1u<<ones)-1;
+    if (rotate) element=((element>>rotate)|(element<<(size-rotate)))&mask;
+    for (unsigned width=size;width<32;width*=2) element|=element<<width;
+    *value=element; return true;
+}
+// The SDK constructors zero their object with memset(this, 0, size). Compilers
+// load that size into w2 either with MOVZ or, in older SDK builds, with the
+// bitmask-immediate ORR from WZR; both are the same `mov w2, #size`.
+static bool loads_w2(uint32_t instruction,uint32_t size) {
+    uint32_t value=0; if ((instruction&31u)!=2) return false;
+    if (instruction>>23==0xa5u) { // MOVZ w2, #imm16, LSL #(hw*16); hw is 0 or 1 for a W register
+        unsigned hw=instruction>>21&3u; if (hw>1) return false;
+        value=(instruction>>5&0xffffu)<<(hw*16);
+    } else if (instruction>>23!=0x64u || (instruction>>5&31u)!=31 || // ORR w2, wzr, #bitmask
+        !bitmask32(instruction>>22&1u,instruction>>16&63u,instruction>>10&63u,&value)) return false;
+    return value==size;
+}
 static bool friend_layout(void) {
     const uint32_t *code=guest_sym("_ZN2nn7friends6FriendC1Ev"); uint32_t words[3]; if (!code) return false;
     memcpy(words,code,sizeof words);
-    if (words[0]!=0x52804002u && words[1]!=0x52804002u) return false; // constructor memset size 0x200
+    if (!loads_w2(words[0],0x200) && !loads_w2(words[1],0x200)) return false; // constructor memset size 0x200
     return getter("_ZNK2nn7friends6Friend11GetNicknameEv",0x91006000u) &&
         getter("_ZNK2nn7friends6Friend11GetPresenceEv",0x91010000u) &&
         getter("_ZNK2nn7friends6Friend12GetAccountIdEv",0xf9400800u) &&
@@ -26,7 +49,7 @@ static bool friend_layout(void) {
 static bool presence_layout(void) {
     const uint32_t *code=guest_sym("_ZN2nn7friends12UserPresenceC1Ev"); if(!code)return false;
     uint32_t first;memcpy(&first,code,4);
-    if(first==0x52801c02u)return true; // constructor memset size 0xe0
+    if(loads_w2(first,0xe0))return true; // constructor memset size 0xe0
     // New SDKs inline the complete fourteen-pair zero initialization.
     if(first!=0xa90d7c1fu)return false;
     uint32_t words[15];memcpy(words,code,sizeof words);
