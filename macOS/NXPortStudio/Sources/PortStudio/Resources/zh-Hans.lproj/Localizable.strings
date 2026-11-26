@@ -411,3 +411,16 @@
 "A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself." = "一个小型后台代理为你从这里安装的所有 Mac 游戏保持同一个会话。没有它时，每个游戏都会请求钥匙串访问并各自登录。";
 "macOS did not change the background agent. Try again, or check Login Items in System Settings." = "macOS 未更改后台代理。请重试，或在系统设置中检查登录项。";
 "Some installed games could not be registered with the background agent; they sign in by themselves." = "部分已安装的游戏无法注册到后台代理；它们会各自登录。";
+"Friends" = "好友";
+"Notify me when friends come online or send a request" = "好友上线或发送请求时通知我";
+"Friend requests" = "好友请求";
+"Decline" = "拒绝";
+"Accept" = "接受";
+"Online now" = "当前在线";
+"No friends online." = "没有在线的好友。";
+"Playing %@" = "正在玩 %@";
+"In a game" = "游戏中";
+"Online" = "在线";
+"The background agent could not read your friends. Try again later." = "后台代理无法读取你的好友。请稍后再试。";
+"Nextendo did not accept the answer to this friend request." = "Nextendo 未接受对此好友请求的回复。";
+"macOS did not allow notifications. Allow them for NX Port Studio in System Settings, Notifications." = "macOS 未允许通知。请在“系统设置”的“通知”中允许 NX Port Studio。";

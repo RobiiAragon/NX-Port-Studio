@@ -82,6 +82,14 @@ final class StudioModel {
     var isRefreshingNextendoCatalog = false
     var nextendoAgentState: NextendoAgentState = .unavailable
     var nextendoAgentMessage: String?
+    /// The agent's friends snapshot for the Nextendo page (docs/nextendo-agent.md, phase 3).
+    var nextendoFriends: NextendoFriendsView?
+    var nextendoFriendsMessage: String?
+    var isLoadingNextendoFriends = false
+    var nextendoFriendAnswers: Set<UInt64> = []
+    var nextendoNotifications = false
+    var nextendoGameNames: [String: String] = [:]
+    var isChangingNextendoNotifications = false
     var isChangingNextendoAgent = false
     @ObservationIgnored let nextendoAgentClient = NextendoAgentAdminClient()
     @ObservationIgnored let nextendoPreferences: UserDefaults

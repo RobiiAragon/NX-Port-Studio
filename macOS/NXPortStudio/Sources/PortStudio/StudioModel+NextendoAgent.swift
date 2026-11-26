@@ -78,6 +78,46 @@ extension StudioModel {
         Task { _ = await client.accountDidChange() }
     }
 
+    // MARK: Hub
+
+    /// Friends and the notification switch come from the agent, which polls for them.
+    func refreshNextendoFriends() async {
+        guard nextendoAgentState == .on, nextendoAccount != nil else { nextendoFriends = nil; return }
+        guard !isLoadingNextendoFriends else { return }
+        isLoadingNextendoFriends = true; defer { isLoadingNextendoFriends = false }
+        if let enabled = await nextendoAgentClient.notifications() { nextendoNotifications = enabled }
+        nextendoGameNames = await Task.detached { NextendoInstalledGames.names() }.value
+        switch await nextendoAgentClient.friends() {
+        case let result? where result.status == .ok:
+            nextendoFriends = result.view; nextendoFriendsMessage = nil
+        case let result? where result.status == .signedOut:
+            nextendoFriends = nil; nextendoFriendsMessage = nil
+        default:
+            nextendoFriendsMessage = t("The background agent could not read your friends. Try again later.")
+        }
+    }
+
+    func answerNextendoFriendRequest(_ friend: NextendoFriend, accept: Bool) async {
+        guard !nextendoFriendAnswers.contains(friend.pid) else { return }
+        nextendoFriendAnswers.insert(friend.pid); defer { nextendoFriendAnswers.remove(friend.pid) }
+        let result = await nextendoAgentClient.answerFriendRequest(friend.pid, accept: accept)
+        if result?.status == .ok, let http = result?.http, (200..<300).contains(http) {
+            await refreshNextendoFriends()
+        } else {
+            nextendoFriendsMessage = t("Nextendo did not accept the answer to this friend request.")
+        }
+    }
+
+    func setNextendoNotifications(_ enabled: Bool) async {
+        guard !isChangingNextendoNotifications else { return }
+        isChangingNextendoNotifications = true; defer { isChangingNextendoNotifications = false }
+        let result = await nextendoAgentClient.setNotifications(enabled)
+        nextendoNotifications = result ?? false
+        if enabled && result != true {
+            nextendoFriendsMessage = t("macOS did not allow notifications. Allow them for NX Port Studio in System Settings, Notifications.")
+        }
+    }
+
     nonisolated static func installedMacPorts(in folders: [URL] = [URL(fileURLWithPath: "/Applications"),
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]) -> [URL] {
         folders.flatMap { folder -> [URL] in

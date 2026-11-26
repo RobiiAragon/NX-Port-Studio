@@ -297,6 +297,12 @@ final class NextendoAgentTests: XCTestCase {
         XCTAssertEqual(listener.generations, [2])
         let status = await client.status()
         XCTAssertEqual(status?.peers, 1); XCTAssertEqual(status?.ports, 1)
+        let friends = await client.friends()
+        XCTAssertEqual(friends?.status, .ok); XCTAssertEqual(friends?.view?.friends.map(\.name), ["SyntheticFriend"])
+        let answer = await client.answerFriendRequest(501, accept: true)
+        XCTAssertEqual(answer?.status, .failed)               // the fixture provider has no such route
+        let notifications = await client.setNotifications(true)
+        XCTAssertEqual(notifications, false)                  // a server without a hub has no notifications
         let registered = await client.registerPeer(app: try XCTUnwrap(Bundle.main.executableURL))
         XCTAssertEqual(registered, .ok)
         XCTAssertEqual(server.peers.count, 1)   // the same cdhash, not a second entry

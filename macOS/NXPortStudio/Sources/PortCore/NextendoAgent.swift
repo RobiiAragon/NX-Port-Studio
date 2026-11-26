@@ -9,6 +9,8 @@ public enum NextendoAgent {
     /// Studio only: the exact app bundle that contains the agent.
     public static let adminService = "org.nxnative.portstudio.agent.admin"
     public static let launchAgentPlist = "org.nxnative.portstudio.agent.plist"
+    /// The agent is a small app inside Studio, so it has a bundle of its own for notifications.
+    public static let bundlePath = "Contents/Library/LoginItems/NX Port Studio Agent.app"
     /// 2 adds `social`. A port built for 1 gets `versionMismatch` and keeps its own
     /// path, which still holds the OAuth grant a version-1 record lacked.
     public static let protocolVersion = 2
@@ -53,6 +55,15 @@ public enum NextendoAgentStatus: Int, Sendable {
     func accountDidChange(reply: @escaping @Sendable (UInt64) -> Void)
     /// Reply: protocol version, registered peers, connected ports.
     func status(reply: @escaping @Sendable (Int, Int, Int) -> Void)
+    /// Reply: status, the account's `GET /api/friends` body (images omitted).
+    func friends(reply: @escaping @Sendable (Int, Data?) -> Void)
+    /// Accepts or declines an incoming request. Reply: status, HTTP status.
+    func answerFriendRequest(_ pid: UInt64, accept: Bool, reply: @escaping @Sendable (Int, Int) -> Void)
+    /// Turns the agent's notifications on or off. Reply: whether they are on now
+    /// (false when macOS refused permission).
+    func setNotifications(_ enabled: Bool, reply: @escaping @Sendable (Bool) -> Void)
+    /// Reply: whether the agent's notifications are on.
+    func notifications(reply: @escaping @Sendable (Bool) -> Void)
 }
 
 public enum NextendoAgentInterfaces {

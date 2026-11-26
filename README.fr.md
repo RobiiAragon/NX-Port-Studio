@@ -31,6 +31,7 @@ L'interface démarre en espagnol. Son sélecteur propose aussi l'anglais, le fra
 - Mappage des contrôles, mouvement et vibrations selon les capacités du système et des manettes.
 - Transport réseau natif, découverte LAN/LDN et intégration expérimentale de Nextendo.
 - Configuration Nextendo depuis l’iPhone/iPad : navigateur du système, Trousseau de l’app et vérification des exigences du jeu et du service.
+- Sur Mac, **Garder Nextendo connecté** lance un petit agent en arrière-plan : une seule session pour tous les jeux Mac installés, sans demande d’accès au Trousseau, un panneau **Amis** et des notifications. Je l’ai testé avec des données synthétiques, pas encore avec un jeu ([conception et limites](docs/nextendo-agent.md)).
 
 J’étends aussi le moteur : sockets Horizon, attentes HLE, vérification TLS, comptes et prise en charge des Joy-Con. La compatibilité dépend du jeu, de sa version et de l'appareil.
 

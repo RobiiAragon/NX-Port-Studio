@@ -211,6 +211,37 @@ public actor NextendoAgentAccount {
         _ = await send("presence", body: next.body)
     }
 
+    // MARK: Hub (Studio and the agent itself)
+
+    /// Accepts or declines an incoming friend request, then drops the shared snapshot.
+    public func answerFriendRequest(_ pid: UInt64, accept: Bool) async -> Reply {
+        guard pid > 0, let body = try? JSONSerialization.data(withJSONObject: ["pid": pid]) else { return (.refused, 0, nil) }
+        let reply = await send(path: accept ? "friends/accept" : "friends/decline", scope: "friends", body: body)
+        if reply.status == .ok, (200..<300).contains(reply.http) { friends = nil }
+        return reply
+    }
+
+    /// `GET /api/session-status` with the game token, as the developer guide documents:
+    /// `revoked` is true when this device's game session was closed on the website.
+    public func sessionRevoked() async -> (status: NextendoAgentStatus, revoked: Bool?) {
+        let session: NextendoSession?
+        do { session = try store.load() } catch { return (.unavailable, nil) }
+        guard let session else { return (.signedOut, nil) }
+        guard session.tokenKind == .nex, !session.summary(at: now()).isExpired else { return (.unavailable, nil) }
+        let reply = await request(path: "session-status", bearer: session.token, body: nil)
+        guard reply.status == .ok else { return (reply.status, nil) }
+        guard (200..<300).contains(reply.http), let body = reply.body,
+              let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let revoked = object["revoked"] as? NSNumber, CFGetTypeID(revoked) == CFBooleanGetTypeID() else { return (.failed, nil) }
+        return (.ok, revoked.boolValue)
+    }
+
+    /// The website closed this Mac's session: sign out here as Studio would, and tell the ports.
+    public func signOutRevoked() async {
+        do { try await service.signOut() } catch { agentLog.error("revoked account could not be removed") }
+        changed(account: true)
+    }
+
     private func current() -> Data? { presence.values.max(by: { $0.declared < $1.declared })?.body }
 
     private func friendsSnapshot() async -> Reply {
@@ -241,10 +272,17 @@ public actor NextendoAgentAccount {
 
     private func send(_ resource: String, body: Data?) async -> Reply {
         guard let scope = NextendoAgent.socialScopes[resource] else { return (.refused, 0, nil) }
+        // Each friend otherwise carries its base64 profile image; no port reads one.
+        return await send(path: resource == "friends" ? "friends?images=0" : resource, scope: scope, body: body)
+    }
+
+    private func send(path: String, scope: String, body: Data?) async -> Reply {
         let authorization = await access(scope)
         guard let token = authorization.token else { return (authorization.status, 0, nil) }
-        // Each friend otherwise carries its base64 profile image; no port reads one.
-        let path = resource == "friends" ? "friends?images=0" : resource
+        return await request(path: path, bearer: token, body: body)
+    }
+
+    private func request(path: String, bearer token: String, body: Data?) async -> Reply {
         var request = URLRequest(url: URL(string: "https://nextendo.network/api/" + path)!)
         request.httpMethod = body == nil ? "GET" : "POST"; request.timeoutInterval = 12
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -264,6 +302,9 @@ public final class NextendoAgentServer: NSObject, NSXPCListenerDelegate, @unchec
     private let portListener: NSXPCListener, adminListener: NSXPCListener
     let account: NextendoAgentAccount
     let peers: NextendoAgentPeers
+    /// nil in a server without notifications (tests that do not exercise the hub).
+    private(set) var hub: NextendoAgentHub?
+    private var hubTask: Task<Void, Never>?
     private let adminRequirement: String?
     private let lock = NSLock()
     private var ports: [UInt64: NSXPCConnection] = [:]
@@ -272,26 +313,46 @@ public final class NextendoAgentServer: NSObject, NSXPCListenerDelegate, @unchec
     /// `adminRequirement` nil refuses every administrator; a port is accepted only
     /// when its code matches a registered cdhash.
     public init(portListener: NSXPCListener, adminListener: NSXPCListener, account: NextendoAgentAccount,
-                peerStore: any NextendoAgentPeerStore, adminRequirement: String?) {
+                peerStore: any NextendoAgentPeerStore, adminRequirement: String?,
+                notifier: (any NextendoHubNotifying)? = nil, settings: any NextendoHubSettings = NextendoHubMemorySettings(),
+                games: @escaping @Sendable () -> [String: String] = { NextendoInstalledGames.names() }) {
         self.portListener = portListener; self.adminListener = adminListener; self.account = account
         peers = NextendoAgentPeers(store: peerStore); self.adminRequirement = adminRequirement
         super.init()
         portListener.delegate = self; adminListener.delegate = self
         account.notifier.set { [weak self] in self?.push($0) }
+        if let notifier {
+            hub = NextendoAgentHub(account: account, notifier: notifier, settings: settings,
+                                   connectedPorts: { [weak self] in self?.connectedPorts ?? 0 }, games: games)
+        }
     }
 
     /// The launchd agent inside NX Port Studio.app: its administrator is exactly that app.
-    public static func launchd() -> NextendoAgentServer {
-        let app = Bundle.main.bundleURL
+    public static func launchd(notifier: any NextendoHubNotifying) -> NextendoAgentServer {
         var requirement: String?
-        if app.pathExtension == "app", let studio = try? NextendoAgentCode.cdhash(of: app) { requirement = NextendoAgentCode.requirement(for: [studio]) }
-        else { agentLog.error("not inside a signed NX Port Studio.app; administration is refused") }
+        if let app = studioBundle(containing: Bundle.main.bundleURL), let studio = try? NextendoAgentCode.cdhash(of: app) {
+            requirement = NextendoAgentCode.requirement(for: [studio])
+        } else { agentLog.error("not inside a signed NX Port Studio.app; administration is refused") }
         return NextendoAgentServer(portListener: NSXPCListener(machServiceName: NextendoAgent.portService),
                                    adminListener: NSXPCListener(machServiceName: NextendoAgent.adminService),
-                                   account: NextendoAgentAccount(), peerStore: NextendoAgentKeychainPeerStore(), adminRequirement: requirement)
+                                   account: NextendoAgentAccount(), peerStore: NextendoAgentKeychainPeerStore(), adminRequirement: requirement,
+                                   notifier: notifier, settings: NextendoHubDefaults())
     }
 
-    public func resume() { portListener.resume(); adminListener.resume() }
+    /// Studio's bundle for an agent app at `NextendoAgent.bundlePath` inside it.
+    static func studioBundle(containing agent: URL) -> URL? {
+        let parts = NextendoAgent.bundlePath.split(separator: "/").count
+        var studio = agent.standardizedFileURL
+        for _ in 0..<parts { studio.deleteLastPathComponent() }
+        guard agent.pathExtension == "app", studio.pathExtension == "app",
+              studio.appendingPathComponent(NextendoAgent.bundlePath).standardizedFileURL.path == agent.standardizedFileURL.path else { return nil }
+        return studio
+    }
+
+    public func resume() {
+        portListener.resume(); adminListener.resume()
+        if let hub, hubTask == nil { hubTask = Task { await hub.run() } }
+    }
     public var connectedPorts: Int { lock.withLock { ports.count } }
 
     public func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
@@ -361,6 +422,26 @@ final class NextendoAgentAdminSession: NSObject, NextendoAgentAdminService, @unc
         guard let server else { reply(NextendoAgent.protocolVersion, 0, 0); return }
         reply(NextendoAgent.protocolVersion, server.peers.count, server.connectedPorts)
     }
+    func friends(reply: @escaping @Sendable (Int, Data?) -> Void) {
+        guard let account = server?.account else { reply(NextendoAgentStatus.unavailable.rawValue, nil); return }
+        Task {
+            let result = await account.social("friends", body: nil, port: 0)
+            let ok = result.status == .ok && (200..<300).contains(result.http)
+            reply((ok ? NextendoAgentStatus.ok : result.status == .ok ? .failed : result.status).rawValue, ok ? result.body : nil)
+        }
+    }
+    func answerFriendRequest(_ pid: UInt64, accept: Bool, reply: @escaping @Sendable (Int, Int) -> Void) {
+        guard let account = server?.account else { reply(NextendoAgentStatus.unavailable.rawValue, 0); return }
+        Task { let result = await account.answerFriendRequest(pid, accept: accept); reply(result.status.rawValue, result.http) }
+    }
+    func setNotifications(_ enabled: Bool, reply: @escaping @Sendable (Bool) -> Void) {
+        guard let hub = server?.hub else { reply(false); return }
+        Task { reply(await hub.setNotifications(enabled)) }
+    }
+    func notifications(reply: @escaping @Sendable (Bool) -> Void) {
+        guard let hub = server?.hub else { reply(false); return }
+        Task { reply(await hub.notificationsEnabled) }
+    }
 }
 
 // MARK: Studio's client
@@ -374,7 +455,7 @@ public struct NextendoAgentAdminClient: Sendable {
         self.init(timeout: timeout) {
             let connection = NSXPCConnection(machServiceName: NextendoAgent.adminService)
             // Talk only to the agent shipped inside this same app.
-            let agent = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/NXPortStudioAgent")
+            let agent = Bundle.main.bundleURL.appendingPathComponent(NextendoAgent.bundlePath)
             if let cdhash = try? NextendoAgentCode.cdhash(of: agent), let requirement = NextendoAgentCode.requirement(for: [cdhash]) {
                 connection.setCodeSigningRequirement(requirement)
             }
@@ -395,8 +476,26 @@ public struct NextendoAgentAdminClient: Sendable {
     public func status() async -> (version: Int, peers: Int, ports: Int)? {
         await call { proxy, done in proxy.status { done(($0, $1, $2)) } }
     }
+    public func friends() async -> (status: NextendoAgentStatus, view: NextendoFriendsView?)? {
+        await call { proxy, done in
+            proxy.friends { status, body in
+                let view = body.flatMap(NextendoFriendsView.decode)
+                done((view == nil && NextendoAgentStatus(wire: status) == .ok ? .failed : NextendoAgentStatus(wire: status), view))
+            }
+        }
+    }
+    public func answerFriendRequest(_ pid: UInt64, accept: Bool) async -> (status: NextendoAgentStatus, http: Int)? {
+        await call { proxy, done in proxy.answerFriendRequest(pid, accept: accept) { done((NextendoAgentStatus(wire: $0), $1)) } }
+    }
+    public func setNotifications(_ enabled: Bool) async -> Bool? {
+        // macOS may show its permission prompt first: allow time for the answer.
+        await call(timeout: .seconds(120)) { proxy, done in proxy.setNotifications(enabled) { done($0) } }
+    }
+    public func notifications() async -> Bool? {
+        await call { proxy, done in proxy.notifications { done($0) } }
+    }
 
-    private func call<T: Sendable>(_ body: @escaping @Sendable (NextendoAgentAdminService, @escaping @Sendable (T) -> Void) -> Void) async -> T? {
+    private func call<T: Sendable>(timeout: Duration? = nil, _ body: @escaping @Sendable (NextendoAgentAdminService, @escaping @Sendable (T) -> Void) -> Void) async -> T? {
         let connection = makeConnection()
         connection.remoteObjectInterface = NextendoAgentInterfaces.admin()
         let once = NextendoAgentOnce<T>()
@@ -408,7 +507,7 @@ public struct NextendoAgentAdminClient: Sendable {
             let proxy = box.connection.remoteObjectProxyWithErrorHandler { _ in once.finish(nil) }
             guard let service = proxy as? NextendoAgentAdminService else { once.finish(nil); return }
             body(service) { once.finish($0) }
-            let deadline = timeout
+            let deadline = timeout ?? self.timeout
             Task { try? await Task.sleep(for: deadline); once.finish(nil) }
         }
     }

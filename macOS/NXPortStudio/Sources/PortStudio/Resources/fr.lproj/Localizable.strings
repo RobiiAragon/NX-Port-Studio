@@ -411,3 +411,16 @@
 "A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself." = "Un petit agent en arrière-plan garde une seule session pour tous les jeux Mac que tu installes d’ici. Sans lui, chaque jeu demande l’accès au trousseau et se connecte seul.";
 "macOS did not change the background agent. Try again, or check Login Items in System Settings." = "macOS n’a pas modifié l’agent en arrière-plan. Réessaie ou vérifie les éléments d’ouverture dans Réglages Système.";
 "Some installed games could not be registered with the background agent; they sign in by themselves." = "Certains jeux installés n’ont pas pu être enregistrés auprès de l’agent en arrière-plan ; ils se connectent seuls.";
+"Friends" = "Amis";
+"Notify me when friends come online or send a request" = "M'avertir quand un ami se connecte ou m'envoie une demande";
+"Friend requests" = "Demandes d'ami";
+"Decline" = "Refuser";
+"Accept" = "Accepter";
+"Online now" = "En ligne maintenant";
+"No friends online." = "Aucun ami en ligne.";
+"Playing %@" = "Joue à %@";
+"In a game" = "Dans un jeu";
+"Online" = "En ligne";
+"The background agent could not read your friends. Try again later." = "L'agent en arrière-plan n'a pas pu lire tes amis. Réessaie plus tard.";
+"Nextendo did not accept the answer to this friend request." = "Nextendo n'a pas accepté la réponse à cette demande d'ami.";
+"macOS did not allow notifications. Allow them for NX Port Studio in System Settings, Notifications." = "macOS n'a pas autorisé les notifications. Autorise-les pour NX Port Studio dans Réglages Système, Notifications.";

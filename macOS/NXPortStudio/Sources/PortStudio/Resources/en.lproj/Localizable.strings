@@ -411,3 +411,16 @@
 "A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself." = "A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself.";
 "macOS did not change the background agent. Try again, or check Login Items in System Settings." = "macOS did not change the background agent. Try again, or check Login Items in System Settings.";
 "Some installed games could not be registered with the background agent; they sign in by themselves." = "Some installed games could not be registered with the background agent; they sign in by themselves.";
+"Friends" = "Friends";
+"Notify me when friends come online or send a request" = "Notify me when friends come online or send a request";
+"Friend requests" = "Friend requests";
+"Decline" = "Decline";
+"Accept" = "Accept";
+"Online now" = "Online now";
+"No friends online." = "No friends online.";
+"Playing %@" = "Playing %@";
+"In a game" = "In a game";
+"Online" = "Online";
+"The background agent could not read your friends. Try again later." = "The background agent could not read your friends. Try again later.";
+"Nextendo did not accept the answer to this friend request." = "Nextendo did not accept the answer to this friend request.";
+"macOS did not allow notifications. Allow them for NX Port Studio in System Settings, Notifications." = "macOS did not allow notifications. Allow them for NX Port Studio in System Settings, Notifications.";
