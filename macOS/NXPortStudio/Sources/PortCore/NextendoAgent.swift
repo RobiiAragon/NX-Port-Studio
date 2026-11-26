@@ -1,0 +1,65 @@
+// The Mac Nextendo agent's XPC contract (docs/nextendo-agent.md), shared by Studio,
+// the agent and every Mac port (dm/mac/pack_app.py compiles this file into the
+// port's bootstrap). Foundation only: no process, Keychain or UI code here.
+import Foundation
+
+public enum NextendoAgent {
+    /// Ports connect here; each connection must match a cdhash Studio registered.
+    public static let portService = "org.nxnative.portstudio.agent"
+    /// Studio only: the exact app bundle that contains the agent.
+    public static let adminService = "org.nxnative.portstudio.agent.admin"
+    public static let launchAgentPlist = "org.nxnative.portstudio.agent.plist"
+    public static let protocolVersion = 1
+    /// The host's credential provider buffer (dm/host/hle_nextendo_apple.m).
+    public static let credentialLimit = 65_536
+    /// Peer allowlist bound; the oldest registrations are dropped first.
+    public static let peerLimit = 512
+}
+
+/// Raw values cross XPC as Int. Unknown values read as `.failed`.
+public enum NextendoAgentStatus: Int, Sendable {
+    case ok = 0, signedOut = 1, unavailable = 2, versionMismatch = 3, refused = 4, failed = 5
+    public init(wire: Int) { self = NextendoAgentStatus(rawValue: wire) ?? .failed }
+}
+
+/// Exported by each port connection; the agent calls it after Studio reports an account change.
+@objc public protocol NextendoAgentListener {
+    func accountChanged(_ generation: UInt64)
+}
+
+@objc public protocol NextendoAgentPortService {
+    /// Reply: status, agent protocol version.
+    func hello(_ version: Int, titleID: String, gameVersion: String, reply: @escaping @Sendable (Int, Int) -> Void)
+    /// Reply: status, schema-1 record without its renewal grant, account generation.
+    /// `renew` runs the same coalesced game-account preparation a port runs today at boot.
+    func gameCredential(renew: Bool, reply: @escaping @Sendable (Int, Data?, UInt64) -> Void)
+}
+
+@objc public protocol NextendoAgentAdminService {
+    /// Reply: status. The cdhash is the 20-byte SHA-1 prefix form `codesign` reports.
+    func registerPeer(_ cdhash: Data, reply: @escaping @Sendable (Int) -> Void)
+    /// Studio changed the stored account (sign-in, sign-out, new credential). Reply: new generation.
+    func accountDidChange(reply: @escaping @Sendable (UInt64) -> Void)
+    /// Reply: protocol version, registered peers, connected ports.
+    func status(reply: @escaping @Sendable (Int, Int, Int) -> Void)
+}
+
+public enum NextendoAgentInterfaces {
+    public static func port() -> NSXPCInterface { NSXPCInterface(with: NextendoAgentPortService.self) }
+    public static func admin() -> NSXPCInterface { NSXPCInterface(with: NextendoAgentAdminService.self) }
+    public static func listener() -> NSXPCInterface { NSXPCInterface(with: NextendoAgentListener.self) }
+}
+
+extension NextendoSession {
+    /// What a port receives: the stored schema-1 record without the renewal grant,
+    /// so no refresh token leaves the agent. The host decoder treats `renewal` as optional.
+    public func encodedForPort() throws -> Data { try withRenewal(nil).encodedForStorage() }
+
+    /// A port accepts only an unexpired NEX record that carries no renewal grant.
+    public static func decodeForPort(_ data: Data, now: Date = Date()) throws -> NextendoSession {
+        guard data.count <= NextendoAgent.credentialLimit else { throw NextendoError.invalidResponse }
+        let session = try decodeStored(data)
+        guard session.tokenKind == .nex, session.renewal == nil, !session.summary(at: now).isExpired else { throw NextendoError.invalidResponse }
+        return session
+    }
+}

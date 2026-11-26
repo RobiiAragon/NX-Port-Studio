@@ -36,6 +36,28 @@ cp "$BIN_DIR/NXPortStudio" "$CONTENTS/MacOS/NXPortStudio"
 # Remove linker debug records containing local object-file paths before signing.
 # Runtime symbols and the source fallback in DEBUG builds remain available.
 /usr/bin/strip -S "$CONTENTS/MacOS/NXPortStudio"
+# The Nextendo agent (docs/nextendo-agent.md): launchd starts it on demand once
+# Studio registers it with SMAppService; it is never a login item by itself.
+cp "$BIN_DIR/NXPortStudioAgent" "$CONTENTS/MacOS/NXPortStudioAgent"
+/usr/bin/strip -S "$CONTENTS/MacOS/NXPortStudioAgent"
+mkdir -p "$CONTENTS/Library/LaunchAgents"
+cat > "$CONTENTS/Library/LaunchAgents/org.nxnative.portstudio.agent.plist" <<'AGENTPLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>org.nxnative.portstudio.agent</string>
+    <key>BundleProgram</key><string>Contents/MacOS/NXPortStudioAgent</string>
+    <key>MachServices</key>
+    <dict>
+        <key>org.nxnative.portstudio.agent</key><true/>
+        <key>org.nxnative.portstudio.agent.admin</key><true/>
+    </dict>
+    <key>AssociatedBundleIdentifiers</key><array><string>org.nxnative.portstudio</string></array>
+    <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+AGENTPLIST
 cp -R "$RESOURCE_BUNDLE" "$CONTENTS/Resources/"
 ln -s ../Resources/NXPortStudio_PortStudio.bundle "$CONTENTS/MacOS/NXPortStudio_PortStudio.bundle"
 # System permission prompts read the main app bundle rather than SwiftPM's
@@ -127,7 +149,9 @@ PLIST
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 # The default is a local ad-hoc signature. Developer ID distribution requires
 # a separate signing/notarization review of the embedded tools and engine.
+# Nested code first: the app's seal records the agent's own signature.
+/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --identifier org.nxnative.portstudio.agent "$CONTENTS/MacOS/NXPortStudioAgent"
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" "$APP"
-/usr/bin/codesign --verify "$APP"
+/usr/bin/codesign --verify --deep --strict "$APP"
 mv "$APP" "$OUTPUT"
 printf 'Created %s\nEngine snapshot: %s-%s\n' "$OUTPUT" "$BASE_REVISION" "$ENGINE_HASH"

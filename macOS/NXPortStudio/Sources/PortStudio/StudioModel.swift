@@ -80,6 +80,10 @@ final class StudioModel {
     var nextendoCatalog: NextendoCatalogSnapshot?
     var nextendoCatalogError: String?
     var isRefreshingNextendoCatalog = false
+    var nextendoAgentState: NextendoAgentState = .unavailable
+    var nextendoAgentMessage: String?
+    var isChangingNextendoAgent = false
+    @ObservationIgnored let nextendoAgentClient = NextendoAgentAdminClient()
     @ObservationIgnored let nextendoPreferences: UserDefaults
     @ObservationIgnored let nextendoAccountService: NextendoAccountService
     @ObservationIgnored let nextendoCatalogService: NextendoCatalogService
@@ -362,6 +366,7 @@ final class StudioModel {
                     let registration = ProcessCommand(executableURL: URL(fileURLWithPath: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"), arguments: ["-f", installed.path])
                     let result = try await runner.run(registration)
                     if result.exitCode != 0 { appendLog("Launch Services registration failed; the port is installed in Applications.") }
+                    await registerPortWithNextendoAgent(installed)
                     NSWorkspace.shared.activateFileViewerSelecting([installed])
                 }
                 progress = 1

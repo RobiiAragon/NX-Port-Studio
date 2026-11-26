@@ -9,6 +9,7 @@ struct NextendoView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             TimelineView(.periodic(from: .now, by: 30)) { context in accountPanel(at: context.date) }
+            agentPanel
             applicationPanel
             TimelineView(.periodic(from: .now, by: 30)) { context in catalogPanel(at: context.date) }
         }.task { await model.loadNextendoPage() }
@@ -87,6 +88,39 @@ struct NextendoView: View {
             Button(t("Disconnect account"), role: .destructive) { Task { await model.signOutNextendo() } }
                 .buttonStyle(QuietButtonStyle()).disabled(accountActionsDisabled)
                 .help(t("Remove the saved Nextendo credential from this Mac."))
+        }
+    }
+
+    /// docs/nextendo-agent.md: one session for every Mac game, kept by a background agent.
+    private var agentPanel: some View {
+        StudioPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(t("Mac games"), systemImage: "gamecontroller").font(.system(size: 17, weight: .medium))
+                    Spacer()
+                    if model.isChangingNextendoAgent { ProgressView().controlSize(.small) }
+                    Toggle(t("Keep Nextendo connected"), isOn: Binding(get: { model.nextendoAgentState == .on || model.nextendoAgentState == .needsApproval },
+                                                                        set: { value in Task { await model.setNextendoAgent(enabled: value) } }))
+                        .toggleStyle(.switch).disabled(model.isChangingNextendoAgent || model.nextendoAgentState == .unavailable)
+                }
+                Text(agentDescription).font(.system(size: 12)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
+                if model.nextendoAgentState == .needsApproval {
+                    HStack {
+                        Text(t("Allow NX Port Studio in Login Items to finish turning this on.")).font(.system(size: 12))
+                        Spacer()
+                        Button(t("Open Login Items")) { model.openNextendoAgentApproval() }.buttonStyle(QuietButtonStyle())
+                    }
+                }
+                if let message = model.nextendoAgentMessage { notice(message) }
+            }
+        }
+    }
+
+    private var agentDescription: String {
+        switch model.nextendoAgentState {
+        case .unavailable: t("Available in the packaged NX Port Studio app.")
+        case .on: t("Your installed Mac games use this account without asking for Keychain access, and signing out here reaches games that are open.")
+        case .off, .needsApproval: t("A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself.")
         }
     }
 

@@ -1372,6 +1372,15 @@ credential rejection and unchanged game availability. The Foundation lifecycle
 fixture covers off-main execution, duplicate clicks, denial, explicit retry and
 close/reopen observation without opening a window or reading the real Keychain.
 
+### Every Mac port asks for Keychain access and renews the account by itself
+
+- **Symptom:** each Mac port, and each rebuild of one, asks macOS for access to the saved Nextendo account. Every launch renews the account again. A sign-out in Studio does not reach a game that is already open.
+- **Cause:** each port was its own client. Its host read `org.nxnative.nextendo.account` directly (`hle_nextendo_apple.m`), and its bootstrap ran `prepareGameAccount(forceGameRefresh: true)` at every boot (`dm/mac/GameAccount.swift`). Ad-hoc signed ports are a new code identity to the Keychain after every build. Nothing connected Studio to a running port.
+- **Fix:** NX Port Studio ships a launchd agent (`Sources/PortStudioAgent`, `PortCore/NextendoAgentServer.swift`) that renews the account for every port that connects and hands each one the schema-1 record without its renewal grant. The host takes that record through the existing `dm_nextendo_set_credential_provider` (`dm/host/bundle_mac.c`, `dm/mac/AgentClient.swift`). Studio reports sign-in, new game credentials and sign-out, and the agent pushes the change to open ports, which call `dm_nextendo_account_invalidate_social()`. Ports and Studio are admitted by `cdhash` code-signing requirements; Studio registers each port when it installs it. A port the agent does not answer keeps its own path unchanged, and `DM_NEXTENDO_AGENT=0` forces that path. The [design note](../nextendo-agent.md) has the protocol and its limits.
+- **Checks:** `NextendoAgentTests` (real XPC and code-signing refusal, record redaction, allowlist, timeouts) and `test_mac_game_account.py` (the real `bundle_mac.c` with agent and no-agent bootstraps) need no game, Keychain item or network.
+- **Limits:** I have not run it with a game or confirmed `SMAppService` with the ad-hoc Studio bundle. iOS is unchanged: each iPhone app keeps its own integration.
+- **Found on:** every Mac port in Nextendo or automatic mode, by reading the account path; no single game.
+
 ### A generic account Result does not identify the failing operation
 
 - **Symptom:** a game reports the shared `0x2a2` failure before its first recorded socket call, but account/NIFM availability diagnostics do not identify whether account ensure, ID retrieval, token loading or asynchronous completion failed.

@@ -3,6 +3,7 @@
 #include "bundle_mac.h"
 #include "game_profile.h"
 #include "net_socket.h"
+#include "nextendo_account.h"
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <limits.h>
@@ -13,10 +14,25 @@
 
 static void *bootstrap_image;
 
+// NX Port Studio's Nextendo agent, when it answers, owns the account for this
+// port (docs/nextendo-agent.md): the host reads its record through the provider
+// and this process neither reads the Keychain nor renews.
+static bool (*agent_credential)(uint8_t *, size_t, size_t *);
+static bool agent_provider(uint8_t *buffer, size_t capacity, size_t *size) {
+    return agent_credential && agent_credential(buffer, capacity, size);
+}
+
 // Called on the existing guest worker while the primary AppKit loop is active.
 // CLI hosts and local-only modes do not load account code or read storage.
 void dm_mac_bundle_prepare_account(void) {
     if (!bootstrap_image || !dm_net_nextendo_enabled()) return;
+    bool (*agent)(void (*)(void)) = dlsym(bootstrap_image, "dm_mac_agent_prepare");
+    agent_credential = dlsym(bootstrap_image, "dm_mac_agent_credential");
+    const char *use_agent = getenv("DM_NEXTENDO_AGENT");   // 0: skip the agent, sign in from this port
+    if ((!use_agent || strcmp(use_agent, "0")) && agent && agent_credential && agent(dm_nextendo_account_invalidate_social)) {
+        dm_nextendo_set_credential_provider(agent_provider);
+        return;
+    }
     void (*prepare)(void) = dlsym(bootstrap_image, "dm_mac_prepare_game_account");
     if (prepare) prepare();
     else fputs("[RED] launcher: account preparation is unavailable in the bundled bootstrap\n", stderr);

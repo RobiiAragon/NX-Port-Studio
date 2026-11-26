@@ -412,3 +412,12 @@
 "Nextendo could not issue the game credential (HTTP %d)." = "Nextendo no pudo emitir la credencial del juego (HTTP %d).";
 "Nextendo could not renew sign-in (HTTP %d)." = "Nextendo no pudo renovar la sesión (HTTP %d).";
 "Another app is renewing the saved Nextendo account. Try again shortly." = "Otra app está renovando la cuenta guardada de Nextendo. Inténtalo de nuevo en un momento.";
+"Mac games" = "Juegos para Mac";
+"Keep Nextendo connected" = "Mantener Nextendo conectado";
+"Allow NX Port Studio in Login Items to finish turning this on." = "Permite NX Port Studio en Ítems de inicio para terminar de activarlo.";
+"Open Login Items" = "Abrir Ítems de inicio";
+"Available in the packaged NX Port Studio app." = "Disponible en la app empaquetada de NX Port Studio.";
+"Your installed Mac games use this account without asking for Keychain access, and signing out here reaches games that are open." = "Tus juegos para Mac instalados usan esta cuenta sin pedir acceso al llavero, y cerrar sesión aquí llega a los juegos abiertos.";
+"A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself." = "Un pequeño agente en segundo plano mantiene una sola sesión para todos los juegos para Mac que instales desde aquí. Sin él, cada juego pide acceso al llavero e inicia sesión por su cuenta.";
+"macOS did not change the background agent. Try again, or check Login Items in System Settings." = "macOS no cambió el agente en segundo plano. Inténtalo de nuevo o revisa Ítems de inicio en Configuración del Sistema.";
+"Some installed games could not be registered with the background agent; they sign in by themselves." = "Algunos juegos instalados no se pudieron registrar con el agente en segundo plano; inician sesión por su cuenta.";
