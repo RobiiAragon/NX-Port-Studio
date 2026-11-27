@@ -19,6 +19,7 @@ NSString *dm_nextendo_api_bearer(const char *resource){(void)resource;credential
 NSData *dm_nextendo_api_identity(const char *resource){(void)resource;credential_reads++;return linked?[NSData dataWithBytes:&generation length:sizeof generation]:nil;}
 NSString *dm_nextendo_api_passive_bearer(uint64_t *value){if(value)*value=linked?generation:0;return linked?@"synthetic-social-proof":nil;}
 bool dm_nextendo_api_passive_valid(NSString *proof,uint64_t value){return linked&&value==generation&&[proof isEqual:@"synthetic-social-proof"];}
+dm_nextendo_api_provider dm_nextendo_api_transport_provider(void){return NULL;}
 void dm_guest_host_wait_begin(void){} void dm_guest_host_wait_end(void){}
 dm_net_mode_t dm_net_mode(void){return mode;}
 int dm_account_uid_exists(const void *value){return local_present&&value&&!memcmp(value,uid,16);}
@@ -61,6 +62,36 @@ static void local_presence_initialization(void) {
     mode=previous_mode;linked=previous_linked;
     if(profile){const char *value=profile.UTF8String;if(!value){CHECK(false);return;}setenv("DM_NEXTENDO_ROUTES",value,1);}else unsetenv("DM_NEXTENDO_ROUTES");
 }
+// The constructors zero their object with memset(this, 0, size); compilers load
+// that size into w2 with MOVZ or, in the older SDKs of Mario Kart 8 Deluxe 4.0.1,
+// Smash 13.0.5, Splatoon 2 5.5.2 and Odyssey 1.4.1, with ORR from WZR.
+static void constructor_encodings(void) {
+    uint8_t filter[16]={0},object[0x200+16];int count=-1;
+    uint32_t original[3];memcpy(original,constructor,sizeof original);
+    const uint32_t accepted[][3]={{0x52804002,0x2a1f03e1,0x14000000},{0x2a1f03e1,0x52804002,0x14000000},
+        {0x321703e2,0x2a1f03e1,0x14000000},{0x2a1f03e1,0x321703e2,0x14000000}};
+    // orr #0x100, orr from w1, movz into w3, movz #0x200 LSL 16, size after the first two words
+    const uint32_t rejected[][3]={{0x321803e2,0x2a1f03e1,0x14000000},{0x32170022,0x2a1f03e1,0x14000000},
+        {0x52804003,0x2a1f03e1,0x14000000},{0x52a04002,0x2a1f03e1,0x14000000},{0x2a1f03e1,0x14000000,0x52804002}};
+    for(unsigned i=0;i<sizeof accepted/sizeof accepted[0];i++) {
+        memcpy(constructor,accepted[i],sizeof original);memset(object,0xa5,sizeof object);count=-1;
+        CHECK(!dm_nextendo_friends_list(&count,object,uid,0,1,filter,false)&&count==1&&object[0x128]==1&&object[0x200]==0xa5);
+    }
+    for(unsigned i=0;i<sizeof rejected/sizeof rejected[0];i++) {
+        memcpy(constructor,rejected[i],sizeof original);count=-1;
+        CHECK(dm_nextendo_friends_list(&count,object,uid,0,1,filter,false)!=0&&!count);
+    }
+    memcpy(constructor,original,sizeof original);
+    uint32_t presence_original=presence_constructor[0];uint8_t own[0xe0+16];
+    // movz #0xe0, orr #0xe0; then orr #0x1c0 and orr into w3
+    const uint32_t presence_accepted[]={0x52801c02,0x321b0be2},presence_rejected[]={0x321a0be2,0x321b0be3};
+    for(unsigned i=0;i<2;i++) {
+        presence_constructor[0]=presence_accepted[i];memset(own,0xa5,sizeof own);
+        CHECK(!dm_nextendo_presence_initialize(own,uid)&&!memcmp(own,uid,16)&&own[0xe0]==0xa5);
+        presence_constructor[0]=presence_rejected[i];CHECK(dm_nextendo_presence_initialize(own,uid)!=0);
+    }
+    presence_constructor[0]=presence_original;
+}
 static bool transport(const char *url,const char *method,const char *auth,const uint8_t *body,size_t body_size,uint8_t *output,size_t capacity,size_t *size,unsigned *status){
     requests++;CHECK(!strcmp(auth,"Bearer synthetic-social-proof"));
     if(strstr(url,"/api/presence")){
@@ -70,6 +101,7 @@ static bool transport(const char *url,const char *method,const char *auth,const 
         memcpy(output,"{}",2);*size=2;*status=response_status;return true;
     }
     CHECK(!strcmp(method,"GET"));
+    CHECK(!strcmp(url,strstr(url,"/api/me")?"https://nextendo.network/api/me":"https://nextendo.network/api/friends?images=0"));
     NSData *data=[(strstr(url,"/api/me")?@"{\"nsa\":\"abcdef0000001234\"}":reply) dataUsingEncoding:NSUTF8StringEncoding];
     if(data.length>capacity)return false;memcpy(output,data.bytes,data.length);*size=data.length;*status=response_status;return true;
 }
@@ -87,6 +119,7 @@ int main(void){@autoreleasepool{
     uint64_t id=0;memcpy(&id,objects+0x10,8);CHECK(id==501&&!strcmp((char*)objects+0x18,"Alpha"));
     CHECK(objects[0x58]==2&&objects[0x5c]==1&&objects[0x60]==1&&objects[0x61]==2&&objects[0x62]==3&&objects[0x120]==1&&objects[0x128]==1);
     CHECK(!memcmp(objects,uid,16)&&objects[0x600]==0xa5);
+    constructor_encodings();
     int before=requests;uint64_t ids[4]={0,0,0,0xface};
     CHECK(!dm_nextendo_friends_list(&count,ids,NULL,1,1,filter,true)&&count==1&&ids[0]==502&&ids[1]==0&&ids[3]==0xface&&requests==before);
     char profile[]="/tmp/nx-social-profile-XXXXXX";char *created=mkdtemp(profile);CHECK(created!=NULL);if(!created)return 1;

@@ -36,6 +36,52 @@ cp "$BIN_DIR/NXPortStudio" "$CONTENTS/MacOS/NXPortStudio"
 # Remove linker debug records containing local object-file paths before signing.
 # Runtime symbols and the source fallback in DEBUG builds remain available.
 /usr/bin/strip -S "$CONTENTS/MacOS/NXPortStudio"
+# The Nextendo agent (docs/nextendo-agent.md): a windowless app inside Studio, so its
+# notifications have a bundle of their own. launchd runs it at login only once Studio
+# registers it with SMAppService; it is never a login item by itself.
+AGENT_APP="$CONTENTS/Library/LoginItems/NX Port Studio Agent.app"
+mkdir -p "$AGENT_APP/Contents/MacOS" "$AGENT_APP/Contents/Resources"
+cp "$BIN_DIR/NXPortStudioAgent" "$AGENT_APP/Contents/MacOS/NXPortStudioAgent"
+/usr/bin/strip -S "$AGENT_APP/Contents/MacOS/NXPortStudioAgent"
+cat > "$AGENT_APP/Contents/Info.plist" <<'AGENTINFO'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>NX Port Studio Agent</string>
+    <key>CFBundleDisplayName</key><string>NX Port Studio</string>
+    <key>CFBundleIdentifier</key><string>org.nxnative.portstudio.agent</string>
+    <key>CFBundleExecutable</key><string>NXPortStudioAgent</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleShortVersionString</key><string>1.6.0</string>
+    <key>CFBundleVersion</key><string>29</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSUIElement</key><true/>
+</dict>
+</plist>
+AGENTINFO
+mkdir -p "$CONTENTS/Library/LaunchAgents"
+cat > "$CONTENTS/Library/LaunchAgents/org.nxnative.portstudio.agent.plist" <<'AGENTPLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>org.nxnative.portstudio.agent</string>
+    <key>BundleProgram</key><string>Contents/Library/LoginItems/NX Port Studio Agent.app/Contents/MacOS/NXPortStudioAgent</string>
+    <key>MachServices</key>
+    <dict>
+        <key>org.nxnative.portstudio.agent</key><true/>
+        <key>org.nxnative.portstudio.agent.admin</key><true/>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+    <key>AssociatedBundleIdentifiers</key><array><string>org.nxnative.portstudio</string></array>
+    <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+AGENTPLIST
 cp -R "$RESOURCE_BUNDLE" "$CONTENTS/Resources/"
 ln -s ../Resources/NXPortStudio_PortStudio.bundle "$CONTENTS/MacOS/NXPortStudio_PortStudio.bundle"
 # System permission prompts read the main app bundle rather than SwiftPM's
@@ -97,6 +143,7 @@ printf '%s-%s\n' "$BASE_REVISION" "$ENGINE_HASH" > "$ENGINE/ENGINE_REVISION"
 
 xcrun swift "$PROJECT_DIR/scripts/GenerateIcon.swift" "$STAGING/AppIcon.iconset"
 /usr/bin/iconutil -c icns "$STAGING/AppIcon.iconset" -o "$CONTENTS/Resources/AppIcon.icns"
+cp "$CONTENTS/Resources/AppIcon.icns" "$AGENT_APP/Contents/Resources/AppIcon.icns"
 
 cat > "$CONTENTS/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -127,7 +174,9 @@ PLIST
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 # The default is a local ad-hoc signature. Developer ID distribution requires
 # a separate signing/notarization review of the embedded tools and engine.
+# Nested code first: the app's seal records the agent's own signature.
+/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" "$AGENT_APP"
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" "$APP"
-/usr/bin/codesign --verify "$APP"
+/usr/bin/codesign --verify --deep --strict "$APP"
 mv "$APP" "$OUTPUT"
 printf 'Created %s\nEngine snapshot: %s-%s\n' "$OUTPUT" "$BASE_REVISION" "$ENGINE_HASH"

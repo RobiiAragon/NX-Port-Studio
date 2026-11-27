@@ -9,6 +9,10 @@ struct NextendoView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             TimelineView(.periodic(from: .now, by: 30)) { context in accountPanel(at: context.date) }
+            agentPanel
+            if model.nextendoAgentState == .on && model.nextendoAccount != nil {
+                TimelineView(.periodic(from: .now, by: 60)) { context in friendsPanel.task(id: context.date) { await model.refreshNextendoFriends() } }
+            }
             applicationPanel
             TimelineView(.periodic(from: .now, by: 30)) { context in catalogPanel(at: context.date) }
         }.task { await model.loadNextendoPage() }
@@ -87,6 +91,92 @@ struct NextendoView: View {
             Button(t("Disconnect account"), role: .destructive) { Task { await model.signOutNextendo() } }
                 .buttonStyle(QuietButtonStyle()).disabled(accountActionsDisabled)
                 .help(t("Remove the saved Nextendo credential from this Mac."))
+        }
+    }
+
+    /// docs/nextendo-agent.md: one session for every Mac game, kept by a background agent.
+    private var agentPanel: some View {
+        StudioPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(t("Mac games"), systemImage: "gamecontroller").font(.system(size: 17, weight: .medium))
+                    Spacer()
+                    if model.isChangingNextendoAgent { ProgressView().controlSize(.small) }
+                    Toggle(t("Keep Nextendo connected"), isOn: Binding(get: { model.nextendoAgentState == .on || model.nextendoAgentState == .needsApproval },
+                                                                        set: { value in Task { await model.setNextendoAgent(enabled: value) } }))
+                        .toggleStyle(.switch).disabled(model.isChangingNextendoAgent || model.nextendoAgentState == .unavailable)
+                }
+                Text(agentDescription).font(.system(size: 12)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
+                if model.nextendoAgentState == .needsApproval {
+                    HStack {
+                        Text(t("Allow NX Port Studio in Login Items to finish turning this on.")).font(.system(size: 12))
+                        Spacer()
+                        Button(t("Open Login Items")) { model.openNextendoAgentApproval() }.buttonStyle(QuietButtonStyle())
+                    }
+                }
+                if let message = model.nextendoAgentMessage { notice(message) }
+            }
+        }
+    }
+
+    private var friendsPanel: some View {
+        StudioPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(t("Friends"), systemImage: "person.2").font(.system(size: 17, weight: .medium))
+                    Spacer()
+                    if model.isLoadingNextendoFriends { ProgressView().controlSize(.small) }
+                    Button(t("Refresh")) { Task { await model.refreshNextendoFriends() } }
+                        .buttonStyle(QuietButtonStyle()).disabled(model.isLoadingNextendoFriends)
+                }
+                Toggle(t("Notify me when friends come online or send a request"), isOn: Binding(get: { model.nextendoNotifications },
+                                                                                               set: { value in Task { await model.setNextendoNotifications(value) } }))
+                    .disabled(model.isChangingNextendoNotifications)
+                if let view = model.nextendoFriends {
+                    if !view.requests.isEmpty {
+                        Text(t("Friend requests")).fontWeight(.medium)
+                        ForEach(view.requests) { friend in
+                            HStack {
+                                Text(friend.name)
+                                Spacer()
+                                Button(t("Decline")) { Task { await model.answerNextendoFriendRequest(friend, accept: false) } }
+                                    .buttonStyle(QuietButtonStyle())
+                                Button(t("Accept")) { Task { await model.answerNextendoFriendRequest(friend, accept: true) } }
+                            }.disabled(model.nextendoFriendAnswers.contains(friend.pid))
+                        }
+                    }
+                    Text(t("Online now")).fontWeight(.medium)
+                    let online = view.friends.filter(\.isOnline)
+                    if online.isEmpty {
+                        Text(t("No friends online.")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
+                    } else {
+                        ForEach(online) { friend in
+                            HStack {
+                                Circle().fill(friend.status == 2 ? Color.green : Color.blue).frame(width: 7, height: 7)
+                                Text(friend.name)
+                                Spacer()
+                                Text(friendActivity(friend)).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
+                            }
+                        }
+                    }
+                } else if !model.isLoadingNextendoFriends && model.nextendoFriendsMessage == nil {
+                    Text(t("No friends online.")).font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
+                }
+                if let message = model.nextendoFriendsMessage { notice(message) }
+            }
+        }
+    }
+
+    private func friendActivity(_ friend: NextendoFriend) -> String {
+        if let title = friend.titleID, let game = model.nextendoGameNames[title] { return String(format: t("Playing %@"), game) }
+        return friend.status == 2 ? t("In a game") : t("Online")
+    }
+
+    private var agentDescription: String {
+        switch model.nextendoAgentState {
+        case .unavailable: t("Available in the packaged NX Port Studio app.")
+        case .on: t("Your installed Mac games use this account without asking for Keychain access, and signing out here reaches games that are open.")
+        case .off, .needsApproval: t("A small background agent keeps one session for every Mac game you install from here. Without it, each game asks for Keychain access and signs in by itself.")
         }
     }
 

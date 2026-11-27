@@ -5,6 +5,7 @@ extension StudioModel {
     static let nextendoScopes = ["identity", "friends", "game.matchmaking", "presence"]
 
     func loadNextendoPage() async {
+        refreshNextendoAgentState()
         await reloadNextendoAccount()
         guard !Task.isCancelled else { return }
         nextendoCatalog = await nextendoCatalogService.snapshot()
@@ -83,6 +84,7 @@ extension StudioModel {
                 try Task.checkCancellation()
                 guard self.nextendoAuthorizationID == id else { return }
                 self.nextendoAccount = summary
+                self.notifyNextendoAgentAccountChanged()
             } catch is CancellationError {} catch {
                 guard self.nextendoAuthorizationID == id else { return }
                 self.nextendoAccountError = self.nextendoAccountMessage(error)
@@ -134,6 +136,7 @@ extension StudioModel {
                 try Task.checkCancellation()
                 guard self.nextendoGameCredentialID == id else { return }
                 self.nextendoAccount = summary
+                self.notifyNextendoAgentAccountChanged()
             } catch is CancellationError {} catch {
                 guard self.nextendoGameCredentialID == id else { return }
                 self.nextendoAccountError = self.nextendoAccountMessage(error)
@@ -147,7 +150,7 @@ extension StudioModel {
         cancelNextendoSignIn(); isSigningOutNextendo = true; nextendoAccountError = nil
         defer { isSigningOutNextendo = false }
         await nextendoCancellationTask?.value
-        do { try await nextendoAccountService.signOut(); nextendoAccount = nil }
+        do { try await nextendoAccountService.signOut(); nextendoAccount = nil; notifyNextendoAgentAccountChanged() }
         catch { nextendoAccountError = nextendoAccountMessage(error) }
     }
 

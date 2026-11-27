@@ -33,6 +33,7 @@ Own-application OAuth → identity-checked NEX credential acquisition and Keycha
 - Obtain and validate an eligible Mario Kart game build: the available LAN-tested 3.0.5 build does not meet the current signed 4.0.1 service requirement.
 - Establish an actual authorized NEX game session and complete an online match on a supported game/version.
 - Add per-title network status with evidence, failures and reproducible versions.
+- Validate with a game the Studio XPC agent that gives Mac ports one shared session. It is implemented: credential broker, sign-out push, shared friends and presence, and a hub with friends, notifications and revocation ([design](docs/nextendo-agent.md)).
 - Physically validate the implemented mobile account flow: system-browser authorization, identity-checked NEX acquisition, per-app Keychain storage and migration from the earlier private credential cache.
 
 **Exit evidence:** a documented native online match. Server policy acceptance and an OAuth token alone do not meet this milestone.

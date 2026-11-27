@@ -93,7 +93,7 @@ def require_primary_host(host):
 
 
 def swift_sources():   # the settings window, with the iOS launcher's model and rows
-    return [HERE / 'Launcher.swift', HERE / 'GameAccount.swift', PORT_CORE / 'NextendoAccount.swift', PORT_CORE / 'NextendoLoopback.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift', HERE.parent / 'ios/Sources/LauncherSavesView.swift']
+    return [HERE / 'Launcher.swift', HERE / 'GameAccount.swift', HERE / 'AgentClient.swift', PORT_CORE / 'NextendoAccount.swift', PORT_CORE / 'NextendoAgent.swift', PORT_CORE / 'NextendoLoopback.swift', HERE.parent / 'ios/Sources/LauncherSettings.swift', HERE.parent / 'ios/Sources/LauncherRow.swift', HERE.parent / 'ios/Sources/LauncherLocalization.swift', HERE.parent / 'ios/Sources/LauncherSavesView.swift']
 
 
 def build_launcher(out, minos, clang, swiftc, sdk):   # in-process C bootstrap + existing SwiftUI settings; no main or second NSApplication

@@ -40,6 +40,24 @@ actor NextendoAccountService {
     continuation?.resume()
 }
 '''
+AGENT = r'''
+import Foundation
+private var answer: Int32 = 0, prepares: Int32 = 0
+@_cdecl("fixture_agent_answer") public func fixtureAgentAnswer(_ value: Int32) { answer = value }
+@_cdecl("fixture_agent_prepares") public func fixtureAgentPrepares() -> Int32 { prepares }
+@_cdecl("dm_mac_agent_prepare") public func dmMacAgentPrepare(_ invalidate: @escaping @convention(c) () -> Void) -> Bool {
+    prepares += 1; if answer != 0 { invalidate() }; return answer != 0
+}
+@_cdecl("dm_mac_agent_credential") public func dmMacAgentCredential(_ buffer: UnsafeMutablePointer<UInt8>?, _ capacity: Int, _ size: UnsafeMutablePointer<Int>?) -> Bool {
+    let record = Array("AGENT".utf8); guard let buffer, let size, capacity >= record.count else { return false }
+    buffer.update(from: record, count: record.count); size.pointee = record.count; return true
+}
+@_cdecl("dm_mac_agent_api") public func dmMacAgentAPI(_ resource: UnsafePointer<CChar>?, _ body: UnsafePointer<UInt8>?, _ bodySize: Int,
+        _ output: UnsafeMutablePointer<UInt8>?, _ capacity: Int, _ size: UnsafeMutablePointer<Int>?, _ status: UnsafeMutablePointer<UInt32>?) -> Bool {
+    let reply = Array("{}".utf8); guard let resource, String(cString: resource) == "friends", let output, let size, let status, capacity >= 2 else { return false }
+    output.update(from: reply, count: 2); size.pointee = 2; status.pointee = 200; return true
+}
+'''
 DRIVER = r'''
 #include <CoreFoundation/CoreFoundation.h>
 #include <pthread.h>
@@ -47,6 +65,12 @@ DRIVER = r'''
 #include "bundle_mac.c"
 static dm_net_mode_t mode;
 dm_net_mode_t dm_net_mode(void) { return mode; }
+static dm_nextendo_credential_provider installed;
+static unsigned invalidations;
+void dm_nextendo_set_credential_provider(dm_nextendo_credential_provider provider) { installed = provider; }
+void dm_nextendo_account_invalidate_social(void) { invalidations++; }
+static dm_nextendo_api_provider api;
+void dm_nextendo_set_api_provider(dm_nextendo_api_provider provider) { api = provider; }
 static _Atomic unsigned started, finished;
 static void *worker(void *unused) {
     (void)unused; started=1; dm_mac_bundle_prepare_account(); finished=1; return NULL;
@@ -68,7 +92,7 @@ static void run_skipped(void) {
     CHECK(!calls || (unsigned)calls()==before);
 }
 int main(int argc,char **argv) {
-    if(argc!=2)return 2;
+    if(argc!=2 && argc!=3)return 2;
     mode=DM_NET_NEXTENDO; run_skipped(); // An ordinary CLI host has no bootstrap.
     bootstrap_image=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL); CHECK(bootstrap_image!=NULL); if(!bootstrap_image)return 2;
     calls=dlsym(bootstrap_image,"fixture_calls"); heartbeats=dlsym(bootstrap_image,"fixture_heartbeats");
@@ -88,6 +112,28 @@ int main(int argc,char **argv) {
     // Accidental calls on main must not block its run loop or access storage.
     void (*prepare)(void)=dlsym(bootstrap_image,"dm_mac_prepare_game_account"); CHECK(prepare!=NULL);
     if(prepare){expected=calls();prepare();CHECK(calls()==expected);}
+    CHECK(installed==NULL && api==NULL); // A bootstrap without the agent client keeps the port's own path.
+    if(argc==3) { // docs/nextendo-agent.md: an answering agent owns the account for this port.
+        bootstrap_image=dlopen(argv[2],RTLD_NOW|RTLD_LOCAL); CHECK(bootstrap_image!=NULL); if(!bootstrap_image)return 2;
+        calls=dlsym(bootstrap_image,"fixture_calls"); heartbeats=dlsym(bootstrap_image,"fixture_heartbeats"); release=dlsym(bootstrap_image,"fixture_release");
+        void (*answer)(int)=dlsym(bootstrap_image,"fixture_agent_answer"); int (*prepares)(void)=dlsym(bootstrap_image,"fixture_agent_prepares");
+        CHECK(calls && heartbeats && release && answer && prepares); if(!calls || !heartbeats || !release || !answer || !prepares)return 2;
+        mode=DM_NET_NEXTENDO; answer(1); unsigned before=(unsigned)calls();
+        started=finished=0; pthread_t thread; CHECK(!pthread_create(&thread,NULL,worker,NULL)); CHECK(until(done)); CHECK(!pthread_join(thread,NULL));
+        CHECK((unsigned)calls()==before && prepares()==1 && invalidations==1 && installed!=NULL); // No renewal here, no storage read.
+        uint8_t record[16]; size_t size=0; CHECK(installed && installed(record,sizeof record,&size) && size==5 && !memcmp(record,"AGENT",5));
+        CHECK(installed && !installed(record,4,&size)); // A short buffer fails, never truncates.
+        unsigned status=0; // The account API goes through the agent too: its record has no OAuth grant.
+        CHECK(api && api("friends",NULL,0,record,sizeof record,&size,&status) && size==2 && status==200 && !api("me",NULL,0,record,sizeof record,&size,&status));
+        api=NULL;
+        mode=DM_NET_OFFLINE; installed=NULL; run_skipped(); CHECK(prepares()==1 && installed==NULL); // Local modes never ask the agent.
+        for(unsigned i=0;i<2;i++) { // 0: the agent does not answer; 1: DM_NEXTENDO_AGENT=0 skips it.
+            mode=DM_NET_NEXTENDO; answer(i==0 ? 0 : 1); if(i==1) setenv("DM_NEXTENDO_AGENT","0",1);
+            int asked=prepares(); installed=NULL; started=finished=0; expected=calls()+1;
+            CHECK(!pthread_create(&thread,NULL,worker,NULL)); CHECK(until(called)); release(0); CHECK(until(done)); CHECK(!pthread_join(thread,NULL));
+            CHECK(installed==NULL && api==NULL && prepares()==asked+(i==0)); unsetenv("DM_NEXTENDO_AGENT");
+        }
+    }
     printf("Mac account bridge: %u checks, %u failures; synthetic async service only\n",checks,failures);
     return failures!=0;
 }
@@ -101,15 +147,17 @@ class MacGameAccount(unittest.TestCase):
             root = Path(tmp)
             (root / 'service.swift').write_text(SERVICE)
             (root / 'driver.c').write_text(DRIVER)
+            (root / 'agent.swift').write_text(AGENT)
             (root / 'game_profile.h').write_text('#define DM_GAME_ID "0100000000000001"\n')
             for name, san in [('normal', []), ('asan', ['-fsanitize=address,undefined', '-fno-omit-frame-pointer'])]:
                 with self.subTest(build=name):
-                    library, driver = root / (name + '.dylib'), root / name
-                    subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-parse-as-library', '-emit-library',
-                                    '-O', '-g', *(['-sanitize=address'] if san else []), '-o', library, REPO / 'dm/mac/GameAccount.swift', root / 'service.swift'], check=True, capture_output=True)
+                    library, agent, driver = root / (name + '.dylib'), root / (name + '-agent.dylib'), root / name
+                    for out, extra in ((library, []), (agent, [root / 'agent.swift'])):
+                        subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-parse-as-library', '-emit-library',
+                                        '-O', '-g', *(['-sanitize=address'] if san else []), '-o', out, REPO / 'dm/mac/GameAccount.swift', root / 'service.swift', *extra], check=True, capture_output=True)
                     subprocess.run(['xcrun', 'clang', '-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror', *san,
                                     '-I', root, '-I', REPO / 'dm/host', '-o', driver, root / 'driver.c', '-framework', 'CoreFoundation'], check=True, capture_output=True)
-                    result = subprocess.run([driver, library], capture_output=True, text=True, timeout=20)
+                    result = subprocess.run([driver, library, agent], capture_output=True, text=True, timeout=20)
                     self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
                     self.assertIn('0 failures', result.stdout)
                     self.assertIn('account preparation failed', result.stderr)

@@ -27,6 +27,10 @@ void dm_guest_host_wait_end(void);
 int hle_signal_system_event_binding(uint64_t binding);
 
 static _Atomic(dm_nextendo_credential_provider) credentialProvider;
+static _Atomic(dm_nextendo_api_provider) apiProvider;
+// What a passive caller holds in transport mode: the embedder authorizes the request,
+// so the proof is only this process's marker, compared with its generation.
+static NSString *const transportProof = @"embedder-transport";
 static pthread_mutex_t accountLock = PTHREAD_MUTEX_INITIALIZER;
 static NSString *explicitVersion;
 static NSData *cachedFingerprint;
@@ -110,6 +114,12 @@ static NSString *oauth_scope(const char *resource) {
 static BOOL oauth_authorized(DmNextendoCredential *credential,NSString *scope,NSTimeInterval now) {
     return credential&&scope&&isfinite(now)&&isfinite(credential.expiry)&&credential.expiry>now&&
         credential.oauthAccess&&isfinite(credential.oauthExpiry)&&credential.oauthExpiry>now&&[credential.oauthScopes containsObject:scope];
+}
+// With an embedder transport the agent checks the OAuth scope; this process checks
+// that a validated, unexpired NEX record for the account is present.
+static BOOL api_authorized(DmNextendoCredential *credential,NSString *scope,NSTimeInterval now) {
+    if(!atomic_load(&apiProvider))return oauth_authorized(credential,scope,now);
+    return credential&&scope&&isfinite(now)&&isfinite(credential.expiry)&&credential.expiry>now;
 }
 static _Thread_local dm_nextendo_credential_diagnostic credentialDiagnostic;
 static id credential_rejected(dm_nextendo_credential_reason reason) { credentialDiagnostic.reason=reason;return nil; }
@@ -224,6 +234,7 @@ bool dm_nextendo_account_cached_nickname(char nickname[33]) { @autoreleasepool {
     BOOL copied=name && *name && dm_account_copy_nickname(nickname,name);
     pthread_mutex_unlock(&socialCredentialLock);return copied;
 } }
+static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction);
 NSString *dm_nextendo_api_passive_bearer(uint64_t *generation) {
     if (!generation) return nil;
     *generation = 0;
@@ -231,7 +242,16 @@ NSString *dm_nextendo_api_passive_bearer(uint64_t *generation) {
     social_lock();
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     if (socialCredential && (!isfinite(now) || !isfinite(socialCredential.expiry) || socialCredential.expiry <= now)) social_reset_locked();
-    NSString *proof = oauth_authorized(socialCredential,@"presence",now)?socialCredential.oauthAccess:nil;
+    if (!socialCredential && atomic_load(&apiProvider) && atomic_load(&credentialProvider)) {
+        // Transport mode: the credential provider is a memory copy, so presence can
+        // start at boot instead of waiting for the game's first account read.
+        uint64_t started = socialGeneration; pthread_mutex_unlock(&socialCredentialLock);
+        DmNextendoCredential *c = credential_with_interaction(NO);
+        social_lock(); if (started == socialGeneration && !socialCredential) socialCredential = c;
+        now = NSDate.date.timeIntervalSince1970;
+    }
+    NSString *proof = !api_authorized(socialCredential,@"presence",now) ? nil :
+        atomic_load(&apiProvider) ? transportProof : socialCredential.oauthAccess;
     if (proof) *generation = socialGeneration;
     pthread_mutex_unlock(&socialCredentialLock); return proof;
 }
@@ -239,10 +259,14 @@ bool dm_nextendo_api_passive_valid(NSString *proof, uint64_t generation) {
     if (!proof || !generation || !enabled()) return false;
     social_lock();
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
-    BOOL valid = generation == socialGeneration && oauth_authorized(socialCredential,@"presence",now) &&
-        [socialCredential.oauthAccess isEqual:proof];
+    BOOL valid = generation == socialGeneration && api_authorized(socialCredential,@"presence",now) &&
+        [atomic_load(&apiProvider) ? transportProof : socialCredential.oauthAccess isEqual:proof];
     pthread_mutex_unlock(&socialCredentialLock); return valid;
 }
+void dm_nextendo_set_api_provider(dm_nextendo_api_provider provider) {
+    social_lock(); social_reset_locked(); atomic_store(&apiProvider, provider); pthread_mutex_unlock(&socialCredentialLock);
+}
+dm_nextendo_api_provider dm_nextendo_api_transport_provider(void) { return atomic_load(&apiProvider); }
 static DmNextendoCredential *credential_with_interaction(BOOL allowInteraction) {
     BOOL guestWait=YES;
 #if !TARGET_OS_IOS
@@ -357,15 +381,17 @@ uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
 uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return credential_return(DM_ACCOUNT_RETURN_ENSURE,credential() ? 0 : DM_ACCOUNT_FAIL); } }
 // Host-only API authorization. Never serialized into a game bundle or HLE output.
 NSString *dm_nextendo_api_bearer(const char *resource) {
-    NSString *scope=oauth_scope(resource);if(!scope)return nil;
+    NSString *scope=oauth_scope(resource);if(!scope||atomic_load(&apiProvider))return nil;
     DmNextendoCredential *c=credential();return oauth_authorized(c,scope,NSDate.date.timeIntervalSince1970)?c.oauthAccess:nil;
 }
 NSData *dm_nextendo_api_identity(const char *resource) {
     NSString *scope=oauth_scope(resource);if(!scope)return nil;
-    DmNextendoCredential *c=credential();if(!oauth_authorized(c,scope,NSDate.date.timeIntervalSince1970))return nil;
+    DmNextendoCredential *c=credential();if(!api_authorized(c,scope,NSDate.date.timeIntervalSince1970))return nil;
     // Bind caches to this OAuth authorization, local identity and permission.
     // NEX rotation or a legacy NEX-only record cannot authorize an API cache.
-    NSData *bytes=[NSJSONSerialization dataWithJSONObject:@[c.oauthAccess,@(c.pid),scope] options:0 error:nil];
+    // With an embedder transport, the NEX record it handed over takes the grant's place.
+    NSString *authority=atomic_load(&apiProvider)?[@"transport:" stringByAppendingString:c.token]:c.oauthAccess;
+    NSData *bytes=[NSJSONSerialization dataWithJSONObject:@[authority,@(c.pid),scope] options:0 error:nil];
     if(!bytes)return nil;uint8_t digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(bytes.bytes, (CC_LONG)bytes.length, digest); return [NSData dataWithBytes:digest length:sizeof digest];
 }
