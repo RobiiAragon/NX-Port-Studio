@@ -54,7 +54,7 @@ No `pad_layout`: the virtual gamepad starts in the 2D layout. `present_interval`
 
 - **Resolved: a long black screen at boot** (about 17 s on the Mac, 32 s on an iPhone). The game walks RomFS directories of 38,000 files, and every path component scanned its whole parent directory with `getxattr` on each entry. A per-directory name index (`dir_index_get` in `hle_fs.c`), which also speeds up every file Wwise opens, brought the first frame to 5.7 s; a lighter `ReadDirectory` to 1.8 s on the Mac (9.9 s → expected about 3 s on an iPhone), and the opening movie starts at 7 s instead of 49 s.
 - **Resolved: a null read in `sdk` under `nn::applet::CreateLibraryApplet`** (title menu → DLC → `nn::ec::ShowShopAddOnContentList`). Every `Show…` overload the game imports is hooked; the shop calls act as if the player closed the shop (`hle_misc.c`).
-- **Resolved: an abort in `nn::sm::Initialize` under `nn::pctl::IsFreeCommunicationAvailable`** entering the first battle map: answered "not available".
+- **Resolved: an abort in `nn::sm::Initialize` under `nn::pctl::IsFreeCommunicationAvailable`** entering the first battle map: the host answers it ([Parental controls and free communication](../../../docs/reference/services.md#parental-controls-and-free-communication)).
 - Add-on content: its two DLC packages each hold one empty marker file (`e0`, `h0`); the content is already in update 2.0.0. `DLCManager.RefreshHasList` marks a content owned when its mount succeeded (probe `main+0x29f3c88`).
 - It calls `GetSharedFontAddress` without importing `ScalableFontEngineHelper::Decode` (a Unity player), so it gets the plain TTF.
 - `SignalToAddress` type 2 now subtracts 2 as Horizon does; it did not change Engage's demo crash (the address-space shortage above).
