@@ -30,10 +30,11 @@ static void feed_bytes(dm_nex_stream *s, bool out, const Buf *b, size_t step) {
 }
 
 int main(void) {
-    // Disabled unless exactly "1".
+    // Disabled unless exactly "1" or "2"; only "2" adds call stacks.
     const char *off[] = {NULL, "", "0", "true", "11"};
     for (unsigned i = 0; i < 5; i++) { if (off[i]) setenv("DM_NEX_TRACE", off[i], 1); else unsetenv("DM_NEX_TRACE"); CHECK(!dm_nex_enabled()); }
-    setenv("DM_NEX_TRACE", "1", 1); CHECK(dm_nex_enabled());
+    setenv("DM_NEX_TRACE", "2", 1); CHECK(dm_nex_enabled() && dm_nex_stacks());
+    setenv("DM_NEX_TRACE", "1", 1); CHECK(dm_nex_enabled() && !dm_nex_stacks());
 
     // Client: upgrade request, then a masked frame holding an ACK and a request of protocol 109
     // (escaped) carrying a secret-looking parameter that must not be printed.
@@ -59,10 +60,10 @@ int main(void) {
         TraceCapture capture = trace_capture_begin();
         feed_bytes(&up, true, &client, step); feed_bytes(&down, false, &server, step);
         char *text = trace_capture_end(capture);
-        CHECK(strstr(text, "[nex-trace] session=3 send request proto=109 method=38 call=42\n"));
-        CHECK(strstr(text, "[nex-trace] session=3 recv response proto=109 call=42 result=0x80030065\n"));
-        CHECK(strstr(text, "[nex-trace] session=3 recv response proto=10 method=2 call=43 ok\n"));
-        CHECK(strstr(text, "[nex-trace] session=3 recv disconnect\n"));
+        CHECK(strstr(text, " session=3 send request proto=109 method=38 call=42\n"));
+        CHECK(strstr(text, " session=3 recv response proto=109 call=42 result=0x80030065\n"));
+        CHECK(strstr(text, " session=3 recv response proto=10 method=2 call=43 ok\n"));
+        CHECK(strstr(text, " session=3 recv disconnect\n"));
         CHECK(!strstr(text, "SECRET") && !strstr(text, "ZZ") && !strstr(text, "unparsed"));
         unsigned lines = 0; for (char *c = text; *c; c++) lines += *c == '\n'; CHECK(lines == 4);
         free(text); dm_nex_free(&up); dm_nex_free(&down);

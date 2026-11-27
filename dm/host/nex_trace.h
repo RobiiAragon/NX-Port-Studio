@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 enum { DM_NEX_LIMIT = 1 << 18, DM_NEX_LINES = 1024 };
 typedef enum { DM_NEX_START, DM_NEX_HEADER, DM_NEX_FRAMES, DM_NEX_OFF } dm_nex_phase;
@@ -33,7 +34,9 @@ typedef struct {
     uint8_t *message; size_t message_len;         // DATA payload fragments of one RMC message
 } dm_nex_stream;
 
-static inline bool dm_nex_enabled(void) { const char *s = getenv("DM_NEX_TRACE"); return s && !strcmp(s, "1"); }
+// "2" also prints the guest's call stack at each write (hle_ssl_apple.m).
+static inline bool dm_nex_enabled(void) { const char *s = getenv("DM_NEX_TRACE"); return s && (!strcmp(s, "1") || !strcmp(s, "2")); }
+static inline bool dm_nex_stacks(void) { const char *s = getenv("DM_NEX_TRACE"); return s && !strcmp(s, "2"); }
 static inline void dm_nex_free(dm_nex_stream *s) { free(s->packets); free(s->message); memset(s, 0, sizeof *s); s->phase = DM_NEX_OFF; }
 static inline uint32_t dm_nex_u32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 static inline uint16_t dm_nex_u16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
@@ -43,7 +46,11 @@ static inline void dm_nex_line(uint64_t session, bool out, const char *format, .
     static _Atomic unsigned lines;
     if (atomic_fetch_add(&lines, 1) >= DM_NEX_LINES) return;
     char text[160]; __builtin_va_list list; __builtin_va_start(list, format); vsnprintf(text, sizeof text, format, list); __builtin_va_end(list);
-    int saved = errno; fprintf(stderr, "[nex-trace] session=%" PRIu64 " %s %s\n", session, out ? "send" : "recv", text); errno = saved;
+    struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now);   // the same clock as the net trace's t=
+    int saved = errno;
+    fprintf(stderr, "[nex-trace] t=%llu session=%" PRIu64 " %s %s\n", (unsigned long long)now.tv_sec * 1000 + (unsigned long long)now.tv_nsec / 1000000,
+            session, out ? "send" : "recv", text);
+    errno = saved;
 }
 
 static inline void dm_nex_rmc(uint64_t session, bool out, const uint8_t *p, size_t n) {

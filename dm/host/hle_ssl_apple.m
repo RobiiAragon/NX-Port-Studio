@@ -25,6 +25,7 @@
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 void dm_guest_host_wait_begin(void);
+void dm_backtrace(uint64_t fp);   // DM_NEX_TRACE=2 (crash.c; hle_net_backend.c has an empty weak one for fixtures)
 void dm_guest_host_wait_end(void);
 
 @interface DmTlsContext : NSObject
@@ -573,7 +574,10 @@ uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size)
     if ((!result && *out > 0 && !c.tracedWrite) || (result && result != DM_SSL_WOULD_BLOCK)) {
         trace(c, DM_TLS_WRITE, result, 0, (unsigned)*out); if (!result) c.tracedWrite = YES;
     }
-    if (!result && *out > 0 && dm_nex_enabled()) dm_nex_feed(&c->nexOut, c.identifier, true, buffer, (size_t)*out);
+    if (!result && *out > 0 && dm_nex_enabled()) {
+        dm_nex_feed(&c->nexOut, c.identifier, true, buffer, (size_t)*out);
+        if (dm_nex_stacks()) dm_backtrace((uint64_t)__builtin_frame_address(0));
+    }
     error(c, result); [c.lock unlock]; return result;
 } }
 uint32_t dm_ssl_pending(void *object, int *out) { @autoreleasepool {

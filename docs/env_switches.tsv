@@ -98,7 +98,7 @@ DM_NETWORK	player	auto routes LAN, LDN and configured online calls by service; o
 DM_NETWORK_INTERFACE	player	IPv4 interface name for local sockets; otherwise use the actual default route
 DM_NET_DISABLE_MULTICAST	diagnostic	1 disables direct multicast discovery, leaving configured relay discovery available
 DM_NET_DISCOVERY_PEER	player	Optional discovery relay IPv4 endpoint; automatic local discovery requires no entered address
-DM_NET_TRACE	diagnostic	Log native socket and local-network translation details; a connect, send or received datagram names its peer only by kind (provider<n>: the n-th address a Nextendo route resolved to, private, loopback, multicast or public) and port; each Nextendo-mode lookup prints the service name the game asked for and the provider address it was routed to (a numeric name prints as (address))
+DM_NET_TRACE	diagnostic	Log native socket and local-network translation details; a connect, send or received datagram names its peer only by kind (provider<n>: the n-th address a Nextendo route resolved to, private, loopback, multicast or public) and port; each Nextendo-mode lookup prints the service name the game asked for and the provider address it was routed to (a numeric name prints as (address)); socket lines carry `t=` (milliseconds, the monotonic clock); `=2` also prints the guest's call stack at each send and close
 DM_NET_UDP_KEEP	diagnostic	0 closes a Nextendo UDP socket at once instead of holding it 5 seconds for a rebind of the same port (Pia's NAT check then match socket)
 DM_NEXTENDO_AGENT	diagnostic	0 skips NX Port Studio's Nextendo agent: a Mac port reads the saved account, renews it and sends its friends and presence requests by itself, as before the agent (docs/nextendo-agent.md)
 DM_NEXTENDO_BCAT_DIR	path	Private title/version calendar recipe and validated seed snapshot; runtime checks for public HTTPS updates when online services are enabled
@@ -106,7 +106,7 @@ DM_NEXTENDO_CLIENT_ID	switch	Public OAuth application identifier embedded in mob
 DM_NEXTENDO_PEER_COLLECTION	path	Optional iOS build-time directory of already-approved title/host peer certificates; defaults to Studio's local collection
 DM_NEXTENDO_ROUTES	path	Private reviewed Nextendo route-policy TSV with exact host and certificate constraints
 DM_NEXTENDO_SERVICES_DIR	path	Validated game service profile directory for Nextendo
-DM_NEX_TRACE	diagnostic	`=1` logs each NEX remote call carried by a TLS stream (PRUDP-Lite over a WebSocket): direction, protocol, method, call ID and a response's success or result code, at most 1,024 lines; parameters and return values are never printed, and other TLS streams print nothing
+DM_NEX_TRACE	diagnostic	`=1` logs each NEX remote call carried by a TLS stream (PRUDP-Lite over a WebSocket): direction, protocol, method, call ID and a response's success or result code, at most 1,024 lines; parameters and return values are never printed, and other TLS streams print nothing; lines carry `t=` on the same clock as `DM_NET_TRACE`; `=2` also prints the guest's call stack at each write
 DM_NICK	switch	The account nickname the game sees (default `Player`)
 DM_NRO	switch	`0` turns off loading of the NRO modules the game's NRR files register (on by default): every `nn::ro::LoadModule` then fails
 DM_NVN_ALLOCPROF	diagnostic	`=1` charges Metal allocation growth to each replayed op type and function, and logs command allocator sizes and each new texture (serial, size, format, storage)

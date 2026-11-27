@@ -172,7 +172,7 @@ static int net_host_result(int result, int err) { return result < 0 ? net_error(
 static uint64_t net_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000; }
 static void net_trace(const char *op, int fd, long result) {
     const char *s = getenv("DM_NET_TRACE");
-    if (s && atoi(s)) fprintf(stderr, "net: %s guest_fd=%d result=%ld errno=%d\n", op, fd, result, result < 0 ? t_net_errno : 0);
+    if (s && atoi(s)) fprintf(stderr, "net: t=%llu %s guest_fd=%d result=%ld errno=%d\n", (unsigned long long)net_ms(), op, fd, result, result < 0 ? t_net_errno : 0);
 }
 // The addresses a Nextendo route resolved a name to (the provider's servers), so the trace can name a
 // datagram's peer by kind without printing it: a player's own or another player's address never appears.
@@ -197,11 +197,19 @@ static const char *net_peer_kind(uint32_t network) {
     if ((a >> 28) == 0xe || a == 0xffffffffu) return "multicast";
     return "public";
 }
+// DM_NET_TRACE=2 also prints the guest's call stack at each send and close: the code that sends a datagram
+// or gives a socket up. The host's crash.c defines it; the socket fixtures, which link no crash handler, get this empty one.
+__attribute__((weak)) void dm_backtrace(uint64_t fp) { (void)fp; }
+static void net_trace_stack(void) {
+    const char *s = getenv("DM_NET_TRACE");
+    if (s && atoi(s) >= 2) dm_backtrace((uint64_t)__builtin_frame_address(0));
+}
 static void net_trace_peer(const char *op, int fd, long result, const struct sockaddr_in *peer) {
     const char *s = getenv("DM_NET_TRACE");
     if (!(s && atoi(s))) return;
+    if (!strcmp(op, "send")) net_trace_stack();
     if (!peer) { net_trace(op, fd, result); return; }
-    fprintf(stderr, "net: %s guest_fd=%d result=%ld errno=%d peer=%s:%u\n", op, fd, result, result < 0 ? t_net_errno : 0,
+    fprintf(stderr, "net: t=%llu %s guest_fd=%d result=%ld errno=%d peer=%s:%u\n", (unsigned long long)net_ms(), op, fd, result, result < 0 ? t_net_errno : 0,
             net_peer_kind(peer->sin_addr.s_addr), ntohs(peer->sin_port));
 }
 // Each operation borrows a duplicate while under the lock. Close removes the guest slot first;
@@ -358,6 +366,7 @@ static int net_close_owned(int guest, int check_generation, uint64_t generation)
     return net_host_result(result, err);
 }
 int dm_net_close(int guest) {
+    net_trace_stack();
     // Event counters are local synchronization descriptors, including offline.
     pthread_mutex_lock(&g_net_lock);
     int event = guest >= 0 && guest < NET_MAX && g_sockets[guest].used && g_sockets[guest].event;
