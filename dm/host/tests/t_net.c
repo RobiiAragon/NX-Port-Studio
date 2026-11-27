@@ -95,6 +95,7 @@ typedef long (*fn_recvfrom)(int, void *, unsigned long, int, void *, unsigned *)
 typedef int (*fn_option)(int, int, int, const void *, unsigned);
 typedef int (*fn_getoption)(int, int, int, void *, unsigned *);
 typedef int (*fn_poll)(void *, unsigned long, int);
+typedef unsigned (*fn_proxy)(void *);
 typedef int (*fn_select)(int, void *, void *, void *, void *);
 typedef int (*fn_void)(void);
 typedef void (*fn_vvoid)(void);
@@ -209,6 +210,8 @@ static void offline(void) {
     CHECK(!dm_net_enabled() && SOCKET(2, 2, 17) == -1, "offline remains the default, no socket created");
     CHECK(GET(fn_void, "_ZN2nn6socket12GetLastErrnoEv")() == 100, "offline reports actual Horizon ENETDOWN");
     CHECK(GET(fn_void, "_ZN2nn4nifm18IsNetworkAvailableEv")() == 0, "offline NIFM unavailable");
+    uint8_t proxy[0xAC]; memset(proxy, 0xa5, sizeof proxy);
+    CHECK(GET(fn_proxy, "_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE")(proxy) == RES_FAIL && proxy[0] == 0xa5, "offline has no proxy setting and leaves the output untouched");
     fn_void on_hold = GET(fn_void, "_ZN2nn4nifm22IsNetworkRequestOnHoldEv"); on_hold();
     GET(fn_vvoid, "_ZN2nn4nifm20SubmitNetworkRequestEv")();
     CHECK(on_hold() == 1, "offline retains asynchronous request hold");
@@ -224,6 +227,12 @@ static void nifm(void) {
     setenv("DM_NETWORK", "auto", 1); setenv("DM_NETWORK_INTERFACE", "lo0", 1);
     GET(fn_vvoid, "_ZN2nn4nifm27SubmitNetworkRequestAndWaitEv")();
     CHECK(dm_nifm_available(), "NIFM automatic request completes with real up interface");
+    fn_proxy proxy_setting = GET(fn_proxy, "_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE");
+    uint8_t proxy[0xAC]; memset(proxy, 0xa5, sizeof proxy); int zero = 1;
+    CHECK(proxy_setting(proxy) == RES_OK, "an accepted network reports its proxy setting");
+    for (int i = 0; i < 0xAA; i++) zero &= proxy[i] == 0;
+    CHECK(zero && proxy[0xAA] == 0xa5 && proxy[0xAB] == 0xa5, "the setting is the 0xAA-byte all-zero (disabled) proxy and nothing past it");
+    CHECK(proxy_setting(NULL) == RES_FAIL, "no output, no setting");
     uint32_t ip = 0, mask = 0, router = 1, dns1 = 0, dns2 = 0;
     CHECK(dm_net_ipconfig(&ip, &mask, &router, &dns1, &dns2) == 0 && ip == htonl(0x7f000001) && mask == htonl(0xff000000) && router == 0, "actual loopback IP/mask and no invented router");
     setenv("DM_NETWORK_INTERFACE", "no-such-interface", 1);

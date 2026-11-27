@@ -178,17 +178,20 @@ static void net_trace(const char *op, int fd, long result) {
 // datagram's peer by kind without printing it: a player's own or another player's address never appears.
 enum { NET_ROUTED_MAX = 8 };
 static _Atomic uint32_t g_routed[NET_ROUTED_MAX];
-static void net_routed_add(uint32_t address) {
+static unsigned net_routed_add(uint32_t address) {
     for (unsigned i = 0; i < NET_ROUTED_MAX; i++) {
         uint32_t seen = atomic_load(&g_routed[i]);
-        if (seen == address) return;
-        if (!seen && atomic_compare_exchange_strong(&g_routed[i], &seen, address)) return;
-        if (seen == address) return;
+        if (seen == address) return i + 1;
+        if (!seen && atomic_compare_exchange_strong(&g_routed[i], &seen, address)) return i + 1;
+        if (seen == address) return i + 1;
     }
+    return 0;
 }
+// "provider<n>": the n-th provider address a route resolved to; the resolve trace names the host that gave it.
 static const char *net_peer_kind(uint32_t network) {
+    static const char *const routed[NET_ROUTED_MAX] = {"provider1", "provider2", "provider3", "provider4", "provider5", "provider6", "provider7", "provider8"};
     uint32_t a = ntohl(network);
-    for (unsigned i = 0; i < NET_ROUTED_MAX; i++) if (atomic_load(&g_routed[i]) == network) return "provider";
+    for (unsigned i = 0; i < NET_ROUTED_MAX; i++) if (atomic_load(&g_routed[i]) == network) return routed[i];
     if ((a >> 24) == 127) return "loopback";
     if ((a >> 24) == 10 || (a >> 20) == 0xac1 || (a >> 16) == 0xc0a8 || (a >> 22) == (0x64400000u >> 22) || (a >> 16) == 0xa9fe) return "private";
     if ((a >> 28) == 0xe || a == 0xffffffffu) return "multicast";
@@ -746,7 +749,14 @@ static int net_resolver_name(const char *host, int flags, char expanded[DM_NSD_F
         dm_net_dns_provider provider = atomic_load(&g_dns_provider);
         int policy = provider ? provider(*lookup, redirected, INET_ADDRSTRLEN) : numeric ? 0 : -1;
         if (policy < 0 || policy > 1 || (policy > 0 && (!memchr(redirected, 0, INET_ADDRSTRLEN) || inet_pton(AF_INET, redirected, &literal) != 1))) return 8;
-        if (policy > 0) { *lookup = redirected; net_routed_add(literal.s_addr); }
+        unsigned slot = 0;
+        if (policy > 0) { *lookup = redirected; slot = net_routed_add(literal.s_addr); }
+        const char *trace = getenv("DM_NET_TRACE");
+        // The name is the game's own service name; a numeric one is not printed, only its kind.
+        if (trace && atoi(trace)) {
+            if (slot) fprintf(stderr, "net: resolve host=%s route=provider%u\n", numeric ? "(address)" : host, slot);
+            else fprintf(stderr, "net: resolve host=%s route=%s\n", numeric ? "(address)" : host, policy > 0 ? "provider" : "none");
+        }
     }
     return 0;
 }

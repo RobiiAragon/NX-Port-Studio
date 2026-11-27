@@ -98,7 +98,7 @@ DM_NETWORK	player	auto routes LAN, LDN and configured online calls by service; o
 DM_NETWORK_INTERFACE	player	IPv4 interface name for local sockets; otherwise use the actual default route
 DM_NET_DISABLE_MULTICAST	diagnostic	1 disables direct multicast discovery, leaving configured relay discovery available
 DM_NET_DISCOVERY_PEER	player	Optional discovery relay IPv4 endpoint; automatic local discovery requires no entered address
-DM_NET_TRACE	diagnostic	Log native socket and local-network translation details; a connect, send or received datagram names its peer only by kind (provider: an address a Nextendo route resolved to, private, loopback, multicast or public) and port
+DM_NET_TRACE	diagnostic	Log native socket and local-network translation details; a connect, send or received datagram names its peer only by kind (provider<n>: the n-th address a Nextendo route resolved to, private, loopback, multicast or public) and port; each Nextendo-mode lookup prints the service name the game asked for and the provider address it was routed to (a numeric name prints as (address))
 DM_NET_UDP_KEEP	diagnostic	0 closes a Nextendo UDP socket at once instead of holding it 5 seconds for a rebind of the same port (Pia's NAT check then match socket)
 DM_NEXTENDO_AGENT	diagnostic	0 skips NX Port Studio's Nextendo agent: a Mac port reads the saved account, renews it and sends its friends and presence requests by itself, as before the agent (docs/nextendo-agent.md)
 DM_NEXTENDO_BCAT_DIR	path	Private title/version calendar recipe and validated seed snapshot; runtime checks for public HTTPS updates when online services are enabled

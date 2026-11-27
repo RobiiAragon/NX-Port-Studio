@@ -633,6 +633,13 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Check:** 12 of 12 boots with four hosts at once reached the title, with both fixes; a host that answers at once hung 1 of 4 in the same test.
 - **Note:** how it was found: the hung boots' logs diverged from good ones at the save probe (`DM_FS=1`), the thread dumps showed nothing but idle waits, and `DM_PROBE` on the state machine, then `peek` lines in a hung run's `DM_CTL` file, followed the pointers to the status word (a probe on the hot path slowed the boot enough to hide the race: 8 of 8 good).
 
+### A network without a proxy reported as no proxy setting
+
+- **Symptom:** online, the game's log prints `Error: nn::nifm::GetCurrentProxySetting() failed. Err Desc: 1`, and the service it was about to call may stop there. Animal Crossing printed it before each new TLS session it opened while opening its island to visitors.
+- **Cause:** the host answered `nifm::GetCurrentProxySetting` with a failure in every mode, the offline answer. A console on a network with no proxy succeeds and returns the setting with its `enabled` flag clear.
+- **Fix:** with an accepted network request (`dm_nifm_available`), `hle_net.c` zeroes the 0xAA-byte `nifm::ProxySetting` (`{bool enabled, u16 port, char server[0x64], bool auth, char user[0x20], char password[0x20]}`) and returns success; offline or with no output it still fails and writes nothing. [ACNHRecomp](https://github.com/Nycolazs/ACNHRecomp) (MIT) answers it the same way in `runtime/src/hle_net.cpp`. `t_net` checks both answers and that nothing past the 0xAA bytes is written.
+- **Found on:** [Animal Crossing: New Horizons](../../dm/games/01006F8002326000/README.md) 3.0.3 on Nextendo.
+
 ### Game menus choose network services automatically
 
 - **Symptom:** a player must choose a launcher connection mode and restart before switching between online, local wireless and LAN menus in the same game; missing online setup can prevent an unrelated local session from starting.
