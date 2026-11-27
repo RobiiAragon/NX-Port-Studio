@@ -6,7 +6,7 @@
 
 Je m’appuie sur [nxnative de seedds](https://github.com/seedds/nxnative) pour ce projet indépendant. Je préserve les crédits des auteurs du moteur et leurs avis de copyright : [crédits](CREDITS.md), [licence MIT](LICENSE).
 
-> **1.6.0 :** la version stable qui réunit mes onze candidates. Elle apporte le moteur actuel de nxnative ; le jeu en ligne, en LAN et en communication locale depuis les menus de chaque jeu ; Splatoon 2 et Splatoon 3 12.0.0, où j’ai terminé une partie de Salmon Run en ligne ; le transfert de sauvegardes JKSV ; les manettes PowerA filaires sur Mac ; et la présence Nextendo pour que mes amis me voient. [Notes et limites](docs/releases/1.6.0.md).
+> **1.7.0 :** Animal Crossing: New Horizons se joue en ligne avec Nextendo sur mon Mac : j’ai ouvert mon île avec un code Dodo et un visiteur est venu puis reparti. Studio lance aussi les ports Mac installés, avec une Bibliothèque façon menu d’accueil et une seule session Nextendo pour tous les ports. [Notes et limites](docs/releases/1.7.0.md).
 
 J’intègre **l’importation et l’exportation des ZIP JKSV** dans Studio et les nouveaux portages Mac/iPhone, avec conservation des sauvegardes précédentes, accès aux dossiers et partage via Fichiers sur iOS. Voir [le transfert et ses limites de validation](docs/save-data.md).
 
@@ -63,8 +63,9 @@ Voici les jeux Switch dont j’ai essayé les modes réseau dans des portages NX
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Une manche d’arène contre un joueur distant | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Hall et file de Guerre de territoire | — | — | Mac |
 | [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ Une partie de Salmon Run avec d’autres joueurs | — | — | Mac |
+| [Animal Crossing: New Horizons](dm/games/01006F8002326000/README.md) | 3.0.3 | ✅ Un visiteur est venu sur mon île avec un code Dodo | — | — | Mac |
 
-Limites connues : Smash rejette le Match rapide pour connexion instable. Le matchmaking de Splatoon 2 et 3 demande d’autres joueurs dans le même mode au même moment ; le serveur de Splatoon 3 descend au plus à la moitié de l’effectif (4 en Guerre de territoire, 2 en Salmon Run). Je n’ai pas validé le jeu en ligne sur iPhone. La note de chaque jeu donne la version exacte et les points ouverts.
+Limites connues : Smash rejette le Match rapide pour connexion instable. Le matchmaking de Splatoon 2 et 3 demande d’autres joueurs dans le même mode au même moment ; le serveur de Splatoon 3 descend au plus à la moitié de l’effectif (4 en Guerre de territoire, 2 en Salmon Run). Je n’ai pas validé le jeu en ligne sur iPhone. Dans Animal Crossing, j’ai reçu un visiteur mais je n’ai pas encore visité une autre île. La note de chaque jeu donne la version exacte et les points ouverts.
 
 ## Démarrage
 
