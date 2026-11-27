@@ -10,10 +10,31 @@ public struct NextendoFriend: Sendable, Equatable, Identifiable {
     /// nn::friends PresenceStatus: 0 offline, 1 online, 2 playing.
     public let status: Int
     public let titleID: String?
+    /// The friend's profile picture from the provider's gallery (`avatar`, served at
+    /// `/avatars/<id>.jpg`) and its background colour (`color`, `#rrggbb`); nil when unset.
+    public let avatar: String?
+    public let color: String?
+    /// A best friend (`favorite`): shown first, as the provider's own apps do.
+    public let favorite: Bool
+    public let friendCode: String?
     public var id: UInt64 { pid }
     public var isOnline: Bool { status > 0 }
-    public init(pid: UInt64, name: String, status: Int, titleID: String?) {
+    public var avatarURL: URL? { avatar.flatMap { URL(string: "https://nextendo.network/avatars/\($0).jpg") } }
+    public init(pid: UInt64, name: String, status: Int, titleID: String?,
+                avatar: String? = nil, color: String? = nil, favorite: Bool = false, friendCode: String? = nil) {
         self.pid = pid; self.name = name; self.status = status; self.titleID = titleID
+        self.avatar = avatar; self.color = color; self.favorite = favorite; self.friendCode = friendCode
+    }
+}
+
+/// A friend code as the provider stores it (`SW-0000-0000-0000`), from any spelling with
+/// its twelve digits; nil for anything else.
+public enum NextendoFriendCode {
+    public static func normalized(_ text: String) -> String? {
+        let digits = text.filter(\.isASCII).filter(\.isNumber)
+        guard digits.count == 12, text.allSatisfy({ $0.isNumber || $0 == "-" || $0 == " " || $0.uppercased() == "S" || $0.uppercased() == "W" }) else { return nil }
+        let d = Array(digits)
+        return "SW-" + String(d[0..<4]) + "-" + String(d[4..<8]) + "-" + String(d[8..<12])
     }
 }
 
@@ -21,7 +42,11 @@ public struct NextendoFriendsView: Sendable, Equatable {
     public let friends: [NextendoFriend]
     /// Incoming friend requests.
     public let requests: [NextendoFriend]
-    public init(friends: [NextendoFriend], requests: [NextendoFriend]) { self.friends = friends; self.requests = requests }
+    /// Requests this account sent that are still pending.
+    public let sent: [NextendoFriend]
+    public init(friends: [NextendoFriend], requests: [NextendoFriend], sent: [NextendoFriend] = []) {
+        self.friends = friends; self.requests = requests; self.sent = sent
+    }
 
     /// `{friends, requests, sent}`; a malformed entry is skipped, a malformed document is nil.
     public static func decode(_ data: Data) -> NextendoFriendsView? {
@@ -35,10 +60,16 @@ public struct NextendoFriendsView: Sendable, Equatable {
             let presence = row["presence"] as? [String: Any]
             let status = (presence?["status"] as? NSNumber).map { min(max($0.intValue, 0), 2) } ?? 0
             let title = (presence?["app_id"] as? String).flatMap { $0.range(of: "^[0-9A-Fa-f]{16}$", options: .regularExpression) == nil ? nil : $0.lowercased() }
-            return NextendoFriend(pid: number.uint64Value, name: String(text.prefix(64)), status: status, titleID: title)
+            func matching(_ key: String, _ pattern: String) -> String? {
+                (row[key] as? String).flatMap { $0.range(of: pattern, options: .regularExpression) == nil ? nil : $0 }
+            }
+            return NextendoFriend(pid: number.uint64Value, name: String(text.prefix(64)), status: status, titleID: title,
+                                  avatar: matching("avatar", "^[A-Za-z0-9_-]{1,64}$"), color: matching("color", "^#[0-9A-Fa-f]{6}$"),
+                                  favorite: row["favorite"] as? Bool == true, friendCode: matching("friend_code", "^SW-[0-9]{4}-[0-9]{4}-[0-9]{4}$"))
         }
         return NextendoFriendsView(friends: rows.prefix(1024).compactMap(entry),
-                                   requests: ((root["requests"] as? [Any]) ?? []).prefix(1024).compactMap(entry))
+                                   requests: ((root["requests"] as? [Any]) ?? []).prefix(1024).compactMap(entry),
+                                   sent: ((root["sent"] as? [Any]) ?? []).prefix(1024).compactMap(entry))
     }
 }
 

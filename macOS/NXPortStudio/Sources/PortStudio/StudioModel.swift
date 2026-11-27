@@ -41,6 +41,13 @@ final class StudioModel {
     var isLoadingLibrary = false
     var libraryMessage: String?
     var librarySelection: String?
+    var libraryScreen: LibraryScreen = .home
+    var libraryRow: LibraryRow = .games
+    var libraryShortcut = 0
+    var libraryFriendsSection: LibraryFriendsSection = .friends
+    var libraryFriendCode = ""
+    var isSendingFriendRequest = false
+    var libraryFriendRequestResult: (sent: Bool, message: String)?
     var libraryFullScreen = false
     @ObservationIgnored var libraryOwnsWindowFullScreen = false
     var savePorts: [InstalledMacPort] = []

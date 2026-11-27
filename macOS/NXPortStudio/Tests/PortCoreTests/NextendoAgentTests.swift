@@ -301,6 +301,11 @@ final class NextendoAgentTests: XCTestCase {
         XCTAssertEqual(friends?.status, .ok); XCTAssertEqual(friends?.view?.friends.map(\.name), ["SyntheticFriend"])
         let answer = await client.answerFriendRequest(501, accept: true)
         XCTAssertEqual(answer?.status, .failed)               // the fixture provider has no such route
+        let request = await client.sendFriendRequest("SW-3999-0628-0716")
+        XCTAssertNotNil(request)                              // the call crosses XPC and comes back
+        XCTAssertEqual(request?.already, false)
+        let malformed = await client.sendFriendRequest("not a code")
+        XCTAssertEqual(malformed?.status, .refused)
         let notifications = await client.setNotifications(true)
         XCTAssertEqual(notifications, false)                  // a server without a hub has no notifications
         let registered = await client.registerPeer(app: try XCTUnwrap(Bundle.main.executableURL))
