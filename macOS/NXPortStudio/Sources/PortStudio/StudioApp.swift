@@ -13,8 +13,10 @@ struct StudioApp: App {
                 .frame(minWidth: 900, minHeight: 660)
                 .task {
                     async let account: Void = model.reloadNextendoAccount()
+                    async let agent: Void = model.renewNextendoAgentIfUpdated()
                     await model.initialize()
                     await account
+                    await agent
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     model.runner.cancelImmediately()

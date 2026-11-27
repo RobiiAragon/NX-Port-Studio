@@ -25,7 +25,10 @@ public enum NextendoAgentCode {
     }
     private static func cdhash(of code: SecStaticCode) throws -> Data {
         // Validate the signature first: a broken or unsigned bundle has no identity to trust.
-        guard SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess else { throw NextendoError.authorizationUnavailable }
+        // Only the code directory is the identity, and XPC checks it again on every
+        // connection; hashing every sealed resource would read a whole port (many GB).
+        guard SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSDoNotValidateResources), nil) == errSecSuccess
+        else { throw NextendoError.authorizationUnavailable }
         var info: CFDictionary?
         guard SecCodeCopySigningInformation(code, [], &info) == errSecSuccess,
               let values = info as? [String: Any], let unique = values[kSecCodeInfoUnique as String] as? Data,
@@ -263,7 +266,10 @@ public actor NextendoAgentAccount {
             do { session = try store.load() } catch { return (.unavailable, nil) }
             guard let session else { return (.signedOut, nil) }
             guard session.tokenKind == .nex, !session.summary(at: now()).isExpired,
-                  let grant = session.renewal, grant.scopes.contains(scope) else { return (.unavailable, nil) }
+                  let grant = session.renewal, grant.scopes.contains(scope) else {
+                agentLog.error("no OAuth grant for scope \(scope, privacy: .public); sign in again in Studio")
+                return (.unavailable, nil)
+            }
             if grant.expiresAt > now().addingTimeInterval(60) { return (.ok, grant.accessToken) }
             if attempt == 0 { guard await prepare(force: false) else { return (.failed, nil) } }
         }
@@ -290,8 +296,15 @@ public actor NextendoAgentAccount {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body { request.httpBody = body; request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         let response: NextendoHTTPResponse
-        do { response = try await http.send(request) } catch { return (.failed, 0, nil) }
-        guard response.data.count <= NextendoAgent.responseLimit else { return (.failed, response.statusCode, nil) }
+        do { response = try await http.send(request) } catch {
+            agentLog.error("provider request failed: \(String(describing: error), privacy: .public)")
+            return (.failed, 0, nil)
+        }
+        guard response.data.count <= NextendoAgent.responseLimit else {
+            agentLog.error("provider answer of \(response.data.count, privacy: .public) bytes is over the agent's limit")
+            return (.failed, response.statusCode, nil)
+        }
+        if !(200..<300).contains(response.statusCode) { agentLog.error("provider answered HTTP \(response.statusCode, privacy: .public)") }
         return (.ok, response.statusCode, (200..<300).contains(response.statusCode) ? response.data : nil)
     }
 }
