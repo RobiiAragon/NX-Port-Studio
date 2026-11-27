@@ -111,9 +111,19 @@ static void v2_checks(void) {
     }
     CHECK(dm_nextendo_routes_retry_unconfigured() == 0 && dm_nextendo_routes_status() == 0, "explicit setup retry cannot replace a published policy");
 }
+#include <unistd.h>
+void dm_nextendo_routes_test_owner(uid_t euid, const char *bundle);
 int main(int argc, char **argv) {
     if (argc < 3 || argc > 5) return 2; setenv("DM_NETWORK", "nextendo", 1); if (strcmp(argv[1], "-")) setenv("DM_NEXTENDO_ROUTES", argv[1], 1); else unsetenv("DM_NEXTENDO_ROUTES");
-    int expected = atoi(argv[2]), status = dm_nextendo_routes_initialize(); CHECK(status == expected && dm_nextendo_routes_status() == expected, "configuration reports its precise safe status");
+    // DM_ROUTES_TEST_FOREIGN=<bundle or -> makes every file look owned by another user, as
+    // iOS installs a bundle under _installd; only the status of that load is checked.
+    const char *foreign = getenv("DM_ROUTES_TEST_FOREIGN");
+    if (foreign) dm_nextendo_routes_test_owner(geteuid() + 1, strcmp(foreign, "-") ? foreign : NULL);
+    int expected = atoi(argv[2]), status = dm_nextendo_routes_initialize();
+    if (foreign) {
+        CHECK(status == expected, "another owner's route files load only from inside the main bundle");
+        printf("Nextendo routes: %d checks, %d failures (foreign owner)\n", checks, failures); return failures ? 1 : 0;
+    } CHECK(status == expected && dm_nextendo_routes_status() == expected, "configuration reports its precise safe status");
     if (argc == 4 && argv[3][0] == '/') {
         setenv("DM_NEXTENDO_ROUTES", argv[3], 1);
         CHECK(dm_nextendo_routes_initialize() == expected, "a failed policy remains immutable without explicit setup");

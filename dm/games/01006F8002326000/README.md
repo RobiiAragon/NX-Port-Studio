@@ -60,6 +60,7 @@ On the Mac: a new game through Tom Nook's counter (name entry on the game's own 
 
 General host changes first needed here; each applies to every game:
 
+- **Nextendo routes in the iPhone bundle**: [Route files in an iOS bundle are owned by another user](../../../docs/reference/services.md#route-files-in-an-ios-bundle-are-owned-by-another-user).
 - **Play-history key without a firmware keyring**: [A play-history key without an imported firmware keyring](../../../docs/reference/services.md#a-play-history-key-without-an-imported-firmware-keyring).
 - **The host's shaders compiled when the host is built** (`dm/gfx/msl`, `host_msl_lib`): the HUD's `Compiled 2 shaders … 102.70ms` in play on an iPhone 17 Pro Max came from clear-triangle libraries compiled from source when a new room first issued a scissored clear; [The host's own shaders compiled from source at run time](../../../docs/reference/shaders.md#the-hosts-own-shaders-compiled-from-source-at-run-time).
 - **Halfword jump tables padded to their largest entry** (`half_count` in `patch_nso.py`): [Halfword jump table landing pads sized to the largest entry](../../../docs/reference/rewriter.md#halfword-jump-table-landing-pads-sized-to-the-largest-entry).
@@ -79,5 +80,5 @@ General host changes first needed here; each applies to every game:
 
 - Check the island map (issue #73) with the host's alpha test.
 - `game.tsv` still describes the game as "In bring-up", while it plays on the iPhone.
-- Online play on Nextendo: on the Mac the game connects and Dodo searches for best friends' islands. Opening my island with a Dodo Code works and a visitor came and went (see Services); visiting another island and the iPhone are untested.
+- Online play on Nextendo: on the Mac the game connects and Dodo searches for best friends' islands. Opening my island with a Dodo Code works and a visitor came and went (see Services); visiting another island is untested. On iPhone (2026-11-27) the port never went online, signed in or not, because the host refused its bundled routes ([Route files in an iOS bundle are owned by another user](../../../docs/reference/services.md#route-files-in-an-ios-bundle-are-owned-by-another-user)); fixed, not yet retried. Local play from my Mac to the iPhone worked, with the phone at thermal state 2 (serious) after about eight minutes.
 - The keyboard's 8 geometry shaders do not translate.

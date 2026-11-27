@@ -1353,6 +1353,13 @@ This suspension path remains applicable to iOS and explicit host suspension. Mac
 
 ## Native calendar delivery
 
+### Route files in an iOS bundle are owned by another user
+
+- **Symptom:** on iPhone, a port signed in to Nextendo never goes online: its log prints `boot: Nextendo routing status 3` (`DM_NEXTENDO_ROUTES_IO`), and Animal Crossing dropped what the player was doing as soon as it connected to the internet. Local play works, and the same profile loads on the Mac.
+- **Cause:** the route loader (`hle_nextendo_routes.c`) accepted a routes or certificate file only when it is owned by the process's user or by root. iOS installs an app's bundle as `_installd`, so the bundled `dm/nextendo/routes.tsv` failed that check, no route was published, and Nintendo's names were not sent to the provider.
+- **Fix:** a file whose directory lies inside the main bundle (`CFBundleGetMainBundle`, both paths resolved) may have another owner, because the code signature seals the bundle; the check against group- or world-writable files still applies. Outside the bundle the owner check is unchanged. `t_nextendo_routes` makes every file look foreign (`DM_ROUTES_TEST_FOREIGN`) and checks that a bundled profile loads while the same file outside the bundle does not.
+- **Found on:** [Animal Crossing: New Horizons](../../dm/games/01006F8002326000/README.md) 3.0.3, iPhone.
+
 ### BCAT data unavailable after account authorization
 
 - **Symptom:** the game has an account but cannot read its delivery calendar; the old delivery mount always fails, or original SDK delivery-file calls reach an unavailable service.
