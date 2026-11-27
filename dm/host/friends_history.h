@@ -16,7 +16,9 @@ void dm_friends_history_set_key_provider(dm_friends_history_key_provider provide
 // input_flag is the SDK's opaque boolean, preserved as flag & 1. This host's user
 // has no linked Nintendo NSA ID: that field and its presence flag remain zero.
 // UUIDv4 is persisted atomically under DM_ROOT/friends-history (or the working
-// directory on iOS), before success. Failure clears a non-NULL 64-byte output.
+// directory on iOS), before success. With no keyring imported (or a provider that
+// returns false) the key is unsigned: key index 0 and a zero HMAC. A damaged imported
+// keyring fails. Failure clears a non-NULL 64-byte output.
 uint32_t dm_friends_history_key(void *out, const void *uid, unsigned input_flag);
 
 #ifdef DM_FRIENDS_HISTORY_TEST

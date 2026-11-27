@@ -64,10 +64,16 @@ int main(void) {
     CHECK(h_fr_GetPHKey(output+1, zero_uid, 1) == DM_FRIENDS_HISTORY_INVALID_UID && all_zero(output+1, 64));
     CHECK(h_fr_GetPHKey(output+1, other_uid, 1) == DM_FRIENDS_HISTORY_INVALID_UID && all_zero(output+1, 64));
     CHECK(h_fr_GetPHKey(output+1, NULL, 1) == DM_FRIENDS_HISTORY_INVALID_UID);
-    CHECK(h_fr_GetPHKey(output+1, local_uid, 1) != 0 && all_zero(output+1, 64));
+    // No keyring imported: an unsigned key (index 0, zero HMAC) for its own UUID, as a
+    // console never fails this call for an existing user. Another user keeps local_uid's
+    // UUID unset for the known vector below.
+    uint8_t unsigned_uid[16] = {4};
+    CHECK(dm_friends_history_key(output+1, unsigned_uid, 1) == 0 && output[1] == 1 && output[2] == 1 && output[3] == 0 && output[5] == 1);
+    CHECK(all_zero(output+6, 10) && !all_zero(output+17, 16) && (output[23]&0xf0) == 0x40 && all_zero(output+33, 32));
     CHECK(output[0] == 0x6a && output[65] == 0x6a && !wait_depth);
+    uint8_t first_uuid[16]; memcpy(first_uuid, output+17, 16);
     dm_friends_history_set_key_provider(unavailable);
-    CHECK(h_fr_GetPHKey(output+1, local_uid, 1) != 0 && all_zero(output+1, 64));
+    CHECK(dm_friends_history_key(output+1, unsigned_uid, 0) == 0 && output[5] == 0 && !memcmp(first_uuid, output+17, 16) && all_zero(output+33, 32));
     dm_friends_history_set_key_provider(synthetic_keys); dm_friends_history_set_random_provider(fixed_random);
     CHECK(h_fr_GetPHKey(output+1, local_uid, 0xffffffffu) == 0);
     // Independently calculated with Python's hmac/hashlib over this specified
