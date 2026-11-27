@@ -597,6 +597,16 @@ class App(unittest.TestCase):
         self.assertEqual(p['DMSettings'], [])   # launcher.json's settings, as the saved choices they accept: none here
         self.assertRegex(p['DMCommit'], r'^[0-9a-f]{12}(\+dirty)?$')   # the packing checkout (scripts/bug_report.py, the host's start line)
         self.assertEqual(p['DMChain'], '0123456789ab')   # the chain of the libraries packed (msl/b-<chain>)
+        self.assertEqual(p['DMEngine'], p['DMCommit'])   # in a checkout the engine is its commit (Studio's Library compares it)
+        self.assertIsInstance(p['DMEngineTime'], int)
+
+    def test_engine_stamp_of_a_studio_snapshot(self):   # package_app.sh's ENGINE_REVISION and ENGINE_TIME win over git
+        with tempfile.TemporaryDirectory(dir=TEST_ROOT) as d:
+            root = Path(d); (root / 'ENGINE_REVISION').write_text('0123456789ab-abcdefabcdefabcdefab\n')
+            with mock.patch.object(pack_app, 'HERE', root / 'dm/mac'):
+                self.assertEqual(pack_app.engine_stamp(), ('0123456789ab-abcdefabcdefabcdefab', None))
+                (root / 'ENGINE_TIME').write_text('1764000000\n')
+                self.assertEqual(pack_app.engine_stamp(), ('0123456789ab-abcdefabcdefabcdefab', 1764000000))
 
     def test_packed_language_is_the_lists(self):   # --lang a game lacks: the Game language row's default (settings.py: the game's first), with or without the window
         with tempfile.TemporaryDirectory(dir=TEST_ROOT) as d:

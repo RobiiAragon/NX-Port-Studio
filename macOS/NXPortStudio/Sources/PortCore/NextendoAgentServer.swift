@@ -224,6 +224,15 @@ public actor NextendoAgentAccount {
         return reply
     }
 
+    /// `POST /api/friends {friend_code}`: sends a friend request, then drops the shared snapshot
+    /// so the sent request shows. The code must be a normalized friend code.
+    public func sendFriendRequest(_ code: String) async -> Reply {
+        guard NextendoFriendCode.normalized(code) == code, let body = try? JSONSerialization.data(withJSONObject: ["friend_code": code]) else { return (.refused, 0, nil) }
+        let reply = await send(path: "friends", scope: "friends", body: body)
+        if reply.status == .ok, (200..<300).contains(reply.http) { friends = nil }
+        return reply
+    }
+
     /// `GET /api/session-status` with the game token, as the developer guide documents:
     /// `revoked` is true when this device's game session was closed on the website.
     public func sessionRevoked() async -> (status: NextendoAgentStatus, revoked: Bool?) {
@@ -447,6 +456,14 @@ final class NextendoAgentAdminSession: NSObject, NextendoAgentAdminService, @unc
         guard let account = server?.account else { reply(NextendoAgentStatus.unavailable.rawValue, 0); return }
         Task { let result = await account.answerFriendRequest(pid, accept: accept); reply(result.status.rawValue, result.http) }
     }
+    func sendFriendRequest(_ code: String, reply: @escaping @Sendable (Int, Int, Bool) -> Void) {
+        guard let account = server?.account else { reply(NextendoAgentStatus.unavailable.rawValue, 0, false); return }
+        Task {
+            let result = await account.sendFriendRequest(code)
+            let already = result.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["already"] as? Bool ?? false
+            reply(result.status.rawValue, result.http, already)
+        }
+    }
     func setNotifications(_ enabled: Bool, reply: @escaping @Sendable (Bool) -> Void) {
         guard let hub = server?.hub else { reply(false); return }
         Task { reply(await hub.setNotifications(enabled)) }
@@ -499,6 +516,10 @@ public struct NextendoAgentAdminClient: Sendable {
     }
     public func answerFriendRequest(_ pid: UInt64, accept: Bool) async -> (status: NextendoAgentStatus, http: Int)? {
         await call { proxy, done in proxy.answerFriendRequest(pid, accept: accept) { done((NextendoAgentStatus(wire: $0), $1)) } }
+    }
+    /// Nil when the agent does not answer, as one from before this call does.
+    public func sendFriendRequest(_ code: String) async -> (status: NextendoAgentStatus, http: Int, already: Bool)? {
+        await call { proxy, done in proxy.sendFriendRequest(code) { done((NextendoAgentStatus(wire: $0), $1, $2)) } }
     }
     public func setNotifications(_ enabled: Bool) async -> Bool? {
         // macOS may show its permission prompt first: allow time for the answer.

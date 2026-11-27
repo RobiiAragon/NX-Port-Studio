@@ -77,12 +77,20 @@ final class NextendoAgentHubTests: XCTestCase {
             "friends": [["pid": 7, "name": "Seven", "presence": ["status": 2, "app_id": "0100000000010000"]],
                         ["pid": 8, "username": "eight", "presence": ["status": 9, "app_id": "not-a-title"]],
                         ["pid": true, "name": "bool pid"], ["name": "no pid"], "text"],
-            "requests": [["pid": 9, "name": "Nine"]], "sent": []])
+            "requests": [["pid": 9, "name": "Nine"]], "sent": [["pid": 11, "username": "eleven"], ["name": "no pid"]]])
         let view = try XCTUnwrap(NextendoFriendsView.decode(data))
         XCTAssertEqual(view.friends, [NextendoFriend(pid: 7, name: "Seven", status: 2, titleID: "0100000000010000"),
                                       NextendoFriend(pid: 8, name: "eight", status: 2, titleID: nil)])
         XCTAssertEqual(view.requests.map(\.pid), [9])
+        XCTAssertEqual(view.sent, [NextendoFriend(pid: 11, name: "eleven", status: 0, titleID: nil)])   // pending requests this account sent
         XCTAssertNil(NextendoFriendsView.decode(Data("[]".utf8)))
+        let pictured = try XCTUnwrap(NextendoFriendsView.decode(try JSONSerialization.data(withJSONObject: ["friends": [
+            ["pid": 12, "name": "Twelve", "avatar": "icon_03", "color": "#3a7bd5", "favorite": true, "friend_code": "SW-1234-5678-9012"],
+            ["pid": 13, "name": "Thirteen", "avatar": "../etc", "color": "blue", "favorite": "yes", "friend_code": "1234"]]])))
+        XCTAssertEqual(pictured.friends[0], NextendoFriend(pid: 12, name: "Twelve", status: 0, titleID: nil, avatar: "icon_03", color: "#3a7bd5",
+                                                          favorite: true, friendCode: "SW-1234-5678-9012"))
+        XCTAssertEqual(pictured.friends[0].avatarURL?.absoluteString, "https://nextendo.network/avatars/icon_03.jpg")
+        XCTAssertEqual(pictured.friends[1], NextendoFriend(pid: 13, name: "Thirteen", status: 0, titleID: nil))   // malformed fields are dropped
         XCTAssertNil(NextendoFriendsView.decode(Data(#"{"requests":[]}"#.utf8)))
     }
 
@@ -154,6 +162,27 @@ final class NextendoAgentHubTests: XCTestCase {
         XCTAssertEqual(credential.status, .signedOut)
         ports.set(0); provider.advance(60); await hub.poll()
         XCTAssertEqual(provider.count("/api/session-status"), 3)
+    }
+
+    func testFriendCodesAreNormalizedAndSentToTheProvider() async throws {
+        XCTAssertEqual(NextendoFriendCode.normalized("SW-3999-0628-0716"), "SW-3999-0628-0716")
+        XCTAssertEqual(NextendoFriendCode.normalized(" 3999 0628 0716 "), "SW-3999-0628-0716")
+        XCTAssertEqual(NextendoFriendCode.normalized("sw399906280716"), "SW-3999-0628-0716")
+        XCTAssertNil(NextendoFriendCode.normalized("SW-3999-0628-071"))
+        XCTAssertNil(NextendoFriendCode.normalized("3999-0628-0716; DROP"))
+        XCTAssertNil(NextendoFriendCode.normalized("\u{0663}99906280716"))   // only ASCII digits
+        let provider = Provider()
+        let (hub, account) = hub(provider, store: HubStore(session(provider)))
+        _ = await hub.friends()
+        let sent = await account.sendFriendRequest("SW-3999-0628-0716")
+        XCTAssertEqual(sent.status, .ok); XCTAssertEqual(sent.http, 200)
+        let refused = await account.sendFriendRequest("3999 0628 0716")   // only the normalized form crosses to the provider
+        XCTAssertEqual(refused.status, .refused)
+        let posts = provider.requests.filter { $0.httpMethod == "POST" }
+        XCTAssertEqual(posts.map { $0.url?.path ?? "" }, ["/api/friends"])
+        XCTAssertEqual(posts.map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }, [#"{"friend_code":"SW-3999-0628-0716"}"#])
+        _ = await hub.friends()
+        XCTAssertEqual(provider.count("/api/friends"), 3)   // the snapshot is fetched again after the request
     }
 
     func testFriendRequestAnswersGoToTheProvider() async throws {

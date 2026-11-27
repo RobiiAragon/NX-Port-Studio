@@ -9,9 +9,7 @@ extension StudioModel {
     func reloadSavePorts() async {
         guard !isLoadingSavePorts, !isManagingSaves else { return }
         isLoadingSavePorts = true
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let directories = [URL(fileURLWithPath: "/Applications", isDirectory: true), home.appendingPathComponent("Applications", isDirectory: true)]
-        savePorts = await Task.detached { SaveArchiveStore.installedPorts(in: directories, home: home) }.value
+        savePorts = await Task.detached { InstalledMacPorts.scan() }.value
         if selectedSavePort == nil { selectedSavePortID = savePorts.first?.id ?? "" }
         selectedSaveSlot = .primary
         isLoadingSavePorts = false

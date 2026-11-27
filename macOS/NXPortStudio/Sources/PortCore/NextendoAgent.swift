@@ -59,6 +59,9 @@ public enum NextendoAgentStatus: Int, Sendable {
     func friends(reply: @escaping @Sendable (Int, Data?) -> Void)
     /// Accepts or declines an incoming request. Reply: status, HTTP status.
     func answerFriendRequest(_ pid: UInt64, accept: Bool, reply: @escaping @Sendable (Int, Int) -> Void)
+    /// Sends a friend request to a normalized friend code (`SW-0000-0000-0000`).
+    /// Reply: status, HTTP status, whether a request was already pending.
+    func sendFriendRequest(_ code: String, reply: @escaping @Sendable (Int, Int, Bool) -> Void)
     /// Turns the agent's notifications on or off. Reply: whether they are on now
     /// (false when macOS refused permission).
     func setNotifications(_ enabled: Bool, reply: @escaping @Sendable (Bool) -> Void)

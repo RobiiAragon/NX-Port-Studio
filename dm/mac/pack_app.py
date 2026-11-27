@@ -167,6 +167,20 @@ def source_commit():   # DMCommit: the checkout that packed the app (scripts/bug
     return head + ('+dirty' if dirty else '') if head else None
 
 
+def engine_stamp():   # DMEngine, DMEngineTime: the engine that packed the app, which Studio's Library compares with its own (macOS/NXPortStudio PortEngineStamp.of reads the same way)
+    repo = HERE.parent.parent
+    def text(name):
+        try: return (repo / name).read_text(encoding='utf-8').strip()
+        except OSError: return ''
+    revision = text('ENGINE_REVISION')   # Studio's engine snapshot (package_app.sh): commit and content hash, and the commit's time beside it
+    if revision: return revision, int(text('ENGINE_TIME')) if text('ENGINE_TIME').isdigit() else None
+    revision = source_commit()
+    if not revision: return None, None
+    try: time = subprocess.run(['git', '-C', repo, 'log', '-1', '--format=%ct', 'HEAD'], capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError): time = ''
+    return revision, int(time) if time.isdigit() else None
+
+
 def sign(app, identity, codesign):   # nested code first, then the primary host/bundle; no --options runtime (see the top)
     for target in (app / 'Contents/Frameworks/DMMacBootstrap.dylib', app / 'Contents/Helpers/dm-save-supervisor', app):
         try: run([codesign, '--force', '--sign', identity, target])
@@ -287,7 +301,8 @@ def _pack(a, nextendo):
                   'client': nextendo_client_id(),   # DMNextendoClientID: another saved client ID repacks the Info.plist
                   'tools': [[str(c), c.stat().st_mode, c.stat().st_size, c.stat().st_mtime_ns, c.stat().st_ctime_ns, run([c, '--version']).strip()] for c in (clang, swiftc)] + [
                             str(sdk), run(['xcrun', '--sdk', 'macosx', '--show-sdk-version']).strip(),
-                            str(codesign), codesign.stat().st_mode, digest(codesign), minos]}
+                            str(codesign), codesign.stat().st_mode, digest(codesign), minos],
+                  'engine': engine_stamp()}   # a reused app keeps its Info.plist: a newer engine repacks it, so Studio's Library never calls a rebuilt port older
         key = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
         if out.is_dir() and isinstance(previous, dict) and previous.get('inputs') == key and previous.get('app') == inventory(out):
             print(f'app: {out}, reused (inputs unchanged)', flush=True)
@@ -348,6 +363,9 @@ def _pack(a, nextendo):
     info['DMModuleFiles'] = [p.name for p in mods]
     commit = source_commit()
     if commit: info['DMCommit'] = commit
+    engine, engine_time = engine_stamp()
+    if engine: info['DMEngine'] = engine
+    if engine_time is not None: info['DMEngineTime'] = engine_time
     if msl_dst.name.startswith('b-'): info['DMChain'] = msl_dst.name[2:]   # the library chain the app carries (a Vulkan or GL game's vk / gl has none)
     (c / 'Info.plist').write_bytes(plistlib.dumps(info))
     (c / 'PkgInfo').write_text('APPL????')
