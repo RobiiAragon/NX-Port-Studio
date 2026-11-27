@@ -130,8 +130,7 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
 
 ## Phases
 
-1. **Credential broker.** *Done in code.* Remaining acceptance:
-   - a packaged Studio with the switch on;
+1. **Credential broker.** *Done in code.* I checked a packaged Studio with the switch on, and the agent registered again after an update. Remaining acceptance:
    - a registered port that gets its credential with no Keychain dialog;
    - a sign-out in Studio that reaches the open port;
    - a port without the agent behaving as before.
@@ -139,7 +138,7 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
    - a friend list in a game served by the agent;
    - my presence seen by a friend;
    - two games open at once showing the newer one.
-3. **Hub.** *Done in code.* See [Hub](#hub). Remaining acceptance:
+3. **Hub.** *Done in code.* See [Hub](#hub). I checked the Friends panel with a real friend in a game. Remaining acceptance:
    - the notification permission prompt from the agent app;
    - a friend coming online while no game runs;
    - a request accepted from Studio;
