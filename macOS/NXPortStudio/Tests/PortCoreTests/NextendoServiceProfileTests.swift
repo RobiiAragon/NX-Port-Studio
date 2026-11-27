@@ -51,6 +51,29 @@ private actor ProfileHTTP: NextendoHTTPClient {
         let permissions = try FileManager.default.attributesOfItem(atPath: second.path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(permissions?.intValue, 0o600)
     }
+    func testSelfSignedEndpointIsPinnedForItsGameOnly() async throws {
+        let value = try contract(), host = "api.hac.lp1.acbaa.srv.nintendo.net"
+        let pin = try XCTUnwrap(value.titles["01006f8002326000"]?.first { $0.host == host }?.pin)
+        let routes = String(decoding: try value.routes(titleID: "01006f8002326000"), as: UTF8.self)
+        XCTAssertTrue(routes.contains(["pinned-exact", host, "51.178.29.194", host, pin + ".der", pin].joined(separator: "\t") + "\n"))
+        XCTAssertFalse(String(decoding: try value.routes(titleID: "0100152000022000"), as: UTF8.self).contains(host))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let profile = try await NextendoServiceProfileService(client: ProfileHTTP(ca)).prepare(contract: value, titleID: "01006f8002326000", root: root)
+        let folder = profile.deletingLastPathComponent()
+        XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: folder.path)), ["routes.tsv", "manifest.json", "provider-ca.der", pin + ".der"])
+        XCTAssertEqual(NextendoServiceContract.digest(try Data(contentsOf: folder.appendingPathComponent(pin + ".der"))), pin)
+        // A pin the contract does not carry, or a certificate whose bytes differ from its digest, is refused.
+        var raw = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.repository.appendingPathComponent("dm/net/nextendo-services.json"))) as! [String: Any]
+        var certificates = raw["certificates"] as! [String: String]
+        certificates[pin] = String(certificates[pin]!.dropLast(8)) + "AAAAAAA="; raw["certificates"] = certificates
+        XCTAssertThrowsError(try NextendoServiceContract(data: JSONSerialization.data(withJSONObject: raw)))
+    }
+    private static var repository: URL {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        return root
+    }
     func testWrongCertificateAndSymlinkStorageFailWithoutPublishing() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

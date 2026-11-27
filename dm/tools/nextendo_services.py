@@ -19,7 +19,20 @@ def contract(repository):
         address = ipaddress.IPv4Address(value['provider'][name])
         if address.is_unspecified or address.is_multicast or address.is_loopback: raise ValueError('Invalid public Nextendo service address')
     if not re.fullmatch('[0-9a-f]{64}', value['provider']['caSHA256']): raise ValueError('Invalid provider CA digest')
+    certificates = value.get('certificates', {})
+    if not isinstance(certificates, dict) or len(certificates) > 16: raise ValueError('Invalid pinned certificate list')
+    for digest, encoded in certificates.items():
+        der = base64.b64decode(encoded, validate=True) if isinstance(encoded, str) else b''
+        if not re.fullmatch('[0-9a-f]{64}', digest) or not 0 < len(der) <= 65536 or der[0] != 0x30 or hashlib.sha256(der).hexdigest() != digest:
+            raise ValueError('Invalid pinned certificate')
     return value
+
+
+def pinned(value, digest):
+    """The DER bytes of one certificate the contract pins, by its SHA-256 digest."""
+    encoded = value.get('certificates', {}).get(digest)
+    if not isinstance(encoded, str): raise ValueError('A pinned route names a certificate the contract does not carry')
+    return base64.b64decode(encoded, validate=True)
 
 
 def provider_ca(value):
@@ -73,17 +86,30 @@ def rules(value, title_id, protocol=None):
             if kind != 'exact' or item.get('tls'): raise ValueError('A public-DNS route is one exact name without a provider CA')
             output.append('\t'.join([kind, host, '@dns', '-', '-', '-'])); continue
         address = value['provider'][item['server']]
+        if 'pin' in item:
+            # A provider endpoint whose certificate is self-signed rather than issued by the provider CA. Its
+            # exact DER is enrolled in the contract and the host accepts only those bytes for this one name,
+            # with its own SNI (docs/reference/services.md, a private endpoint with no CA-authenticated name).
+            if kind != 'exact' or not item.get('tls'): raise ValueError('A pinned route is one exact TLS name')
+            pinned(value, item['pin'])
+            output.append('\t'.join(['pinned-exact', host, address, host, item['pin'] + '.der', item['pin']])); continue
         tail = ['@host', 'provider-ca.der', value['provider']['caSHA256']] if item['tls'] else ['-', '-', '-']
         output.append('\t'.join([kind, host, address] + tail))
     if not 0 < len(output) <= 128: raise ValueError('Invalid service route count')
     return 'NXNEXTENDO_ROUTES_2\n' + '\n'.join(output) + '\n'
 
 
+def pin_files(value, text):
+    """The certificate files a profile's pinned routes name: {'<sha256>.der': DER bytes}."""
+    rows = [line.split('\t') for line in text.splitlines()[1:]]
+    return {row[4]: pinned(value, row[5]) for row in rows if row[0] == 'pinned-exact'}
+
+
 def prepare(repository, title_id, destination, protocol=None, ca=None):
     value = contract(repository); ca = provider_ca(value) if ca is None else ca
     if hashlib.sha256(ca).hexdigest() != value['provider']['caSHA256']: raise ValueError('Invalid provider CA')
     text = rules(value, title_id, protocol)
-    files = {'routes.tsv': text.encode(), 'provider-ca.der': ca}
+    files = {'routes.tsv': text.encode(), 'provider-ca.der': ca, **pin_files(value, text)}
     manifest = {'formatVersion': 1, 'titleID': title_id.lower(), 'protocol': protocol,
                 'identity': value.get('identities', {}).get(title_id.lower(), {'account':'pid','friends':'pid'}),
                 'routeCount': len(text.splitlines()) - 1,
@@ -107,8 +133,17 @@ def prepare(repository, title_id, destination, protocol=None, ca=None):
 def stage(source, destination, title_id):
     """Stage only a complete public profile, never arbitrary configuration files."""
     source, destination = Path(source), Path(destination)
-    names = {'routes.tsv', 'provider-ca.der', 'manifest.json'}
-    if source.is_symlink() or {p.name for p in source.iterdir()} != names:
+    if source.is_symlink(): raise ValueError('Unexpected Nextendo profile contents')
+    path = source / 'manifest.json'
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 65536: raise ValueError('Invalid Nextendo profile file')
+    manifest = json.loads(path.read_bytes())
+    if manifest.get('formatVersion') != 1 or manifest.get('titleID') != title_id.lower():
+        raise ValueError('Nextendo profile belongs to another game')
+    value = contract(Path(__file__).resolve().parents[2])
+    expected = rules(value, title_id, manifest.get('protocol'))
+    pins = pin_files(value, expected)
+    names = {'routes.tsv', 'provider-ca.der', 'manifest.json', *pins}
+    if {p.name for p in source.iterdir()} != names or set(manifest.get('files', {})) != names - {'manifest.json'}:
         raise ValueError('Unexpected Nextendo profile contents')
     data = {}
     for name in names:
@@ -116,16 +151,13 @@ def stage(source, destination, title_id):
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 65536:
             raise ValueError('Invalid Nextendo profile file')
         data[name] = path.read_bytes()
-    manifest = json.loads(data['manifest.json'])
-    if manifest.get('formatVersion') != 1 or manifest.get('titleID') != title_id.lower():
-        raise ValueError('Nextendo profile belongs to another game')
-    for name in ('routes.tsv', 'provider-ca.der'):
-        if hashlib.sha256(data[name]).hexdigest() != manifest.get('files', {}).get(name):
+    for name in names - {'manifest.json'}:
+        if hashlib.sha256(data[name]).hexdigest() != manifest['files'][name]:
             raise ValueError('Incomplete Nextendo profile integrity')
-    value = contract(Path(__file__).resolve().parents[2])
     if manifest.get('identity') != value.get('identities', {}).get(title_id.lower(), {'account':'pid','friends':'pid'}):
         raise ValueError('Invalid service identity namespace')
-    if hashlib.sha256(data['provider-ca.der']).hexdigest() != value['provider']['caSHA256'] or data['routes.tsv'] != rules(value, title_id, manifest.get('protocol')).encode():
+    if hashlib.sha256(data['provider-ca.der']).hexdigest() != value['provider']['caSHA256'] or data['routes.tsv'] != expected.encode() \
+            or any(data[name] != der for name, der in pins.items()):
         raise ValueError('The profile does not match the public service contract')
     destination.mkdir(parents=True, exist_ok=True)
     for name in names: (destination / name).write_bytes(data[name])

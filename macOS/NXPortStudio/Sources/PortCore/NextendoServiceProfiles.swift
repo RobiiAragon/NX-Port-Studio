@@ -12,6 +12,8 @@ public struct NextendoServiceContract: Decodable, Sendable {
     }
     public struct Rule: Decodable, Sendable {
         let match: String, host: String, server: String, tls: Bool
+        /// SHA-256 of the exact DER certificate a self-signed provider endpoint serves (`certificates`).
+        let pin: String?
     }
     let formatVersion: Int
     let provider: Provider
@@ -20,10 +22,17 @@ public struct NextendoServiceContract: Decodable, Sendable {
     let titles: [String: [Rule]]
     let titleFamilies: [String: String]
     let identities: [String: [String: String]]
+    /// Pinned endpoint certificates, base64 DER by SHA-256.
+    let certificates: [String: String]?
 
     public init(data: Data) throws {
         guard data.count <= 65_536 else { throw NextendoServiceProfileError.invalidContract }
         self = try JSONDecoder().decode(Self.self, from: data)
+        let pins = certificates ?? [:]
+        guard pins.count <= 16, pins.allSatisfy({ digest, encoded in
+            guard let der = Data(base64Encoded: encoded), (1...65_536).contains(der.count), der.first == 0x30 else { return false }
+            return Self.digest(der) == digest && SecCertificateCreateWithData(nil, der as CFData) != nil
+        }) else { throw NextendoServiceProfileError.invalidContract }
         guard formatVersion == 1, Self.address(provider.server), Self.address(provider.nat),
               provider.caSHA256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
               let url = URLComponents(string: provider.caURL), url.scheme == "https", url.host == "raw.githubusercontent.com",
@@ -47,11 +56,27 @@ public struct NextendoServiceContract: Decodable, Sendable {
             else { throw NextendoServiceProfileError.invalidContract }
             guard seen.insert(key).inserted else { continue }
             let address = rule.server == "nat" ? provider.nat : provider.server
+            if let pin = rule.pin {
+                // A self-signed provider endpoint: the host accepts only these exact bytes for this one name.
+                guard rule.match == "exact", rule.tls, certificates?[pin] != nil else { throw NextendoServiceProfileError.invalidContract }
+                lines.append(["pinned-exact", host, address, host, pin + ".der", pin].joined(separator: "\t")); continue
+            }
             let tail = rule.tls ? ["@host", "provider-ca.der", provider.caSHA256] : ["-", "-", "-"]
             lines.append(([rule.match, host, address] + tail).joined(separator: "\t"))
         }
         guard (2...129).contains(lines.count) else { throw NextendoServiceProfileError.invalidContract }
         return Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+    /// The certificate files the pinned routes of a profile name, `<sha256>.der` to DER bytes.
+    func pinnedFiles(routes: Data) -> [String: Data] {
+        var files: [String: Data] = [:]
+        for line in String(decoding: routes, as: UTF8.self).split(separator: "\n").dropFirst() {
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            if fields.count == 6, fields[0] == "pinned-exact", let encoded = certificates?[fields[5]], let der = Data(base64Encoded: encoded) {
+                files[fields[4]] = der
+            }
+        }
+        return files
     }
     func certificate(_ data: Data) throws -> Data {
         guard !data.isEmpty, data.count <= 65_536 else { throw NextendoServiceProfileError.invalidCertificate }
@@ -114,7 +139,7 @@ public actor NextendoServiceProfileService {
         let generation = root.appendingPathComponent(titleID.lowercased() + "-" + UUID().uuidString, isDirectory: true)
         try manager.createDirectory(at: generation, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         do {
-            let files = ["routes.tsv": routes, "provider-ca.der": ca!]
+            let files = contract.pinnedFiles(routes: routes).merging(["routes.tsv": routes, "provider-ca.der": ca!]) { _, base in base }
             for (name, bytes) in files {
                 let file = generation.appendingPathComponent(name)
                 try bytes.write(to: file, options: .atomic)

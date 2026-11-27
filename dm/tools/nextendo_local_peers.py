@@ -219,7 +219,8 @@ def prepare(repository, title_id, public_profile, collection, destination):
         files = {path.name:path.read_bytes() for path in staged.iterdir()}
     manifest = json.loads(files['manifest.json'])
     value = nextendo_services.contract(repository)
-    if set(manifest) != {'formatVersion', 'titleID', 'protocol', 'identity', 'routeCount', 'files'} or set(manifest['files']) != {'routes.tsv', 'provider-ca.der'}:
+    public_pins = nextendo_services.pin_files(value, files['routes.tsv'].decode())
+    if set(manifest) != {'formatVersion', 'titleID', 'protocol', 'identity', 'routeCount', 'files'} or set(manifest['files']) != {'routes.tsv', 'provider-ca.der', *public_pins}:
         raise ValueError('Unexpected public profile manifest fields')
     if manifest.get('protocol') not in (None, 'nex', 'npln', *value.get('families', {})):
         raise ValueError('Unknown public service protocol')
@@ -230,6 +231,8 @@ def prepare(repository, title_id, public_profile, collection, destination):
     private_rows = [row[:] for row in rows]
     additions, addresses, peers, promoted = [], {}, [], []
     for host, entry in sorted(selected.items()):
+        if any(row[0] == 'pinned-exact' and row[1] == host for row in rows):
+            raise ValueError('The public contract already pins this service; a local enrollment cannot replace it')
         address = _effective(rows, host); digest = entry['sha256']
         if address in addresses and addresses[address] != (host, digest): raise ValueError('Ambiguous logical service identities for one public address')
         addresses[address] = host, digest
