@@ -138,15 +138,18 @@ def nextendo_client_id():
     return value if re.fullmatch(r'[A-Za-z0-9._-]{1,256}', value) and value not in ('nextendo-emulator', 'unregistered') else None
 
 
-def info_plist(a, minos, icon):
+def info_plist(a, minos, icon, online=False):   # online: a public Nextendo service profile goes into the app (nextendo_snapshot)
     p = {'CFBundleName': a.name, 'CFBundleDisplayName': a.name, 'CFBundleIdentifier': a.bundle_id or f'org.nxnative.{a.title_id.lower()}',
          'CFBundleVersion': a.version or '1.0', 'CFBundleShortVersionString': a.version or '1.0', 'CFBundlePackageType': 'APPL', 'CFBundleExecutable': EXE,
          'CFBundleInfoDictionaryVersion': '6.0', 'LSMinimumSystemVersion': minos, 'LSArchitecturePriority': ['arm64'], 'NSHighResolutionCapable': True,
          'LSApplicationCategoryType': a.category or 'public.app-category.games', 'DMTitleID': a.title_id.upper(), 'DMRomfsMarker': a.marker or '', 'DMLanguage': a.lang or 'en-US',
          'NSLocalNetworkUsageDescription': 'Connect to compatible games on your local network when you choose Local network (LAN).', 'DMPrimaryHost': True}
     if icon: p['CFBundleIconFile'] = 'AppIcon'
-    client = nextendo_client_id() if (Path(a.patched) / 'nextendo' / 'main.fixups.tsv').is_file() else None
-    if client: p['DMNextendoClientID'] = client   # the launcher's own Nextendo sign-in (Launcher.swift); a public PKCE client ID, never a credential
+    # the launcher's own Nextendo sign-in (Launcher.swift); a public PKCE client ID, never a credential. Every app that can reach Nextendo offers it:
+    # one with the signed code adapter (nextendo_variant), and one whose game needs no code change, only its service profile (routes, pins, identities)
+    reaches = online or (Path(a.patched) / 'nextendo' / 'main.fixups.tsv').is_file()
+    client = nextendo_client_id() if reaches else None
+    if client: p['DMNextendoClientID'] = client
     if a.settings:
         listed = json.loads(Path(a.settings).read_text(encoding='utf-8'))['settings']
         p['DMSettings'] = settings_rules(listed)
@@ -281,6 +284,7 @@ def _pack(a, nextendo):
         inputs = {'options': vars(a), 'files': [(str(p), p.stat().st_mode, digest(p), os.readlink(p) if p.is_symlink() else None) for p in files + sources],
                   'trees': [(p, inventory(Path(p))) for p in (a.romfs, a.aoc, getattr(a, 'nextendo_bcat_dir', None)) if p],
                   'nextendo': {kind:{name:hashlib.sha256(data).hexdigest() for name,data in profile.items()} if profile else None for kind,profile in nextendo.items()} if nextendo else None,
+                  'client': nextendo_client_id(),   # DMNextendoClientID: another saved client ID repacks the Info.plist
                   'tools': [[str(c), c.stat().st_mode, c.stat().st_size, c.stat().st_mtime_ns, c.stat().st_ctime_ns, run([c, '--version']).strip()] for c in (clang, swiftc)] + [
                             str(sdk), run(['xcrun', '--sdk', 'macosx', '--show-sdk-version']).strip(),
                             str(codesign), codesign.stat().st_mode, digest(codesign), minos]}
@@ -340,7 +344,7 @@ def _pack(a, nextendo):
     step('game files'); copy([romfs], res / ('romfs.img' if romfs.is_file() else 'romfs'), clone['romfs'])
     icon = bool(a.icon)
     if icon: step('icon'); make_icns(a.icon, res / 'AppIcon.icns')
-    info = info_plist(a, minos, icon)
+    info = info_plist(a, minos, icon, online=bool(nextendo and nextendo.get('public')))
     info['DMModuleFiles'] = [p.name for p in mods]
     commit = source_commit()
     if commit: info['DMCommit'] = commit
