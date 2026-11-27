@@ -1,22 +1,6 @@
 import Foundation
 import CSaveArchive
 
-public struct InstalledMacPort: Identifiable, Hashable, Sendable {
-    public let appURL: URL
-    public let titleID: String
-    public let name: String
-    public let bundleIdentifier: String
-    public let stateURL: URL
-    public var id: String { appURL.path }
-    public var primarySaveURL: URL { stateURL.appendingPathComponent("save", isDirectory: true) }
-    public var deviceSaveURL: URL { stateURL.appendingPathComponent("save_device", isDirectory: true) }
-
-    public init(appURL: URL, titleID: String, name: String, bundleIdentifier: String, stateURL: URL) {
-        self.appURL = appURL; self.titleID = titleID; self.name = name
-        self.bundleIdentifier = bundleIdentifier; self.stateURL = stateURL
-    }
-}
-
 public enum SaveSlot: String, CaseIterable, Identifiable, Sendable {
     case primary = "save", device = "save_device"
     public var id: String { rawValue }
@@ -32,30 +16,6 @@ public struct SaveArchiveOutcome: Sendable {
 }
 
 public enum SaveArchiveStore {
-    public static func installedPorts(in directories: [URL], home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [InstalledMacPort] {
-        let fm = FileManager.default
-        let state = home.appendingPathComponent("Library/Application Support/nxnative", isDirectory: true)
-        var ports: [InstalledMacPort] = []
-        for directory in directories {
-            let apps = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles])) ?? []
-            for app in apps where app.pathExtension.lowercased() == "app" {
-                guard let values = try? app.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
-                      values.isDirectory == true, values.isSymbolicLink != true,
-                      let data = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
-                      let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-                      let title = info["DMTitleID"] as? String,
-                      title.range(of: "^[0-9A-Fa-f]{16}$", options: .regularExpression) != nil,
-                      UInt64(title, radix: 16) != 0,
-                      let bundle = info["CFBundleIdentifier"] as? String, !bundle.isEmpty else { continue }
-                let titleID = title.uppercased()
-                ports.append(InstalledMacPort(appURL: app, titleID: titleID,
-                    name: info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String ?? app.deletingPathExtension().lastPathComponent,
-                    bundleIdentifier: bundle, stateURL: state.appendingPathComponent(title, isDirectory: true)))
-            }
-        }
-        return ports.sorted { ($0.name, $0.appURL.path) < ($1.name, $1.appURL.path) }
-    }
-
     public static func hasSave(_ port: InstalledMacPort, slot: SaveSlot) -> Bool {
         let path = port.stateURL.appendingPathComponent(slot.rawValue)
         guard let values = try? path.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else { return false }

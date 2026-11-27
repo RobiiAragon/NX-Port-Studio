@@ -140,6 +140,9 @@ PY
 )"
 BASE_REVISION="$(git -C "$REPO_DIR" rev-parse --short=12 HEAD 2>/dev/null || printf 'source')"
 printf '%s-%s\n' "$BASE_REVISION" "$ENGINE_HASH" > "$ENGINE/ENGINE_REVISION"
+# The commit's time orders two engines: Studio's Library tells which ports an older engine
+# packed (DMEngine, DMEngineTime in their Info.plist, dm/mac/pack_app.py).
+git -C "$REPO_DIR" log -1 --format=%ct HEAD > "$ENGINE/ENGINE_TIME" 2>/dev/null || rm -f "$ENGINE/ENGINE_TIME"
 
 xcrun swift "$PROJECT_DIR/scripts/GenerateIcon.swift" "$STAGING/AppIcon.iconset"
 /usr/bin/iconutil -c icns "$STAGING/AppIcon.iconset" -o "$CONTENTS/Resources/AppIcon.icns"

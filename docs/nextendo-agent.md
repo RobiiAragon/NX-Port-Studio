@@ -79,6 +79,7 @@ The agent hands out a game credential, so every connection is checked by code si
 | `status()` | Studio | Protocol version, registered ports, connected ports. |
 | `friends()` | Studio | The account's friends body (images omitted), from the shared snapshot. |
 | `answerFriendRequest(pid, accept)` | Studio | `POST /api/friends/accept` or `/decline` with `{pid}`; drops the shared snapshot. |
+| `sendFriendRequest(code)` | Studio | `POST /api/friends` with `{friend_code}` (`SW-dddd-dddd-dddd`; the agent refuses any other form); replies with status, HTTP status and whether a request was already waiting (`already`), and drops the shared snapshot on 2xx. Nextendo answers 404 when no player has the code and 400 for my own code. An agent older than this call does not answer it, and Studio asks me to reopen it so it updates the agent. |
 | `setNotifications(enabled)`, `notifications()` | Studio | The agent's notification switch, kept in its own preferences. Turning it on asks macOS for permission; a refusal leaves it off. |
 
 Statuses: `ok`, `signedOut`, `unavailable`, `versionMismatch`, `refused`, `failed`.
@@ -125,7 +126,7 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
 
 - **No push channel.** There is no WebSocket or event stream: friends and presence are polled (`/api/friends`, `/api/presence`), and a presence older than 90 s expires (`presenceTTL`). This matches what I [measured with Splatoon 3](reference/services.md#a-game-that-never-publishes-presence-stays-offline-to-its-friends).
 - **Revocation.** `/api/session-status` returns `revoked` for the play session of this device's IP, and a revoked session stays listed until it is pruned after 45 days. Phase 3 polls it only while a game is open and acts only on a change it saw.
-- **Friends.** `GET /api/friends` returns `{friends, requests, sent}`. Each presence carries `status`, `app_id`, `app_field` and `app_detail`, with no game name. `POST /api/friends/accept` and `/decline` take `{pid}`.
+- **Friends.** `GET /api/friends` returns `{friends, requests, sent}`. Each presence carries `status`, `app_id`, `app_field` and `app_detail`, with no game name. `POST /api/friends/accept` and `/decline` take `{pid}`. `POST /api/friends` takes `{friend_code}` and returns `{friend, already}`. Each friend also carries `friend_code`, `favorite` (a best friend), `color` (the profile color, `#rrggbb`) and `avatar`, a gallery picture served at `/avatars/<id>.jpg`; Studio's Library checks the form of each before it shows them ([Studio's Library](frontends.md#studios-library)).
 - **An older OAuth contract.** That snapshot's `/api/oauth/token` issues one-hour access tokens and no refresh token. The current [developer guide](https://wiki.nextendo.network/developers) documents refresh-token rotation, which is what Studio implements. I follow the live guide where the two differ.
 
 ## Phases
@@ -159,11 +160,11 @@ These need no game:
   - local modes never ask the agent;
   - a silent agent and `DM_NEXTENDO_AGENT=0` both fall back to the port's own renewal.
 - `swift test --filter NextendoAgentHubTests` covers:
-  - decoding the friends view;
+  - decoding the friends view, with sent requests, best friends, profile colors, gallery pictures and friend codes, and dropping malformed ones;
   - notifications only for changes after an account's first snapshot, and only with the switch and permission;
   - the 429 pause;
   - revocation acting only on a change seen while a game is open;
-  - friend request answers;
+  - friend request answers, and a request sent by friend code (normalized first, refused otherwise);
   - the notification languages;
   - finding Studio from the agent app.
 - `make -C dm/host/tests nextendo-api nextendo-social` (and their `-sanitize` variants):

@@ -3,7 +3,7 @@
 // app's Resources/dm/launcher.json (dm/games/settings.py with SETTINGS_PLATFORM=mac); the model and the rows are the iOS launcher's (dm/ios/Sources/LauncherSettings.swift, LauncherRow.swift),
 // and so is the store: launcher.<VAR> in the app's preferences, which launcher.c reads when the window is not shown (docs/frontends.md, Saved choices). Basic settings (level basic) come
 // first, the others under Advanced settings, each in the list's sections. Play puts the settings into this process's environment, which the host inherits; Quit and closing the window end the
-// app without the game. "Show this window at launch" off: no window unless Option is held at launch, and launcher.c applies the saved choices. The window never takes focus by itself: an app
+// app without the game. "Show this window at launch" off: no window unless Option is held at launch (or DM_LAUNCHER=1, a front end's equivalent), and launcher.c applies the saved choices. The window never takes focus by itself: an app
 // opened in the background (open -g) keeps its window behind until the player switches to it
 import AppKit
 import SwiftUI
@@ -296,8 +296,11 @@ enum LauncherWindowLayout {
 public func dmMacLauncher() -> Int32 {
     guard let url = Bundle.main.resourceURL?.appendingPathComponent("dm/launcher.json"), let data = try? Data(contentsOf: url) else { return 2 }
     guard let file = try? JSONDecoder().decode(SettingsFile.self, from: data), !file.settings.isEmpty else { fputs("[RED] launcher: dm/launcher.json cannot be read; starting the game\n", stderr); return 2 }
-    if (UserDefaults.standard.object(forKey: "window.show") as? Bool) == false && !NSEvent.modifierFlags.contains(.option) {
-        fputs("launcher: settings window off (hold Option at launch to show it)\n", stderr)
+    // DM_LAUNCHER=1 is a front end's Option key (Studio's Library, Settings): another app opening
+    // this one cannot hold the player's modifier keys, and the choice "Show this window at launch" stays the player's
+    let asked = NSEvent.modifierFlags.contains(.option) || ProcessInfo.processInfo.environment["DM_LAUNCHER"] == "1"
+    if (UserDefaults.standard.object(forKey: "window.show") as? Bool) == false && !asked {
+        fputs("launcher: settings window off (hold Option at launch, or DM_LAUNCHER=1, to show it)\n", stderr)
         return 2
     }
     let model = LauncherModel(file.settings)

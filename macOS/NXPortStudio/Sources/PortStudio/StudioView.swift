@@ -14,6 +14,28 @@ struct StudioView: View {
     @Bindable var model: StudioModel
     @Bindable private var localization = StudioLocalization.shared
     var body: some View {
+        Group {
+            if model.page == .library && model.libraryFullScreen {
+                // The Library alone, as a home screen: no sidebar or page header.
+                LibraryView(model: model).padding(.horizontal, 56).padding(.vertical, 40)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                workspace
+            }
+        }
+        .background(StudioStyle.ground)
+        .foregroundStyle(.white)
+        .font(.system(size: 14))
+        .onChange(of: model.destination) {
+            Task {
+                await model.checkEnvironment()
+                if model.destination == .iOS { await model.refreshDevices() }
+            }
+        }
+        .sheet(isPresented: $model.showingKeysSheet, onDismiss: { model.pastedKeys = "" }) { keysSheet }
+    }
+
+    private var workspace: some View {
         HStack(spacing: 0) {
             sidebar.frame(width: 202)
             Rectangle().fill(.white.opacity(0.06)).frame(width: 1)
@@ -23,6 +45,7 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 22) {
                         if let failure = model.failure { errorNotice(failure) }
                         switch model.page {
+                        case .library: LibraryView(model: model)
                         case .create: createPage
                         case .saves: SavedGamesView(model: model)
                         case .devices: DevicesView(model: model)
@@ -37,16 +60,6 @@ struct StudioView: View {
                 if model.isBusy || model.completedURL != nil { progressFooter }
             }
         }
-        .background(StudioStyle.ground)
-        .foregroundStyle(.white)
-        .font(.system(size: 14))
-        .onChange(of: model.destination) {
-            Task {
-                await model.checkEnvironment()
-                if model.destination == .iOS { await model.refreshDevices() }
-            }
-        }
-        .sheet(isPresented: $model.showingKeysSheet, onDismiss: { model.pastedKeys = "" }) { keysSheet }
     }
 
     private var sidebar: some View {
@@ -109,6 +122,7 @@ struct StudioView: View {
     }
     private var subtitle: String {
         switch model.page {
+        case .library: t("Your installed Mac ports, ready to play.")
         case .create: t("From your game files to an Apple app.")
         case .saves: t("Import and export JKSV backups for your native ports.")
         case .devices: t("Sign and install on your paired iPhone or iPad.")

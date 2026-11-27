@@ -82,17 +82,4 @@ final class SaveArchivesTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: item.primarySaveURL.appendingPathComponent("old")), Data("keep".utf8))
         XCTAssertEqual(try Data(contentsOf: item.deviceSaveURL.appendingPathComponent("userdata.dat")), Data("synthetic new save".utf8))
     }
-
-    func testDiscoveryUsesValidatedTitleMetadataWithoutGameFiles() throws {
-        let root = try fixture(); defer { try? FileManager.default.removeItem(at: root) }
-        for (name, id) in [("Valid", title), ("Bad", "../elsewhere"), ("Zero", "0000000000000000")] {
-            let contents = root.appendingPathComponent(name + ".app/Contents")
-            try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
-            let info = ["DMTitleID": id, "CFBundleIdentifier": "org.example.fixture", "CFBundleName": name]
-            try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
-        }
-        let found = SaveArchiveStore.installedPorts(in: [root], home: root)
-        XCTAssertEqual(found.map(\.name), ["Valid"])
-        XCTAssertEqual(found.first?.primarySaveURL.path, root.appendingPathComponent("Library/Application Support/nxnative/" + title + "/save").path)
-    }
 }

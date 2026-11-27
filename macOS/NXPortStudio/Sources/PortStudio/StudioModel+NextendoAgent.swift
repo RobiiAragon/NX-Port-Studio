@@ -102,7 +102,7 @@ extension StudioModel {
     /// other port keeps signing in by itself.
     func registerInstalledPortsWithNextendoAgent() async {
         var registered = 0, failed = 0
-        for app in Self.installedMacPorts() {
+        for app in InstalledMacPorts.scan().filter(\.isPrimaryHost).map(\.appURL) {
             switch await nextendoAgentClient.registerPeer(app: app) {
             case .ok?: registered += 1
             default: failed += 1
@@ -168,18 +168,6 @@ extension StudioModel {
         nextendoNotifications = result ?? false
         if enabled && result != true {
             nextendoFriendsMessage = t("macOS did not allow notifications. Allow them for NX Port Studio in System Settings, Notifications.")
-        }
-    }
-
-    nonisolated static func installedMacPorts(in folders: [URL] = [URL(fileURLWithPath: "/Applications"),
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]) -> [URL] {
-        folders.flatMap { folder -> [URL] in
-            let apps = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-            return apps.filter { app in
-                guard app.pathExtension == "app",
-                      let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist")) else { return false }
-                return info["DMPrimaryHost"] as? Bool == true && info["DMTitleID"] is String
-            }
         }
     }
 }
