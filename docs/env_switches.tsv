@@ -106,6 +106,7 @@ DM_NEXTENDO_CLIENT_ID	switch	Public OAuth application identifier embedded in mob
 DM_NEXTENDO_PEER_COLLECTION	path	Optional iOS build-time directory of already-approved title/host peer certificates; defaults to Studio's local collection
 DM_NEXTENDO_ROUTES	path	Private reviewed Nextendo route-policy TSV with exact host and certificate constraints
 DM_NEXTENDO_SERVICES_DIR	path	Validated game service profile directory for Nextendo
+DM_NEX_TRACE	diagnostic	`=1` logs each NEX remote call carried by a TLS stream (PRUDP-Lite over a WebSocket): direction, protocol, method, call ID and a response's success or result code, at most 1,024 lines; parameters and return values are never printed, and other TLS streams print nothing
 DM_NICK	switch	The account nickname the game sees (default `Player`)
 DM_NRO	switch	`0` turns off loading of the NRO modules the game's NRR files register (on by default): every `nn::ro::LoadModule` then fails
 DM_NVN_ALLOCPROF	diagnostic	`=1` charges Metal allocation growth to each replayed op type and function, and logs command allocator sizes and each new texture (serial, size, format, storage)
