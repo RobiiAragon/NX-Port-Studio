@@ -182,6 +182,15 @@ def main():
             result = subprocess.run([str(executable), str(ca_handoff), '0', str(listener.getsockname()[1]), 'handoff'], text=True, capture_output=True, timeout=15)
             if result.returncode: raise AssertionError(f'scoped-CA handoff: {result.stdout}\n{result.stderr}')
             total += int(re.search(r'routes: (\d+) checks, 0 failures', result.stdout)[1])
+            # iOS installs the bundle as another user: its sealed files load; another owner's elsewhere do not.
+            bundle = root / 'Port.app'; (bundle / 'dm' / 'nextendo').mkdir(parents=True)
+            sealed = bundle / 'dm' / 'nextendo' / 'routes.tsv'; sealed.write_text(text); sealed.chmod(0o644)
+            (bundle / 'dm' / 'nextendo' / 'ca.der').write_bytes((root / 'ca.der').read_bytes())
+            for target, owner_bundle, status in ((sealed, str(bundle), 0), (sealed, '-', 3), (config, str(bundle), 3)):
+                result = subprocess.run([str(executable), str(target), str(status)], text=True, capture_output=True, timeout=15,
+                                        env={**os.environ, 'DM_ROUTES_TEST_FOREIGN': owner_bundle})
+                if result.returncode: raise AssertionError(f'foreign owner {target.name} {owner_bundle}: {result.stdout}\n{result.stderr}')
+                total += int(re.search(r'routes: (\d+) checks, 0 failures', result.stdout)[1])
             recovery = subprocess.run([str(executable), '-', '1', str(config)], text=True, capture_output=True, timeout=15)
             if recovery.returncode: raise AssertionError(recovery.stdout + recovery.stderr)
             if not {'localhost', 'wrong.invalid', 'api.console.invalid'}.issubset(names):

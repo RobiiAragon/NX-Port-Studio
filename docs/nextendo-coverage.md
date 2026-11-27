@@ -33,7 +33,7 @@ These are my three titles with specific runtime/connection evidence in this deli
 | Game / application | Catalog protocol | Accepted versions | Regional profiles | Patch builds | Native online |
 | --- | --- | --- | ---: | ---: | --- |
 | Among Us | SDK / unspecified | 2026.19.0, 2026.18.0 | 1 | 0 | Unverified |
-| Animal Crossing: New Horizons | SDK / unspecified | 3.0.3 | 1 | 0 | Unverified |
+| Animal Crossing: New Horizons | SDK / unspecified | 3.0.3 | 1 | 0 | [Mac and iPhone Dodo visits verified](../dm/games/01006F8002326000/README.md#services) |
 | ARMS | SDK / unspecified | 5.5.1 | 1 | 0 | Unverified |
 | Clubhouse Games: 51 Worldwide Classics | nex | 2.0.1 | 1 | 0 | Unverified |
 | Crash Team Racing Nitro-Fueled | demonware | 1.0.15 | 1 | 0 | Unverified |
@@ -99,7 +99,7 @@ All 62 regional service configurations were prepared and staged through the prod
 
 | Game | Native profile | Declared native build versions | Catalog accepts | Native online qualification |
 | --- | --- | --- | --- | --- |
-| Animal Crossing: New Horizons | [01006F8002326000](../dm/games/01006F8002326000/README.md) | 3.0.3 | 3.0.3 | Not qualified |
+| Animal Crossing: New Horizons | [01006F8002326000](../dm/games/01006F8002326000/README.md) | 3.0.3 | 3.0.3 | [A visitor to my Mac's island; my Mac to my iPhone's island](../dm/games/01006F8002326000/README.md#services) |
 | Luigi's Mansion 3 | [0100DCA0064A6000](../dm/games/0100DCA0064A6000/README.md) | 1.4.0 | 1.4.0 | Not qualified |
 | Mario Kart 8 Deluxe | [0100152000022000](../dm/games/0100152000022000/README.md) | 4.0.0, 4.0.1 | 4.0.1 | Current private Mac 4.0.1 candidate; Nextendo race not qualified |
 | Mario Party Superstars | [01006FE013472000](../dm/games/01006FE013472000/README.md) | 1.1.1 | 1.1.1 | Not qualified |

@@ -628,9 +628,9 @@ nextendo-account-sanitize: $(B)/t_nextendo_account_asan $(B)/t_account_nickname_
 ROUTE_SOURCES = t_nextendo_routes.c ../hle_nextendo_routes.c ../hle_net_backend.c ../hle_nsd_backend.c ../hle_ssl_apple.m ../hle_nextendo_x509.c t_net_write_stub.c
 ROUTE_DEPS = ../nsd.h $(ROUTE_SOURCES) ../nextendo_routes.h ../net_socket.h ../ssl_backend.h test_nextendo_routes.py test_ssl_transport.py Makefile
 $(B)/t_nextendo_routes: $(ROUTE_DEPS) | $(B)
-	$(CLANG) -O1 -g -fobjc-arc -mmacosx-version-min=14.0 -Wall -Wextra -Werror $(PRIVATE_PKI_FLAGS) -o $@ $(ROUTE_SOURCES) $(PRIVATE_PKI_LIB) -framework Foundation -framework Security
+	$(CLANG) -O1 -g -fobjc-arc -mmacosx-version-min=14.0 -Wall -Wextra -Werror $(PRIVATE_PKI_FLAGS) -DDM_NEXTENDO_ROUTES_TEST -o $@ $(ROUTE_SOURCES) $(PRIVATE_PKI_LIB) -framework Foundation -framework Security
 $(B)/t_nextendo_routes_asan: $(ROUTE_DEPS) | $(B)
-	$(CLANG) -O1 -g -fobjc-arc -mmacosx-version-min=14.0 -Wall -Wextra -Werror $(PRIVATE_PKI_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(ROUTE_SOURCES) $(PRIVATE_PKI_LIB) -framework Foundation -framework Security
+	$(CLANG) -O1 -g -fobjc-arc -mmacosx-version-min=14.0 -Wall -Wextra -Werror $(PRIVATE_PKI_FLAGS) -DDM_NEXTENDO_ROUTES_TEST -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ $(ROUTE_SOURCES) $(PRIVATE_PKI_LIB) -framework Foundation -framework Security
 .PHONY: nextendo-routes nextendo-routes-sanitize
 nextendo-routes: $(B)/t_nextendo_routes
 	$(PYTHON) test_nextendo_routes.py $(B)/t_nextendo_routes

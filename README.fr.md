@@ -63,9 +63,9 @@ Voici les jeux Switch dont j’ai essayé les modes réseau dans des portages NX
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Une manche d’arène contre un joueur distant | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Hall et file de Guerre de territoire | — | — | Mac |
 | [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ Une partie de Salmon Run avec d’autres joueurs | — | — | Mac |
-| [Animal Crossing: New Horizons](dm/games/01006F8002326000/README.md) | 3.0.3 | ✅ Un visiteur est venu sur mon île avec un code Dodo | — | — | Mac |
+| [Animal Crossing: New Horizons](dm/games/01006F8002326000/README.md) | 3.0.3 | ✅ Un visiteur est venu sur l’île de mon Mac avec un code Dodo ; mon Mac a visité l’île de mon iPhone | — | — | Mac, iPhone |
 
-Limites connues : Smash rejette le Match rapide pour connexion instable. Le matchmaking de Splatoon 2 et 3 demande d’autres joueurs dans le même mode au même moment ; le serveur de Splatoon 3 descend au plus à la moitié de l’effectif (4 en Guerre de territoire, 2 en Salmon Run). Je n’ai pas validé le jeu en ligne sur iPhone. Dans Animal Crossing, j’ai reçu un visiteur mais je n’ai pas encore visité une autre île. La note de chaque jeu donne la version exacte et les points ouverts.
+Limites connues : Smash rejette le Match rapide pour connexion instable. Le matchmaking de Splatoon 2 et 3 demande d’autres joueurs dans le même mode au même moment ; le serveur de Splatoon 3 descend au plus à la moitié de l’effectif (4 en Guerre de territoire, 2 en Salmon Run). Sur iPhone, Animal Crossing est le seul jeu que j’ai joué en ligne. Dans Animal Crossing, chaque appareil a besoin de son propre compte Nextendo ; mon essai sur iPhone s’est fait sur mon réseau domestique, et l’iPhone n’a encore ni visité d’île ni joué avec quelqu’un par Internet. La note de chaque jeu donne la version exacte et les points ouverts.
 
 ## Démarrage
 

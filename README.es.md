@@ -75,13 +75,13 @@ Estos son los juegos de Switch cuyos modos de red probé en ports de NX Port Stu
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ Una ronda de arena contra un jugador remoto | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europa) | 5.5.2 | 🟡 Vestíbulo y cola de Territorial | — | — | Mac |
 | [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ Un turno de Salmon Run con otros jugadores | — | — | Mac |
-| [Animal Crossing: New Horizons](dm/games/01006F8002326000/README.md) | 3.0.3 | ✅ Un visitante llegó a mi isla con un PIN Dodo | — | — | Mac |
+| [Animal Crossing: New Horizons](dm/games/01006F8002326000/README.md) | 3.0.3 | ✅ Un visitante llegó a la isla de mi Mac con un PIN Dodo; mi Mac visitó la isla de mi iPhone | — | — | Mac, iPhone |
 
 Límites conocidos:
 - **Smash:** el modo rápido rechaza la conexión por inestable, y una sesión posterior como espectador se desconectó.
 - **Splatoon 2 y 3:** el emparejamiento del proveedor necesita otros jugadores buscando el mismo modo al mismo tiempo. El servidor de Splatoon 3 exige el cupo completo (8 en Territorial, 4 en Salmon Run) durante 45 segundos y luego lo baja, nunca a menos de la mitad (4 y 2). Con poca gente conectada la cola puede no avanzar, así que Salmon Run con un amigo es la forma más rápida de llegar a una partida.
-- **Animal Crossing:** recibí a un visitante; todavía no he visitado otra isla.
-- **Los cinco:** no he validado el juego en línea en iPhone. Los resultados de LAN/LDN de Mario Kart son de la 3.0.5 y no los he repetido en la 4.0.1.
+- **Animal Crossing:** cada dispositivo necesita su propia cuenta Nextendo. La prueba en línea del iPhone fue en mi red de casa; todavía no he visitado otra isla desde el iPhone ni he jugado con alguien por internet desde él.
+- **iPhone:** Animal Crossing es el único juego que he jugado en línea en iPhone. Los resultados de LAN/LDN de Mario Kart son de la 3.0.5 y no los he repetido en la 4.0.1.
 
 La nota de cada juego tiene el build exacto, las fechas y los pendientes.
 

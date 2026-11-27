@@ -66,22 +66,49 @@ static unsigned match_score(const route *entry, const char *host) {
     if (memchr(host + prefix, '.', n - prefix - suffix)) return 0;
     return 10000u + (unsigned)m;
 }
-static int read_regular(int fd, size_t limit, uint8_t **bytes, size_t *length) {
+#ifdef DM_NEXTENDO_ROUTES_TEST
+static uid_t test_euid = (uid_t)-1; static char test_bundle[PATH_MAX];
+void dm_nextendo_routes_test_owner(uid_t euid, const char *bundle) {
+    test_euid = euid; snprintf(test_bundle, sizeof test_bundle, "%s", bundle ? bundle : "");
+}
+static uid_t routes_euid(void) { return test_euid != (uid_t)-1 ? test_euid : geteuid(); }
+#else
+static uid_t routes_euid(void) { return geteuid(); }
+#endif
+// iOS installs an app's bundle as _installd, not as the app's user or root, and the
+// code signature seals every file in it. A directory inside the main bundle may
+// therefore hold route files of another owner; anywhere else the owner must be the
+// process's user or root.
+static bool in_main_bundle(const char *directory) {
+    char bundle[PATH_MAX] = {0}, actual[PATH_MAX];
+#ifdef DM_NEXTENDO_ROUTES_TEST
+    if (test_bundle[0]) { if (!realpath(test_bundle, bundle)) return false; } else
+#endif
+    {
+        CFBundleRef main = CFBundleGetMainBundle(); CFURLRef url = main ? CFBundleCopyBundleURL(main) : NULL;
+        bool ok = url && CFURLGetFileSystemRepresentation(url, true, (UInt8 *)bundle, sizeof bundle); if (url) CFRelease(url);
+        char resolved[PATH_MAX]; if (!ok || !realpath(bundle, resolved)) return false; memcpy(bundle, resolved, sizeof bundle);
+    }
+    if (!realpath(directory, actual)) return false;
+    size_t n = strlen(bundle);
+    return n > 1 && !strncmp(actual, bundle, n) && actual[n] == '/';
+}
+static int read_regular(int fd, size_t limit, bool sealed, uint8_t **bytes, size_t *length) {
     struct stat st;
-    if (fstat(fd, &st) || !S_ISREG(st.st_mode) || (st.st_uid != geteuid() && st.st_uid != 0) || (st.st_mode & 022) || st.st_size <= 0) return DM_NEXTENDO_ROUTES_IO;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode) || (!sealed && st.st_uid != routes_euid() && st.st_uid != 0) || (st.st_mode & 022) || st.st_size <= 0) return DM_NEXTENDO_ROUTES_IO;
     if ((uint64_t)st.st_size > limit) return DM_NEXTENDO_ROUTES_LIMIT;
     uint8_t *data = malloc((size_t)st.st_size + 1); if (!data) return DM_NEXTENDO_ROUTES_LIMIT; size_t done = 0;
     while (done < (size_t)st.st_size) { ssize_t n = read(fd, data + done, (size_t)st.st_size - done); if (n < 0 && errno == EINTR) continue; if (n <= 0) { free(data); return DM_NEXTENDO_ROUTES_IO; } done += (size_t)n; }
     data[done] = 0; *bytes = data; *length = done; return 0;
 }
 static int hex_digit(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
-static int load_ca(int directory, const char *name, const char *expected, route *entry) {
+static int load_ca(int directory, bool sealed, const char *name, const char *expected, route *entry) {
     if (!strcmp(name, "-") && !strcmp(expected, "-")) return 0;
     if (!name[0] || strlen(name) > NAME_MAX || strchr(name, '/') || !strcmp(name, ".") || !strcmp(name, "..") || strlen(expected) != 64) return DM_NEXTENDO_ROUTES_CERTIFICATE;
     uint8_t digest[CC_SHA256_DIGEST_LENGTH];
     for (unsigned i = 0; i < sizeof digest; i++) { int a = hex_digit(expected[i * 2]), b = hex_digit(expected[i * 2 + 1]); if (a < 0 || b < 0) return DM_NEXTENDO_ROUTES_CERTIFICATE; digest[i] = (uint8_t)(a * 16 + b); }
     int fd = openat(directory, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW); if (fd < 0) return DM_NEXTENDO_ROUTES_CERTIFICATE;
-    int status = read_regular(fd, CERT_MAX, &entry->ca, &entry->ca_size); close(fd); if (status) return status;
+    int status = read_regular(fd, CERT_MAX, sealed, &entry->ca, &entry->ca_size); close(fd); if (status) return status;
     uint8_t actual[CC_SHA256_DIGEST_LENGTH]; CC_SHA256(entry->ca, (CC_LONG)entry->ca_size, actual); if (memcmp(actual, digest, sizeof actual)) return DM_NEXTENDO_ROUTES_CERTIFICATE;
     CFDataRef data = CFDataCreate(kCFAllocatorDefault, entry->ca, (CFIndex)entry->ca_size);
     SecCertificateRef certificate = data ? SecCertificateCreateWithData(kCFAllocatorDefault, data) : NULL; if (data) CFRelease(data);
@@ -95,7 +122,8 @@ static int load_policy(const char *path, route **output, size_t *count) {
     const char *file = path + (slash - parent) + 1; if (slash == parent) slash[1] = 0; else *slash = 0;
     int directory = open(parent, O_RDONLY | O_CLOEXEC | O_DIRECTORY); if (directory < 0) return errno == ENOENT ? DM_NEXTENDO_ROUTES_MISSING : DM_NEXTENDO_ROUTES_IO;
     int fd = openat(directory, file, O_RDONLY | O_CLOEXEC | O_NOFOLLOW); if (fd < 0) { int status = errno == ENOENT ? DM_NEXTENDO_ROUTES_MISSING : DM_NEXTENDO_ROUTES_IO; close(directory); return status; }
-    uint8_t *data = NULL; size_t size = 0; int status = read_regular(fd, CONFIG_MAX, &data, &size); close(fd);
+    bool sealed = in_main_bundle(parent);
+    uint8_t *data = NULL; size_t size = 0; int status = read_regular(fd, CONFIG_MAX, sealed, &data, &size); close(fd);
     if (status) { close(directory); return status; }
     if (memchr(data, 0, size)) { free(data); close(directory); return DM_NEXTENDO_ROUTES_INVALID; }
     route *entries = calloc(ROUTE_MAX, sizeof *entries); if (!entries) { free(data); close(directory); return DM_NEXTENDO_ROUTES_LIMIT; }
@@ -135,7 +163,7 @@ static int load_policy(const char *path, route **output, size_t *count) {
         if (entry->address_alias && (dynamic_peer || literal.s_addr != ip.s_addr || !entry->peer[0] || inet_pton(AF_INET, entry->peer, &literal) == 1)) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
         if (!inet_ntop(AF_INET, &ip, entry->address, sizeof entry->address)) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
         for (size_t i = 0; i < used; i++) if (entries[i].match == entry->match && !strcmp(entries[i].host, entry->host)) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
-        if (!status) status = load_ca(directory, fields[3], fields[4], entry);
+        if (!status) status = load_ca(directory, sealed, fields[3], fields[4], entry);
         if (!status && (entry->pinned || entry->address_alias) && !entry->ca_size) status = DM_NEXTENDO_ROUTES_CERTIFICATE;
         if (status) { free(entry->ca); entry->ca = NULL; break; }
         ca_total += entry->ca_size; if (ca_total > CERT_TOTAL_MAX) { free(entry->ca); entry->ca = NULL; status = DM_NEXTENDO_ROUTES_LIMIT; break; } used++;
