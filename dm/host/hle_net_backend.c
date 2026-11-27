@@ -174,6 +174,33 @@ static void net_trace(const char *op, int fd, long result) {
     const char *s = getenv("DM_NET_TRACE");
     if (s && atoi(s)) fprintf(stderr, "net: %s guest_fd=%d result=%ld errno=%d\n", op, fd, result, result < 0 ? t_net_errno : 0);
 }
+// The addresses a Nextendo route resolved a name to (the provider's servers), so the trace can name a
+// datagram's peer by kind without printing it: a player's own or another player's address never appears.
+enum { NET_ROUTED_MAX = 8 };
+static _Atomic uint32_t g_routed[NET_ROUTED_MAX];
+static void net_routed_add(uint32_t address) {
+    for (unsigned i = 0; i < NET_ROUTED_MAX; i++) {
+        uint32_t seen = atomic_load(&g_routed[i]);
+        if (seen == address) return;
+        if (!seen && atomic_compare_exchange_strong(&g_routed[i], &seen, address)) return;
+        if (seen == address) return;
+    }
+}
+static const char *net_peer_kind(uint32_t network) {
+    uint32_t a = ntohl(network);
+    for (unsigned i = 0; i < NET_ROUTED_MAX; i++) if (atomic_load(&g_routed[i]) == network) return "provider";
+    if ((a >> 24) == 127) return "loopback";
+    if ((a >> 24) == 10 || (a >> 20) == 0xac1 || (a >> 16) == 0xc0a8 || (a >> 22) == (0x64400000u >> 22) || (a >> 16) == 0xa9fe) return "private";
+    if ((a >> 28) == 0xe || a == 0xffffffffu) return "multicast";
+    return "public";
+}
+static void net_trace_peer(const char *op, int fd, long result, const struct sockaddr_in *peer) {
+    const char *s = getenv("DM_NET_TRACE");
+    if (!(s && atoi(s))) return;
+    if (!peer) { net_trace(op, fd, result); return; }
+    fprintf(stderr, "net: %s guest_fd=%d result=%ld errno=%d peer=%s:%u\n", op, fd, result, result < 0 ? t_net_errno : 0,
+            net_peer_kind(peer->sin_addr.s_addr), ntohs(peer->sin_port));
+}
 // Each operation borrows a duplicate while under the lock. Close removes the guest slot first;
 // a generation check in every bounded wait prevents an old waiter touching a subsequently reused slot.
 static int net_borrow(int guest, net_ref *r) {
@@ -364,7 +391,7 @@ int dm_net_connect(int guest, const void *addr, unsigned len) {
         result = net_wait(&r, POLLOUT, r.send_ms, start);
         if (!result) { socklen_t n = sizeof err; if (getsockopt(r.fd, SOL_SOCKET, SO_ERROR, &err, &n) < 0) err = errno; result = err ? -1 : 0; if (result) net_error(net_errno(err)); }
     } else result = net_host_result(result, err);
-    close(r.fd); net_trace("connect", guest, result); return result;
+    close(r.fd); net_trace_peer("connect", guest, result, &a); return result;
 }
 int dm_net_listen(int guest, int backlog) { net_ref r; if (net_borrow(guest, &r)) return -1; int result = listen(r.fd, backlog), err = errno; close(r.fd); return net_host_result(result, err); }
 int dm_net_accept(int guest, void *addr, unsigned *len) {
@@ -455,7 +482,7 @@ long dm_net_recv(int guest, void *buf, unsigned long len, int flags, void *addr,
         if (err != EAGAIN || r.nonblock || (flags & 0x80)) { if (!total) result = net_error(net_errno(err)); break; }
         if (net_wait(&r, POLLIN, r.recv_ms, start)) { if (!total) result = -1; break; }
     }
-    close(r.fd); net_trace("recv", guest, result); return result;
+    close(r.fd); net_trace_peer("recv", guest, result, addr && result > 0 ? &a : NULL); return result;
 }
 long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const void *addr, unsigned addrlen) {
     if (!net_gate()) return -1;
@@ -491,7 +518,7 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
         // unavailable bounded subnet must not turn its success into failure.
         t_net_errno=saved;
     }
-    close(r.fd); net_trace("send", guest, result); return result;
+    close(r.fd); net_trace_peer("send", guest, result, addr ? &a : NULL); return result;
 }
 
 #include "net_message.inc"
@@ -719,7 +746,7 @@ static int net_resolver_name(const char *host, int flags, char expanded[DM_NSD_F
         dm_net_dns_provider provider = atomic_load(&g_dns_provider);
         int policy = provider ? provider(*lookup, redirected, INET_ADDRSTRLEN) : numeric ? 0 : -1;
         if (policy < 0 || policy > 1 || (policy > 0 && (!memchr(redirected, 0, INET_ADDRSTRLEN) || inet_pton(AF_INET, redirected, &literal) != 1))) return 8;
-        if (policy > 0) *lookup = redirected;
+        if (policy > 0) { *lookup = redirected; net_routed_add(literal.s_addr); }
     }
     return 0;
 }
