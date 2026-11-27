@@ -53,8 +53,10 @@ static inline void dm_nex_line(uint64_t session, bool out, const char *format, .
     errno = saved;
 }
 
-static inline void dm_nex_rmc(uint64_t session, bool out, const uint8_t *p, size_t n) {
+static inline void dm_nex_rmc(uint64_t session, bool out, const uint8_t *message, size_t n) {
     if (n < 5) { dm_nex_line(session, out, "rmc short=%zu", n); return; }
+    // The longest header read is 16 bytes (escaped protocol, then a response's 9); read a copy.
+    uint8_t p[16] = {0}; memcpy(p, message, n < sizeof p ? n : sizeof p);
     size_t at = 4; uint8_t first = p[at++]; bool request = first & 0x80; unsigned protocol = first & 0x7f;
     if (protocol == 0x7f) { if (n < at + 2) { dm_nex_line(session, out, "rmc short=%zu", n); return; } protocol = dm_nex_u16(p + at); at += 2; }
     if (request) {
