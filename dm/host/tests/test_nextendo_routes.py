@@ -148,6 +148,19 @@ def main():
                 add('alias-hostname.tsv',value.replace(alias,alias.replace('pinned-address\t127.0.0.1\t','pinned-address\tother.console.invalid\t')),2)
             path=root/(name+'.tsv'); path.write_text(value); path.chmod(0o600)
             (root/certificate).chmod(0o600); pin_configs.append((path,reject,name == 'pin-handoff'))
+        # The scoped-CA form: a secure server named by its address keeps the paired exact service
+        # name as its TLS peer and SNI, verified by that route's own CA (address), never by a pin.
+        ca_alias = f'address\t127.0.0.1\t127.0.0.1\tapi.console.invalid\tca.der\t{digest}\n'
+        ca_handoff = root / 'ca-handoff.tsv'; ca_handoff.write_text(v2text + ca_alias); ca_handoff.chmod(0o600)
+        add('ca-alias-unpaired.tsv', 'NXNEXTENDO_ROUTES_2\n' + ca_alias, 2)
+        add('ca-alias-renamed-identity.tsv', v2text + ca_alias.replace('api.console.invalid', 'wrong.console.invalid'), 2)
+        add('ca-alias-wrong-target.tsv', v2text + ca_alias.replace('127.0.0.1\t127.0.0.1', '127.0.0.1\t127.0.0.2'), 2)
+        add('ca-alias-other-ca.tsv', v2text + ca_alias.replace(f'ca.der\t{digest}', f'pin.der\t{hashlib.sha256((root / "pin.der").read_bytes()).hexdigest()}'), 2)
+        add('ca-alias-no-ca.tsv', v2text + ca_alias.replace(f'ca.der\t{digest}', '-\t-'), 5)
+        add('ca-alias-hostname.tsv', v2text + ca_alias.replace('address\t127.0.0.1\t', 'address\tother.console.invalid\t'), 2)
+        pin_handoff = (root / 'pin-handoff.tsv').read_text()
+        add('ca-alias-pinned-identity.tsv', pin_handoff.replace('pinned-address\t', 'address\t'), 2)
+        add('pin-alias-ca-identity.tsv', v2text + ca_alias.replace('address\t', 'pinned-address\t'), 2)
         total = 0
         try:
             for path, status in cases:
@@ -166,11 +179,14 @@ def main():
                 result=subprocess.run([str(executable),str(path),'0',str(pin_listener.getsockname()[1]),'reject-pin' if reject else 'handoff' if handoff else 'v2'],text=True,capture_output=True,timeout=15)
                 if result.returncode: raise AssertionError(f'enrolled leaf {path.name}: {result.stdout}\n{result.stderr}')
                 total += int(re.search(r'routes: (\d+) checks, 0 failures',result.stdout)[1])
+            result = subprocess.run([str(executable), str(ca_handoff), '0', str(listener.getsockname()[1]), 'handoff'], text=True, capture_output=True, timeout=15)
+            if result.returncode: raise AssertionError(f'scoped-CA handoff: {result.stdout}\n{result.stderr}')
+            total += int(re.search(r'routes: (\d+) checks, 0 failures', result.stdout)[1])
             recovery = subprocess.run([str(executable), '-', '1', str(config)], text=True, capture_output=True, timeout=15)
             if recovery.returncode: raise AssertionError(recovery.stdout + recovery.stderr)
             if not {'localhost', 'wrong.invalid', 'api.console.invalid'}.issubset(names):
                 raise AssertionError("actual TLS did not observe both configured SNI names")
-            print(f"Nextendo route policy: {len(cases)+len(pin_configs)} configurations, {total} checks, 0 failures; scoped-CA and explicitly enrolled leaf TLS verified, no user credentials")
+            print(f"Nextendo route policy: {len(cases)+len(pin_configs)+1} configurations, {total} checks, 0 failures; scoped-CA and explicitly enrolled leaf TLS verified, no user credentials")
         finally:
             stop.set()
             listener.close()

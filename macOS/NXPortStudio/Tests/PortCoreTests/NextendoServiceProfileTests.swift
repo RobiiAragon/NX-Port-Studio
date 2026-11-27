@@ -51,6 +51,24 @@ private actor ProfileHTTP: NextendoHTTPClient {
         let permissions = try FileManager.default.attributesOfItem(atPath: second.path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(permissions?.intValue, 0o600)
     }
+    func testSecureServerAddressKeepsItsServiceIdentity() throws {
+        let value = try contract(), host = "g2ee2e300-lp1.s.n.srv.nintendo.net", address = "51.178.29.194"
+        let ca = ["provider-ca.der", NextendoServiceContract.digest(self.ca)]
+        let routes = String(decoding: try value.routes(titleID: "01006f8002326000"), as: UTF8.self)
+        XCTAssertTrue(routes.contains((["exact", host, address, "@host"] + ca).joined(separator: "\t") + "\n"))
+        XCTAssertTrue(routes.contains((["address", address, address, host] + ca).joined(separator: "\t") + "\n"))
+        XCTAssertFalse(String(decoding: try value.routes(titleID: "0100152000022000"), as: UTF8.self).contains("address\t"))
+        // The same bytes as the Python generator (dm/tools/nextendo_services.py), which the C loader pairs.
+        let python = Process(); python.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../..").standardized
+        python.arguments = ["python3", "-c", "import sys; sys.path.insert(0, 'dm/tools'); import nextendo_services as n; sys.stdout.write(n.rules(n.contract('.'), '01006f8002326000'))"]
+        python.currentDirectoryURL = repository; let output = Pipe(); python.standardOutput = output
+        try python.run(); python.waitUntilExit()
+        XCTAssertEqual(python.terminationStatus, 0)
+        // This test's contract names its own fixture CA in place of the provider's.
+        let published = "a654c0eff8aa20a72280ea0ef2b5c2a17392922dd78ffbb113862e1ad2c66d49"
+        XCTAssertEqual(String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).replacingOccurrences(of: published, with: ca[1]), routes)
+    }
     func testSelfSignedEndpointIsPinnedForItsGameOnly() async throws {
         let value = try contract(), host = "api.hac.lp1.acbaa.srv.nintendo.net"
         let pin = try XCTUnwrap(value.titles["01006f8002326000"]?.first { $0.host == host }?.pin)

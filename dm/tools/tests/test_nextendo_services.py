@@ -1,4 +1,5 @@
 """Public profile generation and closed staging, without user account state."""
+import copy
 import hashlib
 import importlib.util
 import json
@@ -42,6 +43,18 @@ class NextendoServicesTests(unittest.TestCase):
                 with self.assertRaises(ValueError): n.stage(source,root/'bad','0100152000022000')
                 (source/'provider-ca.der').unlink(); (source/'provider-ca.der').symlink_to(root/'staged/provider-ca.der')
                 with self.assertRaises(ValueError): n.stage(source,root/'bad','0100152000022000')
+    def test_secure_server_address_keeps_its_service_identity(self):
+        value=n.contract(REPO); host='g2ee2e300-lp1.s.n.srv.nintendo.net'; address=value['provider']['server']; ca=['provider-ca.der',value['provider']['caSHA256']]
+        routes=n.rules(value,'01006f8002326000')
+        self.assertIn('\t'.join(['exact',host,address,'@host']+ca)+'\n',routes)   # the service by its name, verified by the provider CA
+        self.assertIn('\t'.join(['address',address,address,host]+ca)+'\n',routes)   # the secure server by its address: same peer, SNI and CA
+        self.assertNotIn('address\t',n.rules(value,'0100152000022000'))   # another game's profile carries no numeric alias
+        for broken in ({'match':'suffix'},{'tls':False},{'secureAddress':'yes'}):
+            changed=copy.deepcopy(value); rule=next(r for r in changed['titles']['01006f8002326000'] if r['host']==host); rule.update(broken)
+            with self.assertRaises(ValueError): n.rules(changed,'01006f8002326000')
+        twice=copy.deepcopy(value); twice['titles']['01006f8002326000'].append({'match':'exact','host':'other-lp1.s.n.srv.nintendo.net','server':'server','tls':True,'secureAddress':True})
+        with self.assertRaises(ValueError): n.rules(twice,'01006f8002326000')   # two services cannot share one secure-server address
+
     def test_self_signed_endpoint_is_pinned_for_its_game_only(self):
         # Animal Crossing: New Horizons' island API serves a self-signed certificate, not one from the provider CA.
         value=n.contract(REPO); host='api.hac.lp1.acbaa.srv.nintendo.net'
