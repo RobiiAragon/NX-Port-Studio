@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.6.0:** the stable release that gathers my eleven candidates. It brings the current nxnative engine; online, LAN and local wireless play from each game's own menus; Splatoon 2 and Splatoon 3 12.0.0, where I completed an online Salmon Run shift; JKSV save transfer; wired PowerA controllers on the Mac; and Nextendo presence so friends can see me. [Release notes and test limits](docs/releases/1.6.0.md).
+> **1.7.0:** Animal Crossing: New Horizons plays online through Nextendo on my Mac: I opened my island with a Dodo Code and a visitor came and went. Studio also becomes a launcher for installed Mac ports, with a home-menu Library and one Nextendo session shared by every port. [Release notes and test limits](docs/releases/1.7.0.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 
@@ -77,11 +77,13 @@ These are the Switch games whose network modes I have tested in NX Port Studio p
 | [Super Smash Bros. Ultimate](dm/games/01006A800016E000/README.md) | 13.0.5 | ✅ One arena round against a remote player | — | — | Mac |
 | [Splatoon 2](dm/games/0100F8F0000A2000/README.md) (Europe) | 5.5.2 | 🟡 Lobby and Turf War queue | — | — | Mac |
 | [Splatoon 3](dm/games/0100C2500FC20000/README.md) | 12.0.0 | ✅ One Salmon Run shift with other players | — | — | Mac |
+| [Animal Crossing: New Horizons](dm/games/01006F8002326000/README.md) | 3.0.3 | ✅ A visitor came to my island through a Dodo Code | — | — | Mac |
 
 Known limits:
 - **Smash:** Quickplay rejects the connection as unstable, and a later spectating session disconnected.
 - **Splatoon 2 and 3:** the provider's matchmaking needs other players searching the same mode at the same time. Splatoon 3's server keeps the full count (8 for Turf War, 4 for Salmon Run) for 45 seconds and then lowers it, never below half (4 and 2). With few people online the queue can wait indefinitely, so Salmon Run with a friend is the quickest way to reach a match.
-- **All four:** I have not qualified iPhone online play. Mario Kart's LAN/LDN results are from 3.0.5, and I have not repeated them on 4.0.1.
+- **Animal Crossing:** I have hosted one visitor; I have not yet visited another island.
+- **All five:** I have not qualified iPhone online play. Mario Kart's LAN/LDN results are from 3.0.5, and I have not repeated them on 4.0.1.
 
 Each game note has the exact build, dates and open issues.
 
