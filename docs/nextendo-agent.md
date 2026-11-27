@@ -138,10 +138,8 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
    - a friend list in a game served by the agent;
    - my presence seen by a friend;
    - two games open at once showing the newer one.
-3. **Hub.** *Done in code.* See [Hub](#hub). I checked the Friends panel with a real friend in a game. Remaining acceptance:
-   - the notification permission prompt from the agent app;
+3. **Hub.** *Done in code.* See [Hub](#hub). I checked the Friends panel with a real friend in a game, the agent app's notification permission prompt, a notification the agent posted when a friend request arrived, and that request accepted from Studio (`POST /api/friends/accept` answered 200, and the request left the panel). Remaining acceptance:
    - a friend coming online while no game runs;
-   - a request accepted from Studio;
    - a session closed on the website while a game is open.
 
 ## Checks
@@ -175,7 +173,7 @@ These need no game:
   - invalidation, sign-out and offline mode stop it.
 - `dm/tools/tests/test_nsp_mac_app.py` packs the new sources into the bootstrap.
 
-On my Mac with the packaged app, I checked that the switch registers the agent, that the agent runs under launchd, that it is registered again after Studio is replaced, and that the Friends panel shows a real friend in a game. The agent logs failed provider requests, answers over its limit, HTTP errors and a missing OAuth grant under the subsystem `org.nxnative.portstudio.agent`:
+On my Mac with the packaged app, I checked that the switch registers the agent, that the agent runs under launchd, that it is registered again after Studio is replaced, that the Friends panel shows a real friend in a game, and that a friend request is notified and can be accepted from that panel. The agent logs failed provider requests, answers over its limit, HTTP errors and a missing OAuth grant under the subsystem `org.nxnative.portstudio.agent`:
 
 ```bash
 /usr/bin/log show --last 10m --predicate 'subsystem == "org.nxnative.portstudio.agent"'
