@@ -14,6 +14,7 @@ typedef struct {
 uint32_t dm_nextendo_social_friends(dm_social_friend **output, size_t *count);
 uint32_t dm_nextendo_social_friends_refresh(dm_social_friend **output, size_t *count);
 bool dm_nextendo_api_baas_namespace(const char *kind);
+bool dm_nextendo_api_baas_friends(void);
 uint32_t dm_nextendo_friends_list(int *count,void *output,const void *uid,int offset,int capacity,const void *filter,bool ids_only);
 uint32_t dm_nextendo_friends_update(void *output,const void *uid,const uint64_t *ids,int count);
 uint32_t dm_nextendo_friends_ensure(const void *uid);

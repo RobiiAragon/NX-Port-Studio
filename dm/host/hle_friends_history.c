@@ -59,20 +59,23 @@ static int exact_write(int fd, const void *bytes, size_t size) {
     }
     return fsync(fd) == 0;
 }
-static bool firmware_keys(uint8_t keys[8][32]) {
+// 1: the eight keys were read; 0: no keyring was imported (no system data, or no friends
+// archive); -1: an imported keyring that is not exactly a regular 256-byte file.
+static int firmware_keys(uint8_t keys[8][32]) {
     const char *root = getenv("DM_SYSTEM_DATA_DIR");
-    if (!root || !*root) return false;
+    if (!root || !*root) return 0;
     int base = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (base < 0) return false;
+    if (base < 0) return errno == ENOENT ? 0 : -1;
     int archive = openat(base, "010000000000000e", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-    close(base); if (archive < 0) return false;
+    int missing = archive < 0 && errno == ENOENT;
+    close(base); if (archive < 0) return missing ? 0 : -1;
     int files = openat(archive, "files", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-    close(archive); if (files < 0) return false;
+    close(archive); if (files < 0) return -1;
     int fd = openat(files, "play-history.keyring", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
-    close(files); if (fd < 0) return false;
+    close(files); if (fd < 0) return -1;
     struct stat st; int ok = !fstat(fd, &st) && S_ISREG(st.st_mode) &&
         st.st_size == DM_FRIENDS_HISTORY_KEYRING_SIZE && exact_read(fd, keys, DM_FRIENDS_HISTORY_KEYRING_SIZE);
-    close(fd); return ok;
+    close(fd); return ok ? 1 : -1;
 }
 static int uuid_valid(const uint8_t uuid[16]) {
     return (uuid[6] & 0xf0) == 0x40 && (uuid[8] & 0xc0) == 0x80;
@@ -125,10 +128,17 @@ uint32_t dm_friends_history_key(void *out, const void *uid_pointer, unsigned inp
     if (!present) return DM_FRIENDS_HISTORY_INVALID_UID;
     uint8_t keys[8][32] = {{0}}, result[64] = {1, 1}, uuid[16]; uint32_t status = DM_FRIENDS_HISTORY_FAIL;
     dm_guest_host_wait_begin(); pthread_mutex_lock(&history_lock);
-    if ((key_provider ? key_provider(keys) : firmware_keys(keys)) && local_uuid(uid, uuid)) {
-        uint8_t index; history_random(&index, 1); result[2] = index & 7; result[4] = input_flag & 1;
+    int keyring = key_provider ? (key_provider(keys) ? 1 : 0) : firmware_keys(keys);
+    if (keyring >= 0 && local_uuid(uid, uuid)) {
+        uint8_t index = 0; if (keyring) history_random(&index, 1);
+        result[2] = index & 7; result[4] = input_flag & 1;
         memcpy(result+16, uuid, sizeof uuid);
-        CCHmac(kCCHmacAlgSHA256, keys[result[2]], 32, result, 32, result+32);
+        // The console's friends service always returns a key for an existing user, and games
+        // treat a failure as fatal (Animal Crossing cancels hosting in
+        // NexCreateMeshJob::SetupLocalPlayerInfo). Without an imported keyring the key keeps
+        // its body and leaves the signature zero: a peer's AddPlayHistory cannot verify it,
+        // so only the play-history entry is lost.
+        if (keyring) CCHmac(kCCHmacAlgSHA256, keys[result[2]], 32, result, 32, result+32);
         memcpy(out, result, sizeof result); status = DM_FRIENDS_HISTORY_OK;
     }
     history_clear(keys, sizeof keys); history_clear(result, sizeof result);

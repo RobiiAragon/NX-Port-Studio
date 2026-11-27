@@ -61,7 +61,7 @@ HLE_FORCE_WAIT("_ZN2nn7friends16UpdateFriendInfoEPNS0_6FriendERKNS_7account3UidE
           Result, h_fr_UpdateFriendInfo, void *f, const void *uid, const uint64_t *ids, int n) { return dm_nextendo_friends_update(f,uid,ids,n); }
 HLE_FORCE("_ZN2nn7friends14AddPlayHistoryERKNS0_26PlayHistoryRegistrationKeyERKNS0_15InAppScreenNameES6_", "play history is not registered (cut)",
           Result, h_fr_AddPlayHistory, const void *k, const void *a, const void *b) { (void)k; (void)a; (void)b; return RES_FAIL; }
-HLE_FORCE_WAIT("_ZN2nn7friends29GetPlayHistoryRegistrationKeyEPNS0_26PlayHistoryRegistrationKeyERKNS_7account3UidEb", "local UUID play-history key signed with the privately imported firmware keyring; no linked Nintendo NSA ID",
+HLE_FORCE_WAIT("_ZN2nn7friends29GetPlayHistoryRegistrationKeyEPNS0_26PlayHistoryRegistrationKeyERKNS_7account3UidEb", "local UUID play-history key, signed with the privately imported firmware keyring or unsigned without one; no linked Nintendo NSA ID",
           Result, h_fr_GetPHKey, void *key, const void *uid, unsigned input_flag) {
     if (!key) return RES_FAIL;
     if (!dm_account_uid_exists(uid)) { memset(key, 0, DM_FRIENDS_HISTORY_KEY_SIZE); return DM_FRIENDS_HISTORY_INVALID_UID; }

@@ -86,15 +86,27 @@ def rules(value, title_id, protocol=None):
             if kind != 'exact' or item.get('tls'): raise ValueError('A public-DNS route is one exact name without a provider CA')
             output.append('\t'.join([kind, host, '@dns', '-', '-', '-'])); continue
         address = value['provider'][item['server']]
+        secure = item.get('secureAddress', False)
+        if secure is not False and (secure is not True or kind != 'exact' or not item.get('tls')):
+            raise ValueError('A secure-server address belongs to one exact TLS name')
         if 'pin' in item:
             # A provider endpoint whose certificate is self-signed rather than issued by the provider CA. Its
             # exact DER is enrolled in the contract and the host accepts only those bytes for this one name,
             # with its own SNI (docs/reference/services.md, a private endpoint with no CA-authenticated name).
             if kind != 'exact' or not item.get('tls'): raise ValueError('A pinned route is one exact TLS name')
             pinned(value, item['pin'])
-            output.append('\t'.join(['pinned-exact', host, address, host, item['pin'] + '.der', item['pin']])); continue
-        tail = ['@host', 'provider-ca.der', value['provider']['caSHA256']] if item['tls'] else ['-', '-', '-']
-        output.append('\t'.join([kind, host, address] + tail))
+            files = [item['pin'] + '.der', item['pin']]
+            output.append('\t'.join(['pinned-exact', host, address, host] + files))
+        else:
+            files = ['provider-ca.der', value['provider']['caSHA256']]
+            output.append('\t'.join([kind, host, address] + (['@host'] + files if item['tls'] else ['-', '-', '-'])))
+        if secure:
+            # The NEX secure server this service hands the game to, named by its address: TLS to that address
+            # keeps this exact name as its peer and SNI, with the same pin or provider CA (docs/reference/services.md,
+            # NEX secure-server handoff). It admits only the provider's own address, never another numeric name.
+            if ('address', address) in seen: raise ValueError('Two services claim one secure-server address')
+            seen.add(('address', address))
+            output.append('\t'.join(['pinned-address' if 'pin' in item else 'address', address, address, host] + files))
     if not 0 < len(output) <= 128: raise ValueError('Invalid service route count')
     return 'NXNEXTENDO_ROUTES_2\n' + '\n'.join(output) + '\n'
 

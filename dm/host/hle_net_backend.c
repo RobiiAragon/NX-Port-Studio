@@ -172,7 +172,45 @@ static int net_host_result(int result, int err) { return result < 0 ? net_error(
 static uint64_t net_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000; }
 static void net_trace(const char *op, int fd, long result) {
     const char *s = getenv("DM_NET_TRACE");
-    if (s && atoi(s)) fprintf(stderr, "net: %s guest_fd=%d result=%ld errno=%d\n", op, fd, result, result < 0 ? t_net_errno : 0);
+    if (s && atoi(s)) fprintf(stderr, "net: t=%llu %s guest_fd=%d result=%ld errno=%d\n", (unsigned long long)net_ms(), op, fd, result, result < 0 ? t_net_errno : 0);
+}
+// The addresses a Nextendo route resolved a name to (the provider's servers), so the trace can name a
+// datagram's peer by kind without printing it: a player's own or another player's address never appears.
+enum { NET_ROUTED_MAX = 8 };
+static _Atomic uint32_t g_routed[NET_ROUTED_MAX];
+static unsigned net_routed_add(uint32_t address) {
+    for (unsigned i = 0; i < NET_ROUTED_MAX; i++) {
+        uint32_t seen = atomic_load(&g_routed[i]);
+        if (seen == address) return i + 1;
+        if (!seen && atomic_compare_exchange_strong(&g_routed[i], &seen, address)) return i + 1;
+        if (seen == address) return i + 1;
+    }
+    return 0;
+}
+// "provider<n>": the n-th provider address a route resolved to; the resolve trace names the host that gave it.
+static const char *net_peer_kind(uint32_t network) {
+    static const char *const routed[NET_ROUTED_MAX] = {"provider1", "provider2", "provider3", "provider4", "provider5", "provider6", "provider7", "provider8"};
+    uint32_t a = ntohl(network);
+    for (unsigned i = 0; i < NET_ROUTED_MAX; i++) if (atomic_load(&g_routed[i]) == network) return routed[i];
+    if ((a >> 24) == 127) return "loopback";
+    if ((a >> 24) == 10 || (a >> 20) == 0xac1 || (a >> 16) == 0xc0a8 || (a >> 22) == (0x64400000u >> 22) || (a >> 16) == 0xa9fe) return "private";
+    if ((a >> 28) == 0xe || a == 0xffffffffu) return "multicast";
+    return "public";
+}
+// DM_NET_TRACE=2 also prints the guest's call stack at each send and close: the code that sends a datagram
+// or gives a socket up. The host's crash.c defines it; the socket fixtures, which link no crash handler, get this empty one.
+__attribute__((weak)) void dm_backtrace(uint64_t fp) { (void)fp; }
+static void net_trace_stack(void) {
+    const char *s = getenv("DM_NET_TRACE");
+    if (s && atoi(s) >= 2) dm_backtrace((uint64_t)__builtin_frame_address(0));
+}
+static void net_trace_peer(const char *op, int fd, long result, const struct sockaddr_in *peer) {
+    const char *s = getenv("DM_NET_TRACE");
+    if (!(s && atoi(s))) return;
+    if (!strcmp(op, "send")) net_trace_stack();
+    if (!peer) { net_trace(op, fd, result); return; }
+    fprintf(stderr, "net: t=%llu %s guest_fd=%d result=%ld errno=%d peer=%s:%u\n", (unsigned long long)net_ms(), op, fd, result, result < 0 ? t_net_errno : 0,
+            net_peer_kind(peer->sin_addr.s_addr), ntohs(peer->sin_port));
 }
 // Each operation borrows a duplicate while under the lock. Close removes the guest slot first;
 // a generation check in every bounded wait prevents an old waiter touching a subsequently reused slot.
@@ -328,6 +366,7 @@ static int net_close_owned(int guest, int check_generation, uint64_t generation)
     return net_host_result(result, err);
 }
 int dm_net_close(int guest) {
+    net_trace_stack();
     // Event counters are local synchronization descriptors, including offline.
     pthread_mutex_lock(&g_net_lock);
     int event = guest >= 0 && guest < NET_MAX && g_sockets[guest].used && g_sockets[guest].event;
@@ -364,7 +403,7 @@ int dm_net_connect(int guest, const void *addr, unsigned len) {
         result = net_wait(&r, POLLOUT, r.send_ms, start);
         if (!result) { socklen_t n = sizeof err; if (getsockopt(r.fd, SOL_SOCKET, SO_ERROR, &err, &n) < 0) err = errno; result = err ? -1 : 0; if (result) net_error(net_errno(err)); }
     } else result = net_host_result(result, err);
-    close(r.fd); net_trace("connect", guest, result); return result;
+    close(r.fd); net_trace_peer("connect", guest, result, &a); return result;
 }
 int dm_net_listen(int guest, int backlog) { net_ref r; if (net_borrow(guest, &r)) return -1; int result = listen(r.fd, backlog), err = errno; close(r.fd); return net_host_result(result, err); }
 int dm_net_accept(int guest, void *addr, unsigned *len) {
@@ -455,7 +494,7 @@ long dm_net_recv(int guest, void *buf, unsigned long len, int flags, void *addr,
         if (err != EAGAIN || r.nonblock || (flags & 0x80)) { if (!total) result = net_error(net_errno(err)); break; }
         if (net_wait(&r, POLLIN, r.recv_ms, start)) { if (!total) result = -1; break; }
     }
-    close(r.fd); net_trace("recv", guest, result); return result;
+    close(r.fd); net_trace_peer("recv", guest, result, addr && result > 0 ? &a : NULL); return result;
 }
 long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const void *addr, unsigned addrlen) {
     if (!net_gate()) return -1;
@@ -491,7 +530,7 @@ long dm_net_send(int guest, const void *buf, unsigned long len, int flags, const
         // unavailable bounded subnet must not turn its success into failure.
         t_net_errno=saved;
     }
-    close(r.fd); net_trace("send", guest, result); return result;
+    close(r.fd); net_trace_peer("send", guest, result, addr ? &a : NULL); return result;
 }
 
 #include "net_message.inc"
@@ -719,7 +758,14 @@ static int net_resolver_name(const char *host, int flags, char expanded[DM_NSD_F
         dm_net_dns_provider provider = atomic_load(&g_dns_provider);
         int policy = provider ? provider(*lookup, redirected, INET_ADDRSTRLEN) : numeric ? 0 : -1;
         if (policy < 0 || policy > 1 || (policy > 0 && (!memchr(redirected, 0, INET_ADDRSTRLEN) || inet_pton(AF_INET, redirected, &literal) != 1))) return 8;
-        if (policy > 0) *lookup = redirected;
+        unsigned slot = 0;
+        if (policy > 0) { *lookup = redirected; slot = net_routed_add(literal.s_addr); }
+        const char *trace = getenv("DM_NET_TRACE");
+        // The name is the game's own service name; a numeric one is not printed, only its kind.
+        if (trace && atoi(trace)) {
+            if (slot) fprintf(stderr, "net: resolve host=%s route=provider%u\n", numeric ? "(address)" : host, slot);
+            else fprintf(stderr, "net: resolve host=%s route=%s\n", numeric ? "(address)" : host, policy > 0 ? "provider" : "none");
+        }
     }
     return 0;
 }

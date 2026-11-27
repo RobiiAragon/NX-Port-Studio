@@ -239,8 +239,27 @@ static void legacy_concurrency(void) {
     for(unsigned i=0;i<SF_MAX;i++)if(g_sf[i].used)h_sf_Close(SF_H0+i);
     atomic_store(&mute_sf_logs,0);CHECK(!atomic_load(&legacy_errors));CHECK(g_nse==0);
 }
+// npns:u, as a console no push notification reaches: a non-domain request on its own session; GetReceiveEvent (5) and GetStateChangeEvent (7) reply with the read end of
+// one never-signalled event, any other command with zeroed output and no handle
+static void npns_request(uint32_t message[64],uint32_t command) {
+    memset(message,0,64*sizeof *message);message[0]=6;message[1]=8;
+    message[4]=0x49434653;message[5]=1;message[6]=command;
+}
+static void push_notifications(void) {
+    uint32_t session=0,message[64];CHECK(!h_sf_Connect(&session,"npns:u"));if(!session)return;
+    npns_request(message,5);CHECK(!h_sf_Send(session,message,sizeof message));
+    CHECK((message[1]>>31)==1&&message[2]==2&&message[4]==0x4f434653&&!message[6]);uint32_t receive=message[3];CHECK(signaled(receive)==0);
+    npns_request(message,7);CHECK(!h_sf_Send(session,message,sizeof message)&&(message[1]>>31)==1&&!message[6]);
+    uint32_t state=message[3];CHECK(state!=receive&&signaled(state)==0);
+    npns_request(message,103);CHECK(!h_sf_Send(session,message,sizeof message));
+    CHECK(!(message[1]>>31)&&message[4]==0x4f434653&&!message[6]&&!message[8]);
+    CHECK(g_nse==1);h_sf_Close(session);CHECK(g_nse==0);
+    CHECK(signaled(receive)==0&&signaled(state)==0);close_handle(receive);close_handle(state);
+    uint32_t refused=0;CHECK(h_sf_Connect(&refused,"npns:s")==0xe15u&&!refused);
+}
 int main(void) {
     unsetenv("DM_ACCOUNT_TRACE");
+    push_notifications();
     uint32_t session=0,root=0,message[64];
     CHECK(!h_sf_Connect(&session,"friend:u"));
     if(!session)goto finish;

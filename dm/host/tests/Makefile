@@ -549,16 +549,23 @@ $(B)/t_ssl_trace: t_ssl_trace.c ../ssl_trace.h | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -o $@ t_ssl_trace.c
 $(B)/t_ssl_trace_asan: t_ssl_trace.c ../ssl_trace.h | $(B)
 	$(CLANG) -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_ssl_trace.c
+$(B)/t_nex_trace: t_nex_trace.c ../nex_trace.h t_trace_capture.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -o $@ t_nex_trace.c
+$(B)/t_nex_trace_asan: t_nex_trace.c ../nex_trace.h t_trace_capture.h | $(B)
+	$(CLANG) -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ t_nex_trace.c
+$(B)/t_ssl $(B)/t_ssl_asan $(B)/t_nextendo_routes $(B)/t_nextendo_routes_asan: ../nex_trace.h
 $(B)/t_ssl: $(SSL_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -o $@ $(SSL_SOURCES) -framework Foundation -framework Security
 $(B)/t_ssl_asan: $(SSL_DEPS) | $(B)
 	$(CLANG) $(SSL_FLAGS) -fsanitize=address,undefined -mllvm -asan-globals=0 -fno-omit-frame-pointer -o $@ $(SSL_SOURCES) -framework Foundation -framework Security
 .PHONY: ssl ssl-sanitize
-ssl: $(B)/t_ssl $(B)/t_ssl_trace
+ssl: $(B)/t_ssl $(B)/t_ssl_trace $(B)/t_nex_trace
 	$(B)/t_ssl_trace
+	$(B)/t_nex_trace
 	$(PYTHON) test_ssl_transport.py $(B)/t_ssl
-ssl-sanitize: $(B)/t_ssl_asan $(B)/t_ssl_trace_asan
+ssl-sanitize: $(B)/t_ssl_asan $(B)/t_ssl_trace_asan $(B)/t_nex_trace_asan
 	$(B)/t_ssl_trace_asan
+	$(B)/t_nex_trace_asan
 	$(PYTHON) test_ssl_transport.py $(B)/t_ssl_asan
 
 ACCOUNT_SOURCES = t_nextendo_account.m ../hle_account.c ../hle_account_trace.c ../hle_nextendo_apple.m ../hle_nextendo_preflight_mac.c ../hle_nextendo_api_apple.m ../hle_bigstack.c ../entry.S

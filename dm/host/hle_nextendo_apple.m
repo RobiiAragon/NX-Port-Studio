@@ -375,7 +375,10 @@ uint32_t dm_nextendo_account_available(uint8_t *out) { @autoreleasepool {
 uint32_t dm_nextendo_account_id(uint64_t *out) { @autoreleasepool {
     if (!out) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL,DM_ACCOUNT_STAGE_ARGUMENT);
     *out = 0; DmNextendoCredential *c = credential(); if (!c) return credential_return(DM_ACCOUNT_RETURN_ID,DM_ACCOUNT_FAIL);
-    if (dm_nextendo_api_baas_namespace("account")) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,dm_nextendo_api_baas_id(out),DM_ACCOUNT_STAGE_BAAS_ID);
+    if (dm_nextendo_api_baas_namespace("account")) {
+        uint32_t result=dm_nextendo_api_baas_id(out); if (result) return dm_account_trace_return(DM_ACCOUNT_RETURN_ID,result,DM_ACCOUNT_STAGE_BAAS_ID);
+        if (*out) return 0;   // no BAAS ID on this account: the PID stands in (dm_nextendo_api_baas_id)
+    }
     *out = c.pid; return 0;
 } }
 uint32_t dm_nextendo_account_ensure(void) { @autoreleasepool { return credential_return(DM_ACCOUNT_RETURN_ENSURE,credential() ? 0 : DM_ACCOUNT_FAIL); } }

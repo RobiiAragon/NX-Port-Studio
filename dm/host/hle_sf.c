@@ -1,8 +1,9 @@
 // Services whose client a game links into its own main (nn::sf::hipc): Animal Crossing: New Horizons 3.0.3 carries the clients of olsc:u (cloud save data backup settings,
 // main+0x404bc6c) and npns (push notifications). The SDK's client code connects through sm (an abort in sm::Initialize under InitializeHipcServiceResolution, from main+0x5b8198) and talks
 // HIPC through svcSendSyncRequest; the host has neither. It hands out sessions of its own instead and answers each request in the message buffer, for the services listed in sf_served:
-// success, the output data zeroed, no objects or handles. For olsc that reads as "backup off for every user", so the game leaves the settings alone (main+0x2809c8c asks per user and
-// switches backup off where it is on). Any other service name is refused with a red line, as sm refuses a service that is not registered.
+// success, the output data zeroed, no objects, and a copy handle only where npns:u replies with an event (sf_npns_event_command). For olsc that reads as "backup off for every user",
+// so the game leaves the settings alone (main+0x2809c8c asks per user and switches backup off where it is on). Any other service name is refused with a red line, as sm refuses a
+// service that is not registered.
 // The typed friend:u bridge in sf_friends.inc owns real domain objects and kernel
 // completion events, and calls the existing friends backend. It never enters the
 // zero-output fallback. Only metadata is logged for those requests.
@@ -17,9 +18,24 @@
 
 #define SF_H0 0xd0000u   // session handles: outside the kernel handle table (0x1000 + slot, 4096 slots, hle_thread.c)
 #define SF_MAX 64
-static struct { char name[16]; int used, domain; unsigned seen; sf_friend_domain *friends; } g_sf[SF_MAX];
+static struct { char name[16]; int used, domain; unsigned seen; sf_friend_domain *friends; uint64_t event; } g_sf[SF_MAX];
 static pthread_mutex_t g_sf_mu = PTHREAD_MUTEX_INITIALIZER;
-static const char *const sf_served[] = {"olsc:u"};
+static const char *const sf_served[] = {"olsc:u", "npns:u"};
+// npns:u (push notifications, INpnsUser) answers as a console that no notification reaches: every request succeeds with zeroed output, and the commands whose
+// reply is a readable event (Switchbrew "NPNS services") hand out the read end of a host event that is never signalled. Animal Crossing: New Horizons connects
+// when it goes online (main+0x598b20 aborts on a failed connect), takes GetReceiveEvent's handle into a SystemEvent and only calls Receive after that event fires.
+static int sf_npns_event_command(unsigned cmd) {
+    switch (cmd) {
+    case 5:     // GetReceiveEvent
+    case 7:     // GetStateChangeEvent
+    case 105:   // GetPlayReportRequestEvent
+    case 152:   // GetStateChangeEventWithHandover
+    case 153:   // GetDropEventWithHandover
+    case 161:   // GetRequestChangeStateCancelEvent
+        return 1;
+    }
+    return 0;
+}
 
 static int sf_slot(uint32_t h) {
     unsigned i = h - SF_H0;
@@ -29,7 +45,7 @@ static uint32_t sf_new(const char *name, int domain, sf_friend_domain *friends) 
     pthread_mutex_lock(&g_sf_mu);
     unsigned i = 0; while (i < SF_MAX && g_sf[i].used) i++;
     if (i == SF_MAX) { pthread_mutex_unlock(&g_sf_mu); return 0; }
-    strlcpy(g_sf[i].name, name, sizeof g_sf[i].name); g_sf[i].used = 1; g_sf[i].domain = domain; g_sf[i].seen = 0;
+    strlcpy(g_sf[i].name, name, sizeof g_sf[i].name); g_sf[i].used = 1; g_sf[i].domain = domain; g_sf[i].seen = 0; g_sf[i].event = 0;
     g_sf[i].friends=friends;sf_friend_domain_retain(friends);
     pthread_mutex_unlock(&g_sf_mu);
     return SF_H0 + i;
@@ -53,8 +69,10 @@ HLE_FORCE("_ZN2nn2sf4hipc20ConnectToHipcServiceEPNS_3svc6HandleEPKc", "connect t
 HLE_FORCE("_ZN2nn2sf4hipc24CloseClientSessionHandleENS_3svc6HandleE", "close a session (kernel handle) → the host session", void, h_sf_Close, uint32_t h) {
     pthread_mutex_lock(&g_sf_mu);int i = sf_slot(h);
     if (i < 0) { pthread_mutex_unlock(&g_sf_mu);LOG("[RED] sf: CloseClientSessionHandle on %#x, not a host session", h); return; }
-    sf_friend_domain *friends=g_sf[i].friends;g_sf[i].friends=NULL;g_sf[i].used=0;pthread_mutex_unlock(&g_sf_mu);
+    sf_friend_domain *friends=g_sf[i].friends;g_sf[i].friends=NULL;g_sf[i].used=0;
+    uint64_t event=g_sf[i].event;g_sf[i].event=0;pthread_mutex_unlock(&g_sf_mu);
     sf_friend_domain_release(friends);
+    hle_service_event_close(event);   // read handles the game holds stay valid until it closes them
 }
 // Control requests: the pointer buffer is the server's receive buffer for X descriptors (none: the host reads them in place), the domain conversion makes the session's object 1, a duplicate
 // is a new session to the same object
@@ -102,11 +120,19 @@ static Result sf_legacy_send(int i, uint32_t *m, uint64_t size) {
     if (magic != 0x49434653) { LOG("[RED] sf: %s: request without SFCI (%#x)", g_sf[i].name, magic); return 0xe401u; }
     unsigned key = (obj & 0xff) << 16 | (cmd & 0xffff);   // log each object / command once
     int first = g_sf[i].seen != key; g_sf[i].seen = key;
-    if (first || trace) LOG("sf: %s object %u command %u (%u data words in): success, zeroed output", g_sf[i].name, obj, cmd, ndw);
-    // The response: no special header and no descriptors, so the data words start at +8 and the CMIF part at +0x10; everything after the headers up to the buffer's end reads as zero
-    size_t end = size < 0x1000 ? size : 0x1000;
+    uint32_t copy = 0;
+    if (!strcmp(g_sf[i].name, "npns:u") && sf_npns_event_command(cmd)) {
+        Result r = g_sf[i].event ? RES_OK : hle_service_event_create(&g_sf[i].event);
+        if (!r) r = hle_service_event_copy(g_sf[i].event, &copy);
+        if (r) { LOG("[RED] sf: npns:u command %u: no host event for its reply (%#x)", cmd, r); return r; }
+    }
+    if (first || trace) LOG("sf: %s object %u command %u (%u data words in): success, zeroed output%s", g_sf[i].name, obj, cmd, ndw, copy ? ", a never-signalled event" : "");
+    // The response: the data words start at +8, or at +0x10 after a special header with one copy handle; the CMIF part is at +0x10 in both. Everything after the headers
+    // up to the buffer's end reads as zero
+    size_t end = size < 0x1000 ? size : 0x1000, words = copy ? 0x10 : 8;
     memset(base, 0, end);
-    m[1] = (uint32_t)((end - 8) / 4 < 0x3ff ? (end - 8) / 4 : 0x3ff);
+    m[1] = (uint32_t)((end - words) / 4 < 0x3ff ? (end - words) / 4 : 0x3ff);
+    if (copy) { m[1] |= 1u << 31; m[2] = 1u << 1; m[3] = copy; }   // special header: no process ID, one copy handle
     size_t out = 0x10 + (dom ? 16 : 0);
     uint32_t *o = (uint32_t *)(base + out); o[0] = 0x4f434653; o[1] = ver; o[2] = RES_OK; o[3] = 0;   // "SFCO"; a domain's out-object count before it stays 0
     return RES_OK;

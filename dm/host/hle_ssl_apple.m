@@ -9,6 +9,7 @@
 #include "ssl_backend.h"
 #include "net_socket.h"
 #include "ssl_trace.h"
+#include "nex_trace.h"
 #include <stdatomic.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -24,6 +25,7 @@
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 void dm_guest_host_wait_begin(void);
+void dm_backtrace(uint64_t fp);   // DM_NEX_TRACE=2 (crash.c; hle_net_backend.c has an empty weak one for fixtures)
 void dm_guest_host_wait_end(void);
 
 @interface DmTlsContext : NSObject
@@ -43,6 +45,7 @@ void dm_guest_host_wait_end(void);
     _Atomic int descriptor;
     SSLContextRef tls;
     short wanted;
+    dm_nex_stream nexIn, nexOut;   // DM_NEX_TRACE: RMC headers of a NEX stream's plaintext
 }
 @property(nonatomic) uint64_t identifier;
 @property(nonatomic) DmTlsContext *context;
@@ -70,6 +73,7 @@ void dm_guest_host_wait_end(void);
     // still-owned descriptor, without retaining a connection already inside dealloc.
     if (tls) { atomic_store(&closed, false); SSLClose(tls); CFRelease(tls); }
     int fd = atomic_load(&descriptor); if (fd >= 0) close(fd);
+    dm_nex_free(&nexIn); dm_nex_free(&nexOut);
 }
 @end
 
@@ -545,6 +549,7 @@ uint32_t dm_ssl_read(void *object, void *buffer, int *out, unsigned capacity, bo
     if ((!result && *out > 0 && !c.tracedRead) || (result && result != DM_SSL_WOULD_BLOCK)) {
         trace(c, DM_TLS_READ, result, 0, (unsigned)*out); if (!result) c.tracedRead = YES;
     }
+    if (!result && *out > 0 && !peek && dm_nex_enabled()) dm_nex_feed(&c->nexIn, c.identifier, false, buffer, (size_t)*out);
     error(c, result); [c.lock unlock]; return result;
 } }
 uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size) { @autoreleasepool {
@@ -568,6 +573,10 @@ uint32_t dm_ssl_write(void *object, const void *buffer, int *out, unsigned size)
     }
     if ((!result && *out > 0 && !c.tracedWrite) || (result && result != DM_SSL_WOULD_BLOCK)) {
         trace(c, DM_TLS_WRITE, result, 0, (unsigned)*out); if (!result) c.tracedWrite = YES;
+    }
+    if (!result && *out > 0 && dm_nex_enabled()) {
+        dm_nex_feed(&c->nexOut, c.identifier, true, buffer, (size_t)*out);
+        if (dm_nex_stacks()) dm_backtrace((uint64_t)__builtin_frame_address(0));
     }
     error(c, result); [c.lock unlock]; return result;
 } }

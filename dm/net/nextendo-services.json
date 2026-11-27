@@ -183,6 +183,13 @@
         "server": "server",
         "tls": true,
         "pin": "f19cb50bc56f7e628478be481d81f6e9e3e5000f05dbba2dda26f0d1465f14c6"
+      },
+      {
+        "match": "exact",
+        "host": "g2ee2e300-lp1.s.n.srv.nintendo.net",
+        "server": "server",
+        "tls": true,
+        "secureAddress": true
       }
     ]
   },

@@ -618,6 +618,16 @@ class App(unittest.TestCase):
             a.settings = None
             self.assertEqual(pack_app.info_plist(a, '14.0', None)['DMLanguage'], 'fr')   # no list: --lang as given
 
+    def test_nextendo_sign_in_client(self):   # DMNextendoClientID: an app with the signed code adapter, or one with only a public service profile
+        with tempfile.TemporaryDirectory(dir=TEST_ROOT) as d, mock.patch.dict(os.environ, {'DM_NEXTENDO_CLIENT_ID': 'synthetic-client.1'}):
+            a = types.SimpleNamespace(**vars(self.args)); a.patched = d
+            self.assertNotIn('DMNextendoClientID', pack_app.info_plist(a, '14.0', None))   # offline and LAN only: no sign-in
+            self.assertEqual(pack_app.info_plist(a, '14.0', None, online=True)['DMNextendoClientID'], 'synthetic-client.1')   # service profile, no code change
+            (Path(d) / 'nextendo').mkdir(); (Path(d) / 'nextendo' / 'main.fixups.tsv').write_text('')
+            self.assertEqual(pack_app.info_plist(a, '14.0', None)['DMNextendoClientID'], 'synthetic-client.1')   # signed code adapter
+            with mock.patch.dict(os.environ, {'DM_NEXTENDO_CLIENT_ID': 'unregistered'}):
+                self.assertNotIn('DMNextendoClientID', pack_app.info_plist(a, '14.0', None, online=True))   # a placeholder is no client
+
     def test_saved_choices(self):
         """launcher.<VAR> in the app's preferences domain, as a front end or a settings window saves it: used from Finder or the Dock, checked against this build's settings,
         after the launch environment, the player's env.txt and the bundle's, and ignored with DM_SAVED_CHOICES=0"""

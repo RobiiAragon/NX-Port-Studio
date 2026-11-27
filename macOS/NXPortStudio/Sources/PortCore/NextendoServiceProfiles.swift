@@ -14,6 +14,8 @@ public struct NextendoServiceContract: Decodable, Sendable {
         let match: String, host: String, server: String, tls: Bool
         /// SHA-256 of the exact DER certificate a self-signed provider endpoint serves (`certificates`).
         let pin: String?
+        /// The service hands the game to a NEX secure server named by the provider's address.
+        let secureAddress: Bool?
     }
     let formatVersion: Int
     let provider: Provider
@@ -56,13 +58,23 @@ public struct NextendoServiceContract: Decodable, Sendable {
             else { throw NextendoServiceProfileError.invalidContract }
             guard seen.insert(key).inserted else { continue }
             let address = rule.server == "nat" ? provider.nat : provider.server
+            let secure = rule.secureAddress ?? false
+            guard !secure || (rule.match == "exact" && rule.tls) else { throw NextendoServiceProfileError.invalidContract }
+            let files: [String]
             if let pin = rule.pin {
                 // A self-signed provider endpoint: the host accepts only these exact bytes for this one name.
                 guard rule.match == "exact", rule.tls, certificates?[pin] != nil else { throw NextendoServiceProfileError.invalidContract }
-                lines.append(["pinned-exact", host, address, host, pin + ".der", pin].joined(separator: "\t")); continue
+                files = [pin + ".der", pin]
+                lines.append((["pinned-exact", host, address, host] + files).joined(separator: "\t"))
+            } else {
+                files = ["provider-ca.der", provider.caSHA256]
+                lines.append(([rule.match, host, address] + (rule.tls ? ["@host"] + files : ["-", "-", "-"])).joined(separator: "\t"))
             }
-            let tail = rule.tls ? ["@host", "provider-ca.der", provider.caSHA256] : ["-", "-", "-"]
-            lines.append(([rule.match, host, address] + tail).joined(separator: "\t"))
+            if secure {
+                // TLS to the secure server's address keeps this exact name as its peer and SNI, with the same pin or CA.
+                guard seen.insert("address:" + address).inserted else { throw NextendoServiceProfileError.invalidContract }
+                lines.append(([rule.pin == nil ? "address" : "pinned-address", address, address, host] + files).joined(separator: "\t"))
+            }
         }
         guard (2...129).contains(lines.count) else { throw NextendoServiceProfileError.invalidContract }
         return Data((lines.joined(separator: "\n") + "\n").utf8)

@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 static int checks,failures,requests,credential_ensures,credential_reads; static unsigned generation=1,response_status=200;
-static BOOL linked=YES,local_present=YES; static NSString *reply;
+static BOOL linked=YES,local_present=YES; static NSString *reply,*me_reply=@"{\"nsa\":\"abcdef0000001234\"}";
 static dm_net_mode_t mode=DM_NET_AUTO;
 static uint8_t uid[16]={1};
 static uint32_t constructor[]={0x52804002,0x2a1f03e1,0x14000000};
@@ -102,7 +102,7 @@ static bool transport(const char *url,const char *method,const char *auth,const 
     }
     CHECK(!strcmp(method,"GET"));
     CHECK(!strcmp(url,strstr(url,"/api/me")?"https://nextendo.network/api/me":"https://nextendo.network/api/friends?images=0"));
-    NSData *data=[(strstr(url,"/api/me")?@"{\"nsa\":\"abcdef0000001234\"}":reply) dataUsingEncoding:NSUTF8StringEncoding];
+    NSData *data=[(strstr(url,"/api/me")?me_reply:reply) dataUsingEncoding:NSUTF8StringEncoding];
     if(data.length>capacity)return false;memcpy(output,data.bytes,data.length);*size=data.length;*status=response_status;return true;
 }
 int main(void){@autoreleasepool{
@@ -130,6 +130,21 @@ int main(void){@autoreleasepool{
     setenv("DM_NEXTENDO_ROUTES",routes.fileSystemRepresentation,1);
     CHECK(dm_nextendo_api_baas_namespace("friends")&&dm_nextendo_api_baas_namespace("account"));
     CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,1,filter,true)&&count==1&&ids[0]==0xabcdef0000000501ull);
+    // An account whose /api/me has no BAAS ID: its own ID is the PID (the caller's), so its friends are listed by PID too
+    for(NSString *none in @[@"{\"account\":{\"pid\":7}}",@"{\"nsa\":null}",@"{\"nsa\":\"\"}"]){
+        generation++;me_reply=none;uint64_t own=9;CHECK(!dm_nextendo_api_baas_id(&own)&&own==0);
+        int http=requests;CHECK(!dm_nextendo_api_baas_id(&own)&&own==0&&requests==http);
+        CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,1,filter,true)&&count==1&&ids[0]==501);
+    }
+    for(NSString *bad in @[@"{\"nsa\":\"xyz\"}",@"{\"nsa\":12}",@"{\"nsa\":\"abcdef00000012345\"}",@"[]"]){
+        generation++;me_reply=bad;uint64_t own=9;CHECK(dm_nextendo_api_baas_id(&own)!=0&&own==0);
+        CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,1,filter,true)&&count==1&&ids[0]==0xabcdef0000000501ull);
+    }
+    generation++;me_reply=@"{\"nsa\":\"abcdef0000001234\"}";
+    CHECK([@"{\"identity\":{\"friends\":\"baas\",\"account\":\"pid\"}}" writeToFile:manifest atomically:YES encoding:NSUTF8StringEncoding error:nil]);
+    chmod(manifest.fileSystemRepresentation,0600);me_reply=@"{}";generation++;
+    CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,1,filter,true)&&count==1&&ids[0]==0xabcdef0000000501ull);
+    me_reply=@"{\"nsa\":\"abcdef0000001234\"}";generation++;
     chmod(manifest.fileSystemRepresentation,0666);CHECK(!dm_nextendo_api_baas_namespace("friends"));
     unlink(manifest.fileSystemRepresentation);rmdir(profile);setenv("DM_NEXTENDO_ROUTES","/nonexistent/synthetic-social-profile",1);
     filter[4]=1;CHECK(!dm_nextendo_friends_list(&count,ids,uid,0,3,filter,true)&&count==1&&ids[0]==501);filter[4]=0;

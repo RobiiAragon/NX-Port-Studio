@@ -42,6 +42,7 @@ static bool route_pattern(const char *kind, const char *input, route *entry) {
     if (!strcmp(kind, "exact")) entry->match = 0;
     else if (!strcmp(kind, "pinned-exact")) { entry->match = 0; entry->pinned = true; }
     else if (!strcmp(kind, "pinned-address")) { entry->match = 0; entry->pinned = true; entry->address_alias = true; }
+    else if (!strcmp(kind, "address")) { entry->match = 0; entry->address_alias = true; }   // the scoped-CA form of pinned-address
     else if (!strcmp(kind, "suffix")) entry->match = 1;
     else if (!strcmp(kind, "label")) entry->match = 2;
     else return false;
@@ -135,19 +136,22 @@ static int load_policy(const char *path, route **output, size_t *count) {
         if (!inet_ntop(AF_INET, &ip, entry->address, sizeof entry->address)) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
         for (size_t i = 0; i < used; i++) if (entries[i].match == entry->match && !strcmp(entries[i].host, entry->host)) { status = DM_NEXTENDO_ROUTES_INVALID; break; }
         if (!status) status = load_ca(directory, fields[3], fields[4], entry);
-        if (!status && entry->pinned && !entry->ca_size) status = DM_NEXTENDO_ROUTES_CERTIFICATE;
+        if (!status && (entry->pinned || entry->address_alias) && !entry->ca_size) status = DM_NEXTENDO_ROUTES_CERTIFICATE;
         if (status) { free(entry->ca); entry->ca = NULL; break; }
         ca_total += entry->ca_size; if (ca_total > CERT_TOTAL_MAX) { free(entry->ca); entry->ca = NULL; status = DM_NEXTENDO_ROUTES_LIMIT; break; } used++;
     }
     free(data); close(directory); if (!magic || !used) status = status ? status : DM_NEXTENDO_ROUTES_INVALID;
     // NEX secure-server handoffs can name an IP instead of the original DNS
-    // service. A configured numeric alias inherits only an existing exact pin
-    // for the same address and certificate; it grants no independent identity.
+    // service. A configured numeric alias inherits only an existing exact
+    // identity for the same address and certificate authority: a pin (pinned-
+    // address) or a scoped CA (address) whose TLS name is its own host. It
+    // grants no independent identity, and its TLS peer stays that service name.
     for (size_t i = 0; !status && i < used; i++) if (entries[i].address_alias) {
         const route *alias = &entries[i]; bool paired = false;
         for (size_t j = 0; j < used; j++) {
             const route *identity = &entries[j];
-            if (identity->pinned && !identity->address_alias && !identity->match &&
+            if (identity->pinned == alias->pinned && !identity->address_alias && !identity->match && !identity->public_dns &&
+                (!strcmp(identity->peer, "@host") || !strcmp(identity->peer, identity->host)) &&
                 !strcmp(alias->peer, identity->host) && !strcmp(alias->address, identity->address) &&
                 alias->ca_size == identity->ca_size && !memcmp(alias->ca, identity->ca, alias->ca_size)) { paired = true; break; }
         }

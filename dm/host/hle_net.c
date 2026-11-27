@@ -5,6 +5,7 @@
 #include "net_socket.h"
 #include "account_trace.h"
 #include <stdatomic.h>
+#include <string.h>
 void dm_guest_sleep_ns(int64_t ns);
 
 HLE_FORCE("_ZN2nn6socket10InitializeERKNS0_6ConfigE", "connects to the bsd socket service; offline, creates no session (cut)", Result, h_socket_Initialize, const void *cfg) { (void)cfg; return RES_OK; }
@@ -51,7 +52,13 @@ HLE_FORCE("_ZN2nn4nifm26HandleNetworkRequestResultEv", "SDK 4 network request re
     dm_account_trace_nifm(DM_ACCOUNT_TRACE_NETWORK_RESULT, result, available, state); return result;
 }
 HLE_FORCE("_ZN2nn4nifm26GetCurrentPrimaryIpAddressEPNS_6socket6InAddrE", "offline by default; explicit LAN returns the actual interface IPv4 address", Result, h_nifm_GetIp, uint32_t *a) { if (!a) return RES_FAIL; *a = 0; return dm_net_ipconfig(a, NULL, NULL, NULL, NULL) ? RES_FAIL : RES_OK; }
-HLE_FORCE("_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE", "offline: no proxy setting", Result, h_nifm_GetProxy, void *p) { (void)p; return RES_FAIL; }
+// nn::nifm::ProxySetting is {bool enabled, u16 port, char server[0x64], bool auth, char user[0x20], char password[0x20]}
+// (0xAA bytes); all zero is "no proxy", what a console on a network without one reports. Offline there is no setting.
+enum { NIFM_PROXY_SETTING_SIZE = 0xAA };
+HLE_FORCE("_ZN2nn4nifm22GetCurrentProxySettingEPNS0_12ProxySettingE", "the accepted network has no proxy; offline there is no setting", Result, h_nifm_GetProxy, void *p) {
+    if (!p || !dm_nifm_available()) return RES_FAIL;
+    memset(p, 0, NIFM_PROXY_SETTING_SIZE); return RES_OK;
+}
 
 // ---------- socket: offline by default; explicit LAN translates the guest ABI to Darwin ----------
 // Not cut: Inet* / nnsocketInet* byte order and address text conversion (pure computation).
