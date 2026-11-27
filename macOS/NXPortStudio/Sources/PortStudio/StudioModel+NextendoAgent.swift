@@ -13,14 +13,65 @@ enum NextendoAgentState: Equatable, Sendable {
 extension StudioModel {
     private var nextendoAgentService: SMAppService { SMAppService.agent(plistName: NextendoAgent.launchAgentPlist) }
 
+    /// Whether this bundle carries the agent: the packaged app does, `swift run` does not.
+    private var bundleCarriesNextendoAgent: Bool {
+        let contents = Bundle.main.bundleURL.appendingPathComponent("Contents")
+        return FileManager.default.fileExists(atPath: contents.appendingPathComponent("Library/LaunchAgents/\(NextendoAgent.launchAgentPlist)").path)
+            && FileManager.default.fileExists(atPath: Bundle.main.bundleURL.appendingPathComponent(NextendoAgent.bundlePath).path)
+    }
+
     func refreshNextendoAgentState() {
+        guard bundleCarriesNextendoAgent else { nextendoAgentState = .unavailable; return }
+        // SMAppService reports .notFound, not .notRegistered, for an agent that was
+        // never registered, so with the plist in the bundle both mean "off".
         nextendoAgentState = switch nextendoAgentService.status {
         case .enabled: .on
         case .requiresApproval: .needsApproval
-        case .notRegistered: .off
-        case .notFound: .unavailable
-        @unknown default: .unavailable
+        case .notRegistered, .notFound: .off
+        @unknown default: .off
         }
+    }
+
+    private static let registeredAgentKey = "NextendoAgentRegisteredCDHash"
+    private var bundledAgentCDHash: String? {
+        (try? NextendoAgentCode.cdhash(of: Bundle.main.bundleURL.appendingPathComponent(NextendoAgent.bundlePath))).map(NextendoAgentCode.hex)
+    }
+
+    /// launchd keeps a launch constraint on the code that was registered, so after
+    /// Studio is updated the new agent is refused to start (exit 78) until it is
+    /// registered again. Studio remembers which agent it registered and renews it.
+    func renewNextendoAgentIfUpdated() async {
+        refreshNextendoAgentState()
+        guard nextendoAgentState == .on, !isChangingNextendoAgent, let current = bundledAgentCDHash,
+              UserDefaults.standard.string(forKey: Self.registeredAgentKey) != current else { return }
+        isChangingNextendoAgent = true
+        defer { isChangingNextendoAgent = false; refreshNextendoAgentState() }
+        do {
+            // Workaround (docs/nextendo-agent.md, open): registering right after the
+            // removal sometimes keeps the old constraint, and launchd refuses the new
+            // agent. Unknown why; a second removal after a pause has always cleared it.
+            for attempt in 0..<3 {
+                try? await nextendoAgentService.unregister()
+                if attempt > 0 { try? await Task.sleep(for: .seconds(2)) }
+                try nextendoAgentService.register()
+                if await nextendoAgentAnswers() { break }
+            }
+            UserDefaults.standard.set(current, forKey: Self.registeredAgentKey)
+            appendLog("Registered the updated Nextendo agent with macOS.")
+            refreshNextendoAgentState()
+            if nextendoAgentState == .on { await registerInstalledPortsWithNextendoAgent() }
+        } catch {
+            nextendoAgentMessage = t("macOS did not change the background agent. Try again, or check Login Items in System Settings.")
+        }
+    }
+
+    /// Whether the registered agent started and answers, within a few seconds.
+    private func nextendoAgentAnswers() async -> Bool {
+        for attempt in 0..<4 {
+            if attempt > 0 { try? await Task.sleep(for: .seconds(1)) }
+            if await nextendoAgentClient.status() != nil { return true }
+        }
+        return false
     }
 
     func setNextendoAgent(enabled: Bool) async {
@@ -30,10 +81,12 @@ extension StudioModel {
         do {
             if enabled {
                 try nextendoAgentService.register()
+                UserDefaults.standard.set(bundledAgentCDHash, forKey: Self.registeredAgentKey)
                 refreshNextendoAgentState()
                 if nextendoAgentState == .on { await registerInstalledPortsWithNextendoAgent() }
             } else {
                 try await nextendoAgentService.unregister()
+                UserDefaults.standard.removeObject(forKey: Self.registeredAgentKey)
             }
         } catch {
             refreshNextendoAgentState()

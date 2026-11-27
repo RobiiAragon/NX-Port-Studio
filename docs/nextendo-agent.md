@@ -46,7 +46,10 @@ Studio UI       ──XPC──► agent
 ```
 
 - **Packaging.** `macOS/NXPortStudio/scripts/package_app.sh` builds the agent app (bundle identifier `org.nxnative.portstudio.agent`), writes the launchd plist and signs the agent app before Studio. Once registered, launchd starts the agent at login, because the hub polls while no game runs.
-- **Registration.** The Nextendo page has a **Keep Nextendo connected** switch (`StudioModel+NextendoAgent.swift`). It calls `SMAppService.agent(plistName:)`. If macOS asks for approval, the page links to Login Items. Turning it off unregisters the agent, and ports go back to signing in by themselves. A debug `swift run` has no plist, so the switch says it needs the packaged app. **Open:** I have not yet checked that `SMAppService` accepts the ad-hoc signed bundle on my macOS. If it does not, the fallback is a user plist in `~/Library/LaunchAgents` loaded with `launchctl bootstrap gui/<uid>`.
+- **Registration.** The Nextendo page has a **Keep Nextendo connected** switch (`StudioModel+NextendoAgent.swift`). It calls `SMAppService.agent(plistName:)`. If macOS asks for approval, the page links to Login Items. Turning it off unregisters the agent, and ports go back to signing in by themselves. A debug `swift run` has no plist, so the switch says it needs the packaged app. I checked on my Mac that `SMAppService` accepts the ad-hoc signed bundle and starts the agent without asking for approval. Three things I found doing that:
+  - **A never-registered agent is `.notFound`.** `SMAppService` reports `.notFound`, not `.notRegistered`, for an agent that was never registered. So Studio decides that the agent is available from the plist and the agent app in its own bundle, and treats both statuses as off. Before, the switch stayed disabled.
+  - **Updating Studio needs a new registration.** launchd keeps a launch constraint (`LWCR`, a cdhash list) for the agent that was registered. After Studio is replaced, launchd refuses the new agent: `Launch Constraint Violation`, exit 78 (`EX_CONFIG`). Studio stores the cdhash of the agent it registered (`NextendoAgentRegisteredCDHash` in its defaults). At launch, if the bundled agent differs, it unregisters and registers again. **Open, workaround:** registering right after the removal sometimes still keeps the old constraint, and I do not know why. So Studio checks that the agent answers `status` and, if it does not, removes and registers it again after 2 s, up to three times. Turning the switch off and on by hand clears it too.
+  - **A cdhash needs only the code directory.** `NextendoAgentCode.cdhash(of:)` validates the signature with `kSecCSDoNotValidateResources`. With the default flags it hashed every sealed resource of a port, many GB each, and registering 6 installed ports took minutes. Without the resources it takes about 0.02 s per port. XPC checks the cdhash again on every connection.
 - **Who touches the Keychain.** Studio still signs in and out itself, as before, and then reports the change to the agent (`accountDidChange`). For every port that connects, the agent does the boot renewal with the same `NextendoAccountService`, so the agent and Studio coordinate through the existing file lease. A port served by the agent reads no Keychain item and runs no renewal. macOS asks once for the agent instead of once per port and per rebuild. With an ad-hoc Studio, that becomes one prompt per Studio update; a Developer ID signature removes even that.
 
 ## Peer validation
@@ -127,8 +130,7 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
 
 ## Phases
 
-1. **Credential broker.** *Done in code.* Remaining acceptance:
-   - a packaged Studio with the switch on;
+1. **Credential broker.** *Done in code.* I checked a packaged Studio with the switch on, and the agent registered again after an update. Remaining acceptance:
    - a registered port that gets its credential with no Keychain dialog;
    - a sign-out in Studio that reaches the open port;
    - a port without the agent behaving as before.
@@ -136,7 +138,7 @@ I read my mirror of the NextendoNetwork account server (`nextendo-account`, snap
    - a friend list in a game served by the agent;
    - my presence seen by a friend;
    - two games open at once showing the newer one.
-3. **Hub.** *Done in code.* See [Hub](#hub). Remaining acceptance:
+3. **Hub.** *Done in code.* See [Hub](#hub). I checked the Friends panel with a real friend in a game. Remaining acceptance:
    - the notification permission prompt from the agent app;
    - a friend coming online while no game runs;
    - a request accepted from Studio;
@@ -172,5 +174,11 @@ These need no game:
   - passive presence starts from the memory provider;
   - invalidation, sign-out and offline mode stop it.
 - `dm/tools/tests/test_nsp_mac_app.py` packs the new sources into the bootstrap.
+
+On my Mac with the packaged app, I checked that the switch registers the agent, that the agent runs under launchd, that it is registered again after Studio is replaced, and that the Friends panel shows a real friend in a game. The agent logs failed provider requests, answers over its limit, HTTP errors and a missing OAuth grant under the subsystem `org.nxnative.portstudio.agent`:
+
+```bash
+/usr/bin/log show --last 10m --predicate 'subsystem == "org.nxnative.portstudio.agent"'
+```
 
 These still need a game, and I have no test dumps right now: a real NEX sign-in with the agent's record, a friend seeing my presence, and an online match.
