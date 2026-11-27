@@ -251,8 +251,7 @@ private struct LibraryHintBar: View {
             hint(["←", "→"], t("Choose"))
             hint(["⏎"], t("Play"))
             hint(["⌥", "⏎"], t("Settings"))
-            hint(["F"], fullScreen ? t("Exit full screen") : t("Full screen"))
-            if fullScreen { hint(["esc"], t("Back")) }
+            if fullScreen { hint(["esc"], t("Exit full screen")) } else { hint(["F"], t("Full screen")) }
             Spacer()
         }
         .font(.system(size: 12)).foregroundStyle(StudioStyle.muted)
