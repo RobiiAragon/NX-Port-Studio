@@ -28,6 +28,7 @@ I captured the running macOS app in English.
 
 ## One workspace, from input to app
 
+- **A library of installed ports.** I added a **Library** page that lists the Mac ports in Applications with their icon, version and title ID. It plays them, opens a port's own settings window first, shows which ones run and tells me when an older engine built one, so I know to rebuild it for the latest host fixes. Each port still runs, and signs in to Nextendo, without Studio ([how it works](docs/frontends.md#studios-library)).
 - **Real build progress.** Choose one game's base files, updates and DLC; follow the engine's actual stages and actionable errors.
 - **Flexible local imports.** ZIP/7z archives, nested folders and upper-case extensions are recognized, with bounded extraction and byte-verified reuse. Known build failures include recovery steps in all five interface languages.
 - **Signed iOS exports.** Every iOS export goes through Xcode signing and profile verification. Optional installation follows a successful signed export.
@@ -116,7 +117,7 @@ The package script refuses to overwrite an existing destination. Its default loc
 2. Select one game's folder and your `prod.keys` in **New port**.
 3. Optionally import original system resources in **Firmware** and choose the catalog for new ports.
 4. Choose **Mac** or **iPhone / iPad**. For iOS, select a paired eligible device and enter your Xcode development Team ID.
-5. Create the port. Mac builds install directly in **Applications** and remove their temporary engine, extraction and build files. Updates replace only a verified port of the same game. An iOS build is successful only after signing and IPA verification; **Install when finished** controls installation, not whether the export is signed.
+5. Create the port. Mac builds install directly in **Applications** and remove their temporary engine, extraction and build files. Updates replace only a verified port of the same game, and the port appears in **Library**. An iOS build is successful only after signing and IPA verification; **Install when finished** controls installation, not whether the export is signed.
 
 The interface starts in Spanish. Choose English, French, Japanese or Simplified Chinese in the sidebar or Language menu. Interface and game languages are independent. Technical tool output retains its original language. Mac builds retain only the installed app; saves and runtime settings live in Application Support. iOS projects and extracted files remain beside the game for Xcode signing; IPA exports default to Downloads.
 

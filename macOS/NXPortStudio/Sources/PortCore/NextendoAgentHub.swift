@@ -80,16 +80,9 @@ public final class NextendoHubMemorySettings: NextendoHubSettings, @unchecked Se
 
 /// Names of the Mac ports installed for each title, for "X is playing Y".
 public enum NextendoInstalledGames {
-    public static func names(in folders: [URL] = [URL(fileURLWithPath: "/Applications"),
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]) -> [String: String] {
+    public static func names(in folders: [URL] = InstalledMacPorts.defaultFolders) -> [String: String] {
         var names: [String: String] = [:]
-        for folder in folders {
-            for app in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] where app.pathExtension == "app" {
-                guard let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
-                      info["DMPrimaryHost"] as? Bool == true, let title = info["DMTitleID"] as? String else { continue }
-                names[title.lowercased()] = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? app.deletingPathExtension().lastPathComponent
-            }
-        }
+        for port in InstalledMacPorts.scan(in: folders) where port.isPrimaryHost { names[port.titleID.lowercased()] = port.name }
         return names
     }
 }

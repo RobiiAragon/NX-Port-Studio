@@ -23,6 +23,7 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 22) {
                         if let failure = model.failure { errorNotice(failure) }
                         switch model.page {
+                        case .library: LibraryView(model: model)
                         case .create: createPage
                         case .saves: SavedGamesView(model: model)
                         case .devices: DevicesView(model: model)
@@ -109,6 +110,7 @@ struct StudioView: View {
     }
     private var subtitle: String {
         switch model.page {
+        case .library: t("Your installed Mac ports, ready to play.")
         case .create: t("From your game files to an Apple app.")
         case .saves: t("Import and export JKSV backups for your native ports.")
         case .devices: t("Sign and install on your paired iPhone or iPad.")

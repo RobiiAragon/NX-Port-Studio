@@ -4,10 +4,10 @@ import PortCore
 import UniformTypeIdentifiers
 
 enum StudioPage: String, CaseIterable, Identifiable {
-    case create = "New port", saves = "Saved games", devices = "Devices", firmware = "Firmware", localPlay = "Local play", nextendo = "Nextendo", environment = "Environment", log = "Activity"
+    case library = "Library", create = "New port", saves = "Saved games", devices = "Devices", firmware = "Firmware", localPlay = "Local play", nextendo = "Nextendo", environment = "Environment", log = "Activity"
     var id: Self { self }
     var icon: String {
-        switch self { case .create: "shippingbox"; case .saves: "externaldrive"; case .devices: "ipad.and.iphone"; case .firmware: "shippingbox.and.arrow.backward"; case .localPlay: "point.3.connected.trianglepath.dotted"; case .nextendo: "network"; case .environment: "slider.horizontal.3"; case .log: "terminal" }
+        switch self { case .library: "square.grid.2x2"; case .create: "shippingbox"; case .saves: "externaldrive"; case .devices: "ipad.and.iphone"; case .firmware: "shippingbox.and.arrow.backward"; case .localPlay: "point.3.connected.trianglepath.dotted"; case .nextendo: "network"; case .environment: "slider.horizontal.3"; case .log: "terminal" }
     }
 }
 
@@ -35,6 +35,11 @@ final class StudioModel {
     var personalMiis = MiiLibrarySummary.empty
     var miiLibraryError: String?
     var isLoadingMiis = false
+    var libraryPorts: [InstalledMacPort] = []
+    var runningLibraryPorts: Set<String> = []
+    var studioEngine: PortEngineStamp?
+    var isLoadingLibrary = false
+    var libraryMessage: String?
     var savePorts: [InstalledMacPort] = []
     var selectedSavePortID = ""
     var selectedSaveSlot: SaveSlot = .primary

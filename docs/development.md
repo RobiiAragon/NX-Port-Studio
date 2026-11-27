@@ -572,7 +572,7 @@ The bundle holds what the IPA holds, with the Mac's shader libraries:
 
 ```
 <game name>.app/Contents/
-  Info.plist                 name, version, bundle ID, the profile's app_category; DMTitleID, DMRomfsMarker, DMLanguage, DMModuleFiles, DMSettings and DMPrimaryHost for the bootstrap
+  Info.plist                 name, version, bundle ID, the profile's app_category; DMTitleID, DMRomfsMarker, DMLanguage, DMModuleFiles, DMSettings and DMPrimaryHost for the bootstrap; DMCommit, DMChain, and DMEngine/DMEngineTime (the engine that packed it, which Studio's Library compares: docs/frontends.md)
   MacOS/nxnative             the actual native host built for the profile (CFBundleExecutable)
   Frameworks/DMMacBootstrap.dylib   in-process environment/bootstrap and the existing SwiftUI settings
   Helpers/dm-save-supervisor  non-GUI committed-save sender, started only when cloud saves are enabled
