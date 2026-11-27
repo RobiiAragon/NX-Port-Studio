@@ -707,7 +707,10 @@ I remove this diagnostic setting after the coordinated reproduction.
 ### Native client TLS with scoped trust
 
 For a failing connection, I can temporarily set `DM_SSL_TRACE=1` for one port.
-It emits at most 128 numeric records per process, preserving errno. Stages 0–9
+It emits at most 128 numeric records per process, preserving errno, and leaves out
+a record equal to one of the last eight: a nonblocking handshake's polling
+(would-block, then the empty certificate read) shows once per state instead of
+using up the 128 before the connection fails. Stages 0–9
 are hostname admission, socket attachment, value setting, option setting, native
 preparation, certificate verification, handshake, optional certificate export,
 first successful read and first successful write (plus terminal stream errors).
