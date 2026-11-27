@@ -100,7 +100,7 @@ uint32_t dm_nextendo_friends_list(int *count,void *output,const void *uid,int of
     if (presence>3 || options[4]>1 || options[5]>1 || options[6] || options[7]) return RES_FAIL;
     dm_social_friend *friends=NULL; size_t total=0;
     if (dm_nextendo_social_friends(&friends,&total)) return RES_FAIL;
-    bool baas=dm_nextendo_api_baas_namespace("friends"); size_t matched=0,written=0;
+    bool baas=dm_nextendo_api_baas_friends(); size_t matched=0,written=0;
     for (size_t i=0;i<total;i++) {
         const dm_social_friend *item=&friends[i];
         if ((presence==1&&item->presence!=1) || (presence==2&&item->presence!=2) ||
@@ -125,7 +125,7 @@ uint32_t dm_nextendo_friends_update(void *output,const void *uid,const uint64_t 
         for(size_t j=0;j<total;j++)if(friends[j].pid==ids[i]||(friends[j].nsa&&friends[j].nsa==ids[i])){selected[i]=j;break;}
         if(selected[i]==total){free(friends);return RES_FAIL;}
     }
-    bool baas=dm_nextendo_api_baas_namespace("friends");
+    bool baas=dm_nextendo_api_baas_friends();
     for(int i=0;i<count;i++)encode_friend((uint8_t*)output+(size_t)i*0x200,&friends[selected[i]],uid,baas);
     free(friends);return 0;
 }

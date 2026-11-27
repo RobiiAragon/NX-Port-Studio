@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdatomic.h>
 
 void dm_guest_host_wait_begin(void);
 void dm_guest_host_wait_end(void);
@@ -32,27 +33,47 @@ bool dm_nextendo_api_baas_namespace(const char *kind) { @autoreleasepool {
     return namespace && [object[@"identity"][namespace] isEqual:@"baas"];
 } }
 
+// The account's BAAS user ID: /api/me's "nsa", 16 hex digits, the ID a Switch on this account announces. An account without one (no "nsa",
+// or null / empty) answers success with 0, and the caller stands in the provider PID, as ACNHRecomp (MIT) does for servers and accounts without
+// the field (runtime/src/nextendo.cpp, network_service_account_id). A malformed field or a failed request is an error. Both answers are kept
+// for the credential identity they were read with
+static void baas_trace(const char *state) {
+    static _Atomic(const char *) last; const char *flag=getenv("DM_ACCOUNT_TRACE");
+    if(!flag||strcmp(flag,"1")||atomic_exchange(&last,state)==state)return;
+    int saved=errno; fprintf(stderr,"[account-trace] op=api.me.nsa state=%s\n",state); errno=saved;
+}
 uint32_t dm_nextendo_api_baas_id(uint64_t *output) { @autoreleasepool {
     if (!output) return DM_ACCOUNT_FAIL; *output = 0;
     NSData *identity = dm_nextendo_api_identity("me"); if (!identity) return DM_ACCOUNT_FAIL;
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; static NSData *cached_identity; static uint64_t cached_id;
-    pthread_mutex_lock(&mutex); uint64_t existing = [cached_identity isEqual:identity] ? cached_id : 0; pthread_mutex_unlock(&mutex);
-    if (existing) { *output=existing; return 0; }
+    pthread_mutex_lock(&mutex); BOOL known = [cached_identity isEqual:identity]; uint64_t existing = cached_id; pthread_mutex_unlock(&mutex);
+    if (known) { *output=existing; return 0; }
     uint8_t *buffer=malloc(API_MAX); if (!buffer) return DM_ACCOUNT_FAIL; size_t size=0;
     uint32_t result=dm_nextendo_api_request("me",NULL,0,buffer,API_MAX,&size);
     NSData *bytes=result?nil:[NSData dataWithBytes:buffer length:size]; free(buffer);
     id document=bytes?[NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil]:nil;
-    id field=[document isKindOfClass:NSDictionary.class]?document[@"nsa"]:nil;
-    if (![field isKindOfClass:NSString.class] || ![field length] || [field length]>16 || ![identity isEqual:dm_nextendo_api_identity("me")]) return DM_ACCOUNT_FAIL;
-    uint64_t value=0;
-    for (NSUInteger i=0;i<[field length];i++) { unichar c=[field characterAtIndex:i]; unsigned digit;
-        if (c>='0' && c<='9') digit=c-'0'; else if(c>='a' && c<='f') digit=c-'a'+10; else if(c>='A' && c<='F') digit=c-'A'+10; else return DM_ACCOUNT_FAIL;
-        value=(value<<4)|digit;
+    if (![document isKindOfClass:NSDictionary.class] || ![identity isEqual:dm_nextendo_api_identity("me")]) return DM_ACCOUNT_FAIL;
+    id field=document[@"nsa"]; uint64_t value=0;
+    if (!field || field==NSNull.null || [field isEqual:@""]) baas_trace("absent");
+    else {
+        if (![field isKindOfClass:NSString.class] || [field length]>16) { baas_trace("invalid"); return DM_ACCOUNT_FAIL; }
+        for (NSUInteger i=0;i<[field length];i++) { unichar c=[field characterAtIndex:i]; unsigned digit;
+            if (c>='0' && c<='9') digit=c-'0'; else if(c>='a' && c<='f') digit=c-'a'+10; else if(c>='A' && c<='F') digit=c-'A'+10; else { baas_trace("invalid"); return DM_ACCOUNT_FAIL; }
+            value=(value<<4)|digit;
+        }
+        baas_trace(value?"present":"absent");
     }
-    if (!value) return DM_ACCOUNT_FAIL;
     pthread_mutex_lock(&mutex); cached_identity=identity; cached_id=value; pthread_mutex_unlock(&mutex);
     *output=value; return 0;
 } }
+// Friends in the BAAS namespace only while the IDs the players announce are BAAS IDs too: a profile whose own account ID is its BAAS ID
+// falls back to PIDs for everyone when the account has none, so this account's ID and its friends' IDs stay one namespace (ACNHRecomp's
+// friend_id). A failed lookup keeps the profile's namespace; a profile with a PID account (Splatoon 3) keeps its friends' BAAS IDs
+bool dm_nextendo_api_baas_friends(void) {
+    if (!dm_nextendo_api_baas_namespace("friends")) return false;
+    if (!dm_nextendo_api_baas_namespace("account")) return true;
+    uint64_t own=0; return dm_nextendo_api_baas_id(&own) || own;
+}
 
 @interface DmNextendoApiTransfer : NSObject <NSURLSessionDataDelegate, NSURLSessionTaskDelegate>
 @property(nonatomic) NSLock *lock;
