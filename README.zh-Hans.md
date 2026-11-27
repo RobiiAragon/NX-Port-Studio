@@ -6,7 +6,7 @@
 
 我的独立项目基于 [seedds/nxnative](https://github.com/seedds/nxnative)，我保留了原引擎作者署名、MIT 许可和版权声明。请参阅[致谢](CREDITS.md)与[许可证](LICENSE)。
 
-> **1.7.0：**我的 Mac 上《集合啦！动物森友会》已可通过 Nextendo 在线游玩：我用 Dodo 代码开放了岛屿，一位访客来过又离开。Studio 还成为已安装 Mac 移植版的启动器，带有主菜单式的游戏库，所有移植版共用一个 Nextendo 会话。[发行说明与测试限制](docs/releases/1.7.0.md)。
+> **1.7.1：**Nextendo 在线游戏扩展到 iPhone 移植版：我 iPhone 上的《集合啦！动物森友会》用 Dodo 代码开放了岛屿，我的 Mac 前去拜访。[发行说明与测试限制](docs/releases/1.7.1.md)。
 
 我在Studio与新构建的Mac/iPhone移植版中加入了**JKSV ZIP存档导入和导出**，保留旧存档，提供文件夹浏览与iOS文件共享。请参阅[存档传输与验证范围](docs/save-data.md)。
 

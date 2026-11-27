@@ -12,7 +12,7 @@
 
 I build this independent project on [seedds/nxnative](https://github.com/seedds/nxnative). I preserve credit for the upstream native-execution engine and its authors, including their original MIT notice. See [Credits](CREDITS.md) and [License](LICENSE).
 
-> **1.7.0:** Animal Crossing: New Horizons plays online through Nextendo on my Mac: I opened my island with a Dodo Code and a visitor came and went. Studio also becomes a launcher for installed Mac ports, with a home-menu Library and one Nextendo session shared by every port. [Release notes and test limits](docs/releases/1.7.0.md).
+> **1.7.1:** Nextendo online play reaches iPhone ports: Animal Crossing: New Horizons opened its island on my iPhone with a Dodo Code and my Mac visited it. [Release notes and test limits](docs/releases/1.7.1.md).
 
 I include **JKSV save ZIP import/export** in Studio and newly built Mac/iPhone ports, with retained previous saves, folder access and Files sharing on iOS. See [save transfer and its validation limits](docs/save-data.md).
 

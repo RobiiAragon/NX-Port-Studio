@@ -12,7 +12,7 @@
 
 Mi proyecto independiente está basado en [seedds/nxnative](https://github.com/seedds/nxnative). Conservo el reconocimiento al motor original, sus autores y el aviso MIT. Consulta los [créditos](CREDITS.md) y la [licencia](LICENSE).
 
-> **1.7.0:** Animal Crossing: New Horizons ya se juega en línea con Nextendo en mi Mac: abrí mi isla con un PIN Dodo y llegó un visitante que luego se fue. Studio además lanza los ports de Mac instalados, con una Biblioteca estilo menú de inicio y una sola sesión de Nextendo para todos los ports. [Notas y límites](docs/releases/1.7.0.md).
+> **1.7.1:** el juego en línea con Nextendo llega a los ports de iPhone: Animal Crossing: New Horizons abrió su isla en mi iPhone con un PIN Dodo y mi Mac la visitó. [Notas de la versión y límites de las pruebas](docs/releases/1.7.1.md).
 
 Incluyo **importación y exportación de partidas ZIP de JKSV** en Studio y en los nuevos ports de Mac/iPhone, conservando la partida anterior, con acceso a sus carpetas y uso de Archivos en iOS. Consulta [la transferencia de partidas y sus límites de validación](docs/save-data.md).
 
