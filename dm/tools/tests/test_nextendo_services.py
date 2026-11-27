@@ -42,5 +42,32 @@ class NextendoServicesTests(unittest.TestCase):
                 with self.assertRaises(ValueError): n.stage(source,root/'bad','0100152000022000')
                 (source/'provider-ca.der').unlink(); (source/'provider-ca.der').symlink_to(root/'staged/provider-ca.der')
                 with self.assertRaises(ValueError): n.stage(source,root/'bad','0100152000022000')
+    def test_self_signed_endpoint_is_pinned_for_its_game_only(self):
+        # Animal Crossing: New Horizons' island API serves a self-signed certificate, not one from the provider CA.
+        value=n.contract(REPO); host='api.hac.lp1.acbaa.srv.nintendo.net'
+        pin=next(r['pin'] for r in value['titles']['01006f8002326000'] if r['host']==host)
+        routes=n.rules(value,'01006f8002326000')
+        self.assertIn('\t'.join(['pinned-exact',host,value['provider']['server'],host,pin+'.der',pin])+'\n',routes)
+        self.assertNotIn(host,n.rules(value,'0100152000022000'))
+        self.assertEqual(hashlib.sha256(n.pin_files(value,routes)[pin+'.der']).hexdigest(),pin)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); ca=b'original synthetic public CA bytes'
+            value['provider']['caSHA256']=hashlib.sha256(ca).hexdigest()
+            with patch.object(n,'contract',return_value=value):
+                source=n.prepare(REPO,'01006f8002326000',root/'profile',ca=ca)
+                self.assertEqual({p.name for p in n.stage(source,root/'staged','01006f8002326000').iterdir()},
+                                 {'routes.tsv','provider-ca.der','manifest.json',pin+'.der'})
+                (source/(pin+'.der')).write_bytes(b'0'*809)
+                with self.assertRaises(ValueError): n.stage(source,root/'bad','01006f8002326000')
+                (source/(pin+'.der')).unlink()
+                with self.assertRaises(ValueError): n.stage(source,root/'bad','01006f8002326000')
+        for broken in ({'match':'suffix','tls':True},{'match':'exact','tls':False},{'pin':'0'*64}):
+            other=json.loads(json.dumps(n.contract(REPO))); rule=other['titles']['01006f8002326000'][0]; rule.update(broken)
+            with self.assertRaises(ValueError): n.rules(other,'01006f8002326000')
+        tampered=json.loads((REPO/'dm/net/nextendo-services.json').read_text())
+        tampered['certificates'][pin]=tampered['certificates'][pin][:-8]+'AAAAAAA='
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder)/'dm/net').mkdir(parents=True); (Path(folder)/'dm/net/nextendo-services.json').write_text(json.dumps(tampered))
+            with self.assertRaises(ValueError): n.contract(folder)
 
 if __name__=='__main__':unittest.main()

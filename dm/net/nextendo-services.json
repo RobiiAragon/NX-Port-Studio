@@ -175,6 +175,15 @@
         "server": "public-dns",
         "tls": false
       }
+    ],
+    "01006f8002326000": [
+      {
+        "match": "exact",
+        "host": "api.hac.lp1.acbaa.srv.nintendo.net",
+        "server": "server",
+        "tls": true,
+        "pin": "f19cb50bc56f7e628478be481d81f6e9e3e5000f05dbba2dda26f0d1465f14c6"
+      }
     ]
   },
   "titleFamilies": {
@@ -195,5 +204,8 @@
       "account": "pid",
       "friends": "baas"
     }
+  },
+  "certificates": {
+    "f19cb50bc56f7e628478be481d81f6e9e3e5000f05dbba2dda26f0d1465f14c6": "MIIDJTCCAg2gAwIBAgIUARhDbzvtpMN16rLP/ks8+gojLp4wDQYJKoZIhvcNAQELBQAwIjEgMB4GA1UEAwwXbmludGVuZG8tcHJpdmF0ZS1zZXJ2ZXIwHhcNMjYwNzE4MTM0ODAzWhcNMzYwNzE1MTM0ODAzWjAiMSAwHgYDVQQDDBduaW50ZW5kby1wcml2YXRlLXNlcnZlcjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKd011HJWLgGdrT9t7Bhi2aloluO7T16HcS/p7nadbxD2T1zH8saqphM5U9QWkHOS8DfQ4PeaOB442uMSanhgViBnyK7Gm3VunNdgl3rBmLnMGEEI7wDJm9QvYkqVmBGOCeU5CFaZsrk6eEbtpsSl0Ur6tnqh0KFTGtrWfIJjj7JcjtSsO91VbPNJgbTarH80JycNNNpk0qrQgCyP2bzVcWr70Kkqx0EfC9zZKxGCojuONsWel4waBHpyXVT3JLKTjNFqw78Bz6ZDB3K/O00CqYkB21+TtpCmbRR2cLI9jy9AosCXvzJKjiO/VX4WEVj3BGSaZKdzyw+Og7KxZN4Px0CAwEAAaNTMFEwHQYDVR0OBBYEFO/Pdiwa285PS0X9v5iNvX2IfrxzMB8GA1UdIwQYMBaAFO/Pdiwa285PS0X9v5iNvX2IfrxzMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAF9RDzBKxXk1Kx6lJ6Nn8l3cXEy96TaJM29ByIhm4QsD33Kzs1aZd+ZiVAkcjR8DQsXuvVfErYeTtBz9yUGkkdOWjuXNBXhKdDQ8W4PBSg41AVCf7wCBSmDFbd957na7Wf+k/TVtqzwcaRuWIzsQSt3npaobQvVMY0Cp1464ihiUuow+9mDbBtGpsMRG62Ym0lHcQZIX+6G4BmbpxjVX/2D8mNlcvvbdSQd0zfc5iePHOCFdder/ZQwYrM1ChN7/ZGIyTrli7p5erIAhpPf4rxQFo8VojKCbJPPqVzHMgKSeObQFVcLr/dFUt/0f5qoluxqRBJP1gPcX5WZ65FlF08A="
   }
 }
