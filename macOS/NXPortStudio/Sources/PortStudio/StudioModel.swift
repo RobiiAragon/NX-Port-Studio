@@ -49,6 +49,8 @@ final class StudioModel {
     var isSendingFriendRequest = false
     var libraryFriendRequestResult: (sent: Bool, message: String)?
     var libraryFullScreen = false
+    /// The connected controller's button symbols for the hint bar; nil with no controller.
+    var libraryPadGlyphs: LibraryPadGlyphs?
     @ObservationIgnored var libraryOwnsWindowFullScreen = false
     var savePorts: [InstalledMacPort] = []
     var selectedSavePortID = ""

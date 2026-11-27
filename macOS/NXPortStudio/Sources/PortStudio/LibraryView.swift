@@ -9,10 +9,11 @@ import PortCore
 /// the keys at the bottom. A friends screen (the friend list, received and sent requests)
 /// opens from the avatar or the Friends shortcut. Arrow keys move between and along the rows,
 /// Return opens, Option-Return opens a port's settings window, F toggles full screen and
-/// Escape goes back. The ports never need Studio: it opens them as Finder or the Dock would.
+/// Escape goes back. A game controller sends the same keys (LibraryControllerInput). The ports never need Studio: it opens them as Finder or the Dock would.
 struct LibraryView: View {
     @Bindable var model: StudioModel
     @FocusState private var focused: Bool
+    @State private var controller: LibraryControllerInput?
     private let workspace = NSWorkspace.shared.notificationCenter
 
     var body: some View {
@@ -32,7 +33,12 @@ struct LibraryView: View {
         .focusEffectDisabled()
         .focused($focused)
         .onKeyPress(phases: .down) { press in model.handleLibraryKey(press) ? .handled : .ignored }
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            if controller == nil { controller = LibraryControllerInput(model: model) }
+            controller?.start()
+        }
+        .onDisappear { controller?.stop() }
         .task { await model.reloadLibrary() }
         .task {
             while !Task.isCancelled {
@@ -545,23 +551,23 @@ private struct LibraryHintBar: View {
         VStack(spacing: 0) {
             Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
             HStack(spacing: 20) {
-                Image(systemName: "keyboard").foregroundStyle(StudioStyle.muted)
+                Image(systemName: pad == nil ? "keyboard" : "gamecontroller").foregroundStyle(StudioStyle.muted)
                 Spacer()
                 switch model.libraryScreen {
                 case .home:
-                    hint(["←", "→", "↑", "↓"], t("Choose"), nil)
+                    hint(["←", "→", "↑", "↓"], pad?.move, t("Choose"), nil)
                     if model.libraryRow == .games, let port = model.selectedLibraryPort {
                         let running = model.libraryPortIsRunning(port)
-                        if port.engine != nil && !running { hint(["⌥", "⏎"], t("Settings"), .alternate) }
-                        hint(["⏎"], running ? t("Show") : t("Play"), .activate)
+                        if port.engine != nil && !running { hint(["⌥", "⏎"], pad?.alternate, t("Settings"), .alternate) }
+                        hint(["⏎"], pad?.activate, running ? t("Show") : t("Play"), .activate)
                     } else if model.libraryRow == .shortcuts {
-                        hint(["⏎"], t("Open"), .activate)
+                        hint(["⏎"], pad?.activate, t("Open"), .activate)
                     }
-                    if model.libraryFullScreen { hint(["esc"], t("Exit full screen"), .back) }
-                    else { hint(["F"], t("Full screen"), .fullScreen) }
+                    if model.libraryFullScreen { hint(["esc"], pad?.back, t("Exit full screen"), .back) }
+                    else { hint(["F"], pad?.fullScreen, t("Full screen"), .fullScreen) }
                 case .friends:
-                    hint(["↑", "↓"], t("Choose"), nil)
-                    hint(["esc"], t("Back"), .back)
+                    hint(["↑", "↓"], pad?.move, t("Choose"), nil)
+                    hint(["esc"], pad?.back, t("Back"), .back)
                 }
             }
             .padding(.vertical, 14)
@@ -569,14 +575,19 @@ private struct LibraryHintBar: View {
         .font(.system(size: 12))
     }
 
-    @ViewBuilder private func hint(_ keys: [String], _ label: String, _ key: LibraryKey?) -> some View {
+    private var pad: LibraryPadGlyphs? { model.libraryPadGlyphs }
+
+    /// A key hint: the keyboard keys, or the controller's button when one is connected.
+    @ViewBuilder private func hint(_ keys: [String], _ button: String?, _ label: String, _ key: LibraryKey?) -> some View {
         let content = HStack(spacing: 6) {
-            ForEach(keys, id: \.self) { key in
+            if let button {
+                Image(systemName: button).font(.system(size: 16)).foregroundStyle(.white.opacity(0.85))
+            } else { ForEach(keys, id: \.self) { key in
                 Text(verbatim: key).font(.system(size: 11, weight: .semibold, design: .rounded))
                     .padding(.horizontal, 6).frame(minWidth: 22, minHeight: 20)
                     .background(StudioStyle.raised, in: RoundedRectangle(cornerRadius: 5))
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.white.opacity(0.12)))
-            }
+            } }
             Text(label).foregroundStyle(StudioStyle.muted)
         }
         if let key {
