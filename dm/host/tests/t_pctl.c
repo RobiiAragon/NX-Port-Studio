@@ -1,4 +1,4 @@
-// pctl free communication offline policy (hle_misc.c, from PR #38): the hooks are looked up by their mangled names in the real swforce registrations, so a missing or misspelled
+// pctl free communication as a console with no parental controls set (hle_misc.c; from PR #38): the hooks are looked up by their mangled names in the real swforce registrations, so a missing or misspelled
 // takeover fails; no guest module, IPC session or system applet exists in this test
 #include "../hle_misc.c"
 void dm_applet_enter(const char *name) { (void)name; }   // hle_oe.c: the shop and error stand-ins hold the game out of focus
@@ -33,14 +33,14 @@ int main(void) {
     void (*end)(void) = hook("_ZN2nn4pctl20EndFreeCommunicationEv");
     unsigned (*stereo)(unsigned) = hook("_ZN2nn4pctl27CheckStereoVisionPermissionEb");
     const unsigned args[] = {0, 1, 0x100, 0x101, ~0u};
-    if (available) CHECK(available() == 0, "communication unavailable before any permission query");
+    if (available) CHECK(available() == 1, "communication permitted before any permission query: no restriction set");
     for (size_t i = 0; i < sizeof args / sizeof *args; i++) {
-        if (check) CHECK(check(args[i]) == 0, "permission query denies communication, with or without UI");
-        if (begin) CHECK(begin(args[i]) == 0, "begin agrees with the permission query");
+        if (check) CHECK(check(args[i]) == 1, "permission query permits communication, with or without UI");
+        if (begin) CHECK(begin(args[i]) == 1, "begin agrees with the permission query");
         if (stereo) CHECK(stereo(args[i]) == 0, "stereoscopic 3D not permitted: no VR display, as pl::BeginVrMode answers");
         if (end) end();
-        if (check) CHECK(check(args[i]) == 0, "ending communication does not grant permission");
-        if (available) CHECK(available() == 0, "permission queries do not make communication available");
+        if (check) CHECK(check(args[i]) == 1, "ending communication does not withdraw a permission no restriction limits");
+        if (available) CHECK(available() == 1, "permission queries leave communication permitted");
     }
     CHECK(unexpected == 0, "no guest symbol lookup or event binding");
     printf("pctl: %d checks, %d failed\n", checks, fails);

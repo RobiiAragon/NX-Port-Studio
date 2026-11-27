@@ -611,8 +611,9 @@ Most service calls can be found before they crash, before the first boot or the 
 
 - **Symptom:** abort in `nn::sm::Initialize` under `nn::pctl::IsFreeCommunicationAvailable` (Engage, entering its first battle map).
 - **Cause:** the SDK connects to the parental-control service through `sm`.
-- **Fix:** the host answers it like the other free-communication calls: not available (`hle_misc.c`). `pctl::CheckFreeCommunicationPermission`: never.
-- **Found on:** [Fire Emblem Engage](../../dm/games/0100A6301214E000/README.md); [DRAGON QUEST XI S](../../dm/games/01006C300E9F0000/README.md) (`CheckFreeCommunicationPermission`).
+- **Fix:** the host answers `IsFreeCommunicationAvailable`, `CheckFreeCommunicationPermission` and `TryBeginFreeCommunication` as a console with no parental controls set: permitted, with no PIN screen (`hle_misc.c`, `t_pctl`). Whether a network is there is a separate question the game asks `nifm`.
+- **Symptom (resolved):** with Nextendo signed in, Animal Crossing: New Horizons' airport refused online play and named parental controls. The three calls used to answer "never", from when networking was outside the host; a console without a restriction answers yes.
+- **Found on:** [Fire Emblem Engage](../../dm/games/0100A6301214E000/README.md); [DRAGON QUEST XI S](../../dm/games/01006C300E9F0000/README.md) (`CheckFreeCommunicationPermission`); [Animal Crossing: New Horizons](../../dm/games/01006F8002326000/README.md) 3.0.3 (the airport's refusal).
 - **Note:** `pctl::CheckStereoVisionPermission` is under [Applet resource user ID, launch parameters and VR mode](#applet-resource-user-id-launch-parameters-and-vr-mode).
 
 ### Network interface, LDN, socket and play report calls
