@@ -440,3 +440,10 @@
 "Built with another revision of the engine" = "Built with another revision of the engine";
 "%@ could not be opened: %@" = "%@ could not be opened: %@";
 "Each port runs by itself, with its own Nextendo sign-in and online routes. Studio only opens it, as Finder or the Dock would. Hold Option while you click Play to open the settings window of a port built before Studio could ask for it." = "Each port runs by itself, with its own Nextendo sign-in and online routes. Studio only opens it, as Finder or the Dock would. Hold Option while you click Play to open the settings window of a port built before Studio could ask for it.";
+"%lld friends online" = "%lld friends online";
+"Not signed in to Nextendo" = "Not signed in to Nextendo";
+"Full screen" = "Full screen";
+"Exit full screen" = "Exit full screen";
+"Last played %@" = "Last played %@";
+"Choose" = "Choose";
+"Back" = "Back";

@@ -440,3 +440,10 @@
 "Built with another revision of the engine" = "使用另一个引擎修订版创建";
 "%@ could not be opened: %@" = "无法打开 %@：%@";
 "Each port runs by itself, with its own Nextendo sign-in and online routes. Studio only opens it, as Finder or the Dock would. Hold Option while you click Play to open the settings window of a port built before Studio could ask for it." = "每个移植应用都可独立运行，并拥有自己的 Nextendo 登录和在线路由。Studio 只是像访达或程序坞那样打开它。对于在 Studio 能够请求设置窗口之前创建的移植应用，请按住 Option 键并点按“开始游戏”以打开其设置窗口。";
+"%lld friends online" = "%lld 位好友在线";
+"Not signed in to Nextendo" = "未登录 Nextendo";
+"Full screen" = "全屏";
+"Exit full screen" = "退出全屏";
+"Last played %@" = "上次游玩：%@";
+"Choose" = "选择";
+"Back" = "返回";

@@ -40,6 +40,9 @@ final class StudioModel {
     var studioEngine: PortEngineStamp?
     var isLoadingLibrary = false
     var libraryMessage: String?
+    var librarySelection: String?
+    var libraryFullScreen = false
+    @ObservationIgnored var libraryOwnsWindowFullScreen = false
     var savePorts: [InstalledMacPort] = []
     var selectedSavePortID = ""
     var selectedSaveSlot: SaveSlot = .primary

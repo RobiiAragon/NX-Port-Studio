@@ -440,3 +440,10 @@
 "Built with another revision of the engine" = "別のリビジョンのエンジンで作成";
 "%@ could not be opened: %@" = "%@ を開けませんでした: %@";
 "Each port runs by itself, with its own Nextendo sign-in and online routes. Studio only opens it, as Finder or the Dock would. Hold Option while you click Play to open the settings window of a port built before Studio could ask for it." = "各移植アプリは単独で動作し、独自の Nextendo サインインとオンラインルートを持ちます。Studio は Finder や Dock と同じように移植アプリを開くだけです。Studio が設定ウインドウを要求できるようになる前に作成された移植アプリでは、Option キーを押しながら「プレイ」をクリックすると設定ウインドウが開きます。";
+"%lld friends online" = "オンラインのフレンド %lld 人";
+"Not signed in to Nextendo" = "Nextendo に未サインイン";
+"Full screen" = "フルスクリーン";
+"Exit full screen" = "フルスクリーンを終了";
+"Last played %@" = "最後にプレイ: %@";
+"Choose" = "選択";
+"Back" = "戻る";

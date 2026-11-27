@@ -48,6 +48,26 @@ final class InstalledMacPortsTests: XCTestCase {
         XCTAssertEqual(NextendoInstalledGames.names(in: [system, user]), [title.lowercased(): "Alpha", "0100000000010000": "Zeta Port"])
     }
 
+    func testLastPlayedComesFromThePortsLogAndOrdersTheLibrary() throws {
+        let root = try fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let titles = ["Alpha": "0100000000010000", "Beta": "0100000000020000", "Gamma": "0100000000030000", "Delta": "0100000000040000"]
+        for (name, id) in titles { try app(root, name, ["DMTitleID": id, "CFBundleIdentifier": "org.example." + name, "DMPrimaryHost": true]) }
+        let logs = root.appendingPathComponent("Library/Logs/nxnative")
+        try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        let now = Date(timeIntervalSince1970: 1_764_000_000)
+        for (name, age) in [("Beta", 3600.0), ("Delta", 60.0)] {
+            let log = logs.appendingPathComponent(titles[name]! + ".log")
+            try Data("launcher: start\n".utf8).write(to: log)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: log.path)
+        }
+        try Data("old run".utf8).write(to: logs.appendingPathComponent(titles["Gamma"]! + ".prev.log"))   // only the current log counts
+        let found = InstalledMacPorts.scan(in: [root], home: root)
+        XCTAssertEqual(found.map(\.name), ["Alpha", "Beta", "Delta", "Gamma"])
+        XCTAssertEqual(found.first { $0.name == "Delta" }?.lastPlayed, now.addingTimeInterval(-60))
+        XCTAssertNil(found.first { $0.name == "Gamma" }?.lastPlayed)
+        XCTAssertEqual(InstalledMacPorts.recentlyPlayedFirst(found).map(\.name), ["Delta", "Beta", "Alpha", "Gamma"])   // never played: by name, after the played ones
+    }
+
     func testEngineStampOfAStudioSnapshotAndOfACheckout() throws {
         let root = try fixture(); defer { try? FileManager.default.removeItem(at: root) }
         var calls: [[String]] = []

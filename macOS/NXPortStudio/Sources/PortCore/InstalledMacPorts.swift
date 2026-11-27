@@ -16,15 +16,19 @@ public struct InstalledMacPort: Identifiable, Hashable, Sendable {
     public let isPrimaryHost: Bool
     /// `DMEngine` and `DMEngineTime`; nil for a port packed before the stamp.
     public let engine: PortEngineStamp?
+    /// When the port last ran: its launcher starts `~/Library/Logs/nxnative/<title ID>.log`
+    /// afresh at every start (dm/mac/launcher.c) and the host writes it while the game runs.
+    /// Nil for a port that never ran on this Mac.
+    public let lastPlayed: Date?
     public var id: String { appURL.path }
     public var primarySaveURL: URL { stateURL.appendingPathComponent("save", isDirectory: true) }
     public var deviceSaveURL: URL { stateURL.appendingPathComponent("save_device", isDirectory: true) }
 
     public init(appURL: URL, titleID: String, name: String, bundleIdentifier: String, stateURL: URL,
-                version: String = "", isPrimaryHost: Bool = true, engine: PortEngineStamp? = nil) {
+                version: String = "", isPrimaryHost: Bool = true, engine: PortEngineStamp? = nil, lastPlayed: Date? = nil) {
         self.appURL = appURL; self.titleID = titleID; self.name = name
         self.bundleIdentifier = bundleIdentifier; self.stateURL = stateURL
-        self.version = version; self.isPrimaryHost = isPrimaryHost; self.engine = engine
+        self.version = version; self.isPrimaryHost = isPrimaryHost; self.engine = engine; self.lastPlayed = lastPlayed
     }
 }
 
@@ -42,6 +46,7 @@ public enum InstalledMacPorts {
                             home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [InstalledMacPort] {
         let fm = FileManager.default
         let state = home.appendingPathComponent("Library/Application Support/nxnative", isDirectory: true)
+        let logs = home.appendingPathComponent("Library/Logs/nxnative", isDirectory: true)
         var ports: [InstalledMacPort] = []
         for directory in directories {
             let apps = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles])) ?? []
@@ -60,10 +65,23 @@ public enum InstalledMacPorts {
                     bundleIdentifier: bundle, stateURL: state.appendingPathComponent(title, isDirectory: true),
                     version: info["CFBundleShortVersionString"] as? String ?? "",
                     isPrimaryHost: info["DMPrimaryHost"] as? Bool == true,
-                    engine: PortEngineStamp(info: info)))
+                    engine: PortEngineStamp(info: info),
+                    lastPlayed: (try? logs.appendingPathComponent(title + ".log").resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate))
             }
         }
         return ports.sorted { ($0.name, $0.appURL.path) < ($1.name, $1.appURL.path) }
+    }
+
+    /// The Library's order: the most recently played first, then the ports never played, by name.
+    public static func recentlyPlayedFirst(_ ports: [InstalledMacPort]) -> [InstalledMacPort] {
+        ports.enumerated().sorted { a, b in
+            switch (a.element.lastPlayed, b.element.lastPlayed) {
+            case let (x?, y?) where x != y: x > y
+            case (_?, nil): true
+            case (nil, _?): false
+            default: a.offset < b.offset
+            }
+        }.map(\.element)
     }
 }
 

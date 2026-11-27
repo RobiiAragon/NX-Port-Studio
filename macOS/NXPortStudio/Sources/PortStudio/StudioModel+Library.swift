@@ -10,10 +10,42 @@ extension StudioModel {
         isLoadingLibrary = true; defer { isLoadingLibrary = false }
         let repository = repositoryPath.isEmpty ? nil : URL(fileURLWithPath: repositoryPath)
         let (ports, engine) = await Task.detached {
-            (InstalledMacPorts.scan().filter(\.isPrimaryHost), repository.flatMap { PortEngineStamp.of(repository: $0) })
+            (InstalledMacPorts.recentlyPlayedFirst(InstalledMacPorts.scan().filter(\.isPrimaryHost)), repository.flatMap { PortEngineStamp.of(repository: $0) })
         }.value
         libraryPorts = ports; studioEngine = engine
+        if librarySelection.map({ id in !ports.contains { $0.id == id } }) ?? true { librarySelection = ports.first?.id }
         refreshRunningLibraryPorts()
+    }
+
+    var selectedLibraryPort: InstalledMacPort? { libraryPorts.first { $0.id == librarySelection } ?? libraryPorts.first }
+
+    /// Moves the focus along the row (arrow keys); it stops at both ends.
+    func moveLibrarySelection(by step: Int) {
+        guard !libraryPorts.isEmpty else { return }
+        let index = libraryPorts.firstIndex { $0.id == selectedLibraryPort?.id } ?? 0
+        librarySelection = libraryPorts[min(max(index + step, 0), libraryPorts.count - 1)].id
+    }
+
+    /// Friends online for the top bar: only from the Nextendo agent's hub, when it runs.
+    func refreshLibraryFriends() async {
+        refreshNextendoAgentState()
+        await refreshNextendoFriends()
+    }
+
+    var libraryFriendsOnline: Int? { nextendoFriends.map { $0.friends.filter(\.isOnline).count } }
+
+    /// The Library alone in the window; the window goes full screen too, and leaves it on
+    /// the way out only when the Library put it there.
+    func setLibraryFullScreen(_ on: Bool) {
+        guard on != libraryFullScreen else { return }
+        libraryFullScreen = on
+        let window = NSApp.keyWindow ?? NSApp.mainWindow
+        let isFull = window?.styleMask.contains(.fullScreen) == true
+        if on, !isFull { libraryOwnsWindowFullScreen = true; window?.toggleFullScreen(nil) }
+        if !on {
+            if isFull, libraryOwnsWindowFullScreen { window?.toggleFullScreen(nil) }
+            libraryOwnsWindowFullScreen = false
+        }
     }
 
     func refreshRunningLibraryPorts() {
