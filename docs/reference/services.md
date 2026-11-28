@@ -1428,6 +1428,15 @@ close/reopen observation without opening a window or reading the real Keychain.
 - **Limits:** I have not run it with a game or confirmed `SMAppService` with the ad-hoc Studio bundle. iOS is unchanged: each iPhone app keeps its own integration.
 - **Found on:** every Mac port in Nextendo or automatic mode, by reading the account path; no single game.
 
+### Keychain asks again after every Studio update or port rebuild
+
+- **Symptom:** macOS asks again for access to the saved Nextendo account (`org.nxnative.nextendo.account`) or to the agent's allowlist (`org.nxnative.portstudio.agent.peers`), even after **Always Allow**, and without Studio open: the agent starts at login and reads both items.
+- **Cause:** the login keychain's access list trusts an application by its designated requirement. An ad-hoc signature's designated requirement is its cdhash (`security dump-keychain -a` lists the trusted applications as `cdhash:…`), so each Studio update brings a new agent and each port rebuild a new port, and the earlier **Always Allow** does not match them.
+- **Fix:** sign with a certificate, whose designated requirement names the identifier and the certificate (`identifier … and anchor apple generic and certificate leaf[subject.CN] = …`) and stays the same across builds. Studio looks up the creator's Developer ID Application or Apple Development identity for the Team ID entered for iOS, matching the certificate subject's organizational unit, not the ID in the identity's name, which can differ (`PortCore/MacSigningIdentity.swift`), and builds Mac ports with `--mac-sign <SHA-1>`; without one it signs ad-hoc as before and says so in the log. Studio itself is signed by `package_app.sh` with `CODE_SIGN_IDENTITY=<SHA-1>` for a local install; the public package stays ad-hoc, because a certificate signature carries its owner's name. After the first build signed this way, macOS asks once for each item and program, and **Always Allow** then holds.
+- **Checks:** `BuildCoreTests` (identity selection by team, `--mac-sign` only with a SHA-1). On my Mac the lookup found my Apple Development identity for my Team ID, and `codesign` signed with it without a prompt.
+- **Limits:** signing with an Apple Development certificate runs only on Macs that trust that developer's certificate (the creator's own). The agent still checks ports and Studio by cdhash ([Peer validation](../nextendo-agent.md#peer-validation)); that check prompts nothing.
+- **Found on:** every Mac port and the Nextendo agent; I saw it with my Animal Crossing Mac port and Studio 1.7.0 ([game note](../../dm/games/01006F8002326000/README.md)).
+
 ### A generic account Result does not identify the failing operation
 
 - **Symptom:** a game reports the shared `0x2a2` failure before its first recorded socket call, but account/NIFM availability diagnostics do not identify whether account ensure, ID retrieval, token loading or asynchronous completion failed.

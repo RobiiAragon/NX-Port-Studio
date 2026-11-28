@@ -20,6 +20,8 @@ public struct BuildConfiguration: Sendable {
     public var nextendoClientID: String?
     public var workDirectoryURL: URL?
     public var miiDatabaseURL: URL?
+    /// SHA-1 of the identity a Mac app is signed with (MacSigningIdentity); nil signs ad-hoc.
+    public var macSigningIdentity: String?
 
     public init(repositoryURL: URL, gameDirectoryURL: URL, keysURL: URL, outputURL: URL,
                 destination: BuildDestination, appName: String = "", language: String = "",
@@ -127,6 +129,10 @@ public enum BuildCommand {
         }
         if !c.appName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { args += ["--app-name", c.appName] }
         if !c.language.isEmpty { args += ["--language", c.language] }
+        if c.destination == .macOS, let identity = c.macSigningIdentity {
+            guard MacSigningIdentity.valid(identity) else { throw PortError.invalidConfiguration("The Mac signing identity is not a certificate SHA-1.") }
+            args += ["--mac-sign", identity]
+        }
         if preparesXcode {
             args += ["--prepare-xcode", "--xcode-workspace", c.gameDirectoryURL.appendingPathComponent("NXPortStudio.xcworkspace").path]
             args += ["--team-id", team]

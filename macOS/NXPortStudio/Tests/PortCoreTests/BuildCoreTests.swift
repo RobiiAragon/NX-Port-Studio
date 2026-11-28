@@ -291,4 +291,33 @@ final class BuildCoreTests: XCTestCase {
         catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }
         XCTAssertLessThan(start.duration(to: .now), .seconds(1))
     }
+
+    func testMacSigningIdentityPrefersDeveloperIDForTheTeam() {
+        let output = """
+          1) 1111111111111111111111111111111111111111 "Apple Development: Someone (ABCDE12345)"
+          2) 2222222222222222222222222222222222222222 "Developer ID Application: Someone (ZZZZZ99999)"
+          3) 3333333333333333333333333333333333333333 "Developer ID Application: Someone (ABCDE12345)"
+             3 valid identities found
+        """
+        // The team is the certificate's organizational unit; the name's ID can differ (identity 1).
+        let teams = [String(repeating: "1", count: 40): "TEAM000001", String(repeating: "2", count: 40): "ZZZZZ99999",
+                     String(repeating: "3", count: 40): "ABCDE12345"]
+        let select = { (team: String, output: String) in MacSigningIdentity.select(fromFindIdentityOutput: output, teamID: team) { teams[$0] } }
+        XCTAssertEqual(select("abcde12345", output), String(repeating: "3", count: 40))
+        XCTAssertEqual(select("ZZZZZ99999", output), String(repeating: "2", count: 40))
+        XCTAssertEqual(select("TEAM000001", output), String(repeating: "1", count: 40))
+        XCTAssertNil(select("QQQQQ00000", output))
+        XCTAssertNil(select("bad", output))
+    }
+
+    func testMacAppIsSignedWithTheSelectedIdentity() throws {
+        var (root, config) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        XCTAssertFalse(try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL).arguments.contains("--mac-sign"))
+        config.macSigningIdentity = String(repeating: "A", count: 40)
+        let arguments = try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL).arguments
+        XCTAssertEqual(arguments[arguments.firstIndex(of: "--mac-sign")! + 1], String(repeating: "A", count: 40))
+        config.macSigningIdentity = "Apple Development"
+        XCTAssertThrowsError(try BuildCommand.make(configuration: config, pythonURL: ToolEnvironment.defaultPythonURL))
+    }
 }
