@@ -313,6 +313,11 @@ final class StudioModel {
                     config.repositoryURL = session.engineURL
                     config.outputURL = session.applicationURL
                     config.workDirectoryURL = session.workURL
+                    // A certificate signature keeps Keychain approvals across rebuilds (MacSigningIdentity).
+                    config.macSigningIdentity = await MacSigningIdentity.find(teamID: config.teamID, using: runner)
+                    appendLog(config.macSigningIdentity == nil
+                        ? "Signing the Mac app ad-hoc: no Apple Development certificate for the Team ID. Keychain asks again after each rebuild."
+                        : "Signing the Mac app with the Apple Development certificate of the Team ID, so Keychain approvals stay after rebuilds.")
                     status = "Building port"
                 }
                 let command = try BuildCommand.make(configuration: config, pythonURL: pythonURL)

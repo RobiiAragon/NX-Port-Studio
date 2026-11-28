@@ -62,6 +62,7 @@ On the Mac: a new game through Tom Nook's counter (name entry on the game's own 
 General host changes first needed here; each applies to every game:
 
 - **Nextendo routes in the iPhone bundle**: [Route files in an iOS bundle are owned by another user](../../../docs/reference/services.md#route-files-in-an-ios-bundle-are-owned-by-another-user).
+- **Keychain prompts after each rebuild of the ad-hoc Mac port and each Studio update**: [Keychain asks again after every Studio update or port rebuild](../../../docs/reference/services.md#keychain-asks-again-after-every-studio-update-or-port-rebuild).
 - **Play-history key without a firmware keyring**: [A play-history key without an imported firmware keyring](../../../docs/reference/services.md#a-play-history-key-without-an-imported-firmware-keyring).
 - **The host's shaders compiled when the host is built** (`dm/gfx/msl`, `host_msl_lib`): the HUD's `Compiled 2 shaders … 102.70ms` in play on an iPhone 17 Pro Max came from clear-triangle libraries compiled from source when a new room first issued a scissored clear; [The host's own shaders compiled from source at run time](../../../docs/reference/shaders.md#the-hosts-own-shaders-compiled-from-source-at-run-time).
 - **Halfword jump tables padded to their largest entry** (`half_count` in `patch_nso.py`): [Halfword jump table landing pads sized to the largest entry](../../../docs/reference/rewriter.md#halfword-jump-table-landing-pads-sized-to-the-largest-entry).
